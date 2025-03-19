@@ -37,11 +37,10 @@ class NTupleProc(object):
         self.f = data["f"]
         self.name = data["name"]
 
-
-
-def _loaddf(applyfs, g):
+def _loaddf(hdfout, applyfs, g):
     # fname, index, applyfs = inp
     index, fname = g
+    #print("index: %d, fname: %s" %(index, fname))
     # Convert pnfs to xroot URL's
     if fname.startswith("/pnfs"):
         fname = fname.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
@@ -85,10 +84,17 @@ def _loaddf(applyfs, g):
             else:
                 dfs[i] = []
 
+    # Save DataFrame to HDF5 file
+    if dfs:
+        #with pd.HDFStore(hdfout, mode="a", complevel=5, complib="blosc") as store:
+        with pd.HDFStore(hdfout) as store:
+            for i, df in enumerate(dfs):
+                if not df.empty:
+                    store.put(f"tempdf_{index}_{i}", df, format="fixed")
     if madef:
         os.remove(fname)
 
-    return dfs
+    return [f"tempdf_{index}_{i}" for i in range(len(dfs))]  # Return dataset keys
 
 class NTupleGlob(object):
     def __init__(self, g, branches):
@@ -115,29 +121,25 @@ class NTupleGlob(object):
             print("CPU_COUNT : " + str(CPU_COUNT) + ", len(thisglob): " + str(len(thisglob)))
             nproc = min(CPU_COUNT, len(thisglob))
 
-        ret = []
+        saved_keys = []  # Store dataset keys
+        hdf5_file = os.path.join("output_data", "data.h5")
+        os.makedirs(os.path.dirname(hdf5_file), exist_ok=True)
 
         try:
             with Pool(processes=nproc) as pool:
-                for i, dfs in enumerate(tqdm(pool.imap_unordered(partial(_loaddf, fs), enumerate(thisglob)), total=len(thisglob), unit="file", delay=5, smoothing=0.2)):
-                    if dfs is not None:
-                        ret.append(dfs)
+                for keys in tqdm(
+                    pool.imap_unordered(partial(_loaddf, hdf5_file, fs), enumerate(thisglob)),
+                    total=len(thisglob),
+                    unit="file",
+                    delay=5,
+                    smoothing=0.2
+                ):
+                    if keys is not None:
+                        saved_keys.extend(keys)
+
         # Ctrl-C handling
         except KeyboardInterrupt:
             print('Received Ctrl-C. Returning dataframes collected so far.')
+            return hdf5_file, saved_keys
 
-        ret = [pd.concat([dfs[i] for dfs in ret], axis=0, ignore_index=False) for i in range(len(fs))] 
-
-        # Fix the index So that we don't need __ntuple
-        for i in range(len(ret)):
-            sub_index = ret[i].index.names[2:]
-            ret[i] = ret[i].reset_index()
-            ret[i].entry = ret[i].groupby(["__ntuple", "entry"]).ngroup()
-            ret[i].set_index(["entry"] + sub_index, inplace=True, verify_integrity=True)
-            ret[i].sort_index(inplace=True)
-            if not savemeta:
-                del ret[i]["__ntuple"]
-
-        return ret
-
-
+        return hdf5_file, saved_keys

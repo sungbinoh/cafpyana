@@ -37,16 +37,54 @@ args = parser.parse_args()
 def run_pool(output, inputs):
     ntuples = NTupleGlob(inputs, None)
 
-    dfs = ntuples.dataframes(nproc="auto", fs=DFS)
-    output = output + ".df"
-    with pd.HDFStore(output) as hdf:
-        for k,df in zip(reversed(NAMES), reversed(dfs)): # go in reverse order so we can delete along the way
-            try:
-                hdf.put(key=k, value=df, format="fixed")
-            except Exception as e:
-                print("Table %s failed to save, skipping. Exception: %s" % (k, str(e)))
+    hdf5_file, collected_keys = ntuples.dataframes(nproc="auto", fs=DFS)
 
-            del df
+    #print("collected_keys") ## == checked collected keys are correct
+    #print(collected_keys)
+
+    if not collected_keys:
+        print("No DataFrames were collected. Exiting without creating output file.")
+        return
+
+    output = output + ".df"
+    with pd.HDFStore(output, mode="w") as hdf:
+        with pd.HDFStore(hdf5_file, mode='r') as store:
+            for k in range(len(NAMES)):
+                out_key = NAMES[len(NAMES) - k - 1]
+                if collected_keys:
+                    n_files = int(len(collected_keys) / len(NAMES))
+
+                    df = pd.DataFrame()
+                    for i_f in range(n_files):
+                        this_key = f"tempdf_{i_f}_{k}"
+                        #print("this_key: %s" % this_key)
+                        try:
+                            this_df = store[this_key]
+                            df = pd.concat([df, this_df])
+                            del this_df
+                        except Exception as e:
+                            print(f"Table {k} failed to save, skipping. Exception: {e}")
+
+                    hdf.put(key=out_key, value=df, format="fixed")
+                    del df
+            #for k in reversed(NAMES):  # Iterate in reverse order
+            #    print("k: %s", k)
+            #    if collected_keys:
+            #        n_files = len(collected_keys) / len(NAMES)
+            #        print("n_files: %d" % n_files)
+            #        key = collected_keys.pop()  # Get next available dataset
+            #        print("key: %s", key)
+            #        try:
+            #            df = store[key]  # Load the DataFrame
+            #            hdf.put(key=k, value=df, format="fixed")  # Save in final output file
+            #        except Exception as e:
+            #            print(f"Table {k} failed to save, skipping. Exception: {e}")
+
+            #        del df  # Free memory
+
+    # Remove the intermediate HDF5 file after writing final output
+    #os.remove(hdf5_file)
+    print(f"Final merged file saved as '{output}', intermediate file removed.")
 
 def run_grid(inputfiles):
     # 1) dir/file name style
