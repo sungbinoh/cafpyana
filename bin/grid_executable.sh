@@ -19,13 +19,8 @@ echo "@@ cd to cafpyana dir"
 cd cafpyana
 echo "@@ ls -alh"
 ls -alh
-echo "@@ check if there is cmake"
-spack find cmake
-spack load cmake@3.27.7
 which cmake
 echo "@@ check if other spack packages"
-spack load hdf5
-spack load xrootd
 spack load ifdhc@2.7.2
 echo "@@ run init_grid.sh"
 source ./bin/init_grid.sh
