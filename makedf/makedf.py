@@ -30,6 +30,7 @@ TRUE_KE_THRESHOLDS = {"nmu_27MeV": ["muon", 0.027],
                       "np_20MeV": ["proton", 0.02],
                       "np_50MeV": ["proton", 0.05],
                       "npi_30MeV": ["pipm", 0.03],
+                      "nkaon_50MeV": ["kaon_p",0.05]
                       }
 
 def make_hdrdf(f):
@@ -192,6 +193,8 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     mcdf = multicol_merge(mcdf, cpidf, left_index=True, right_index=True, how="left", validate="one_to_one")
     mcdf = multicol_merge(mcdf, pdf, left_index=True, right_index=True, how="left", validate="one_to_one")
 
+    #print("done with make_mcdf")
+
     return mcdf
 
 def make_mcprimdf(f):
@@ -268,6 +271,7 @@ def make_stubs(f, det="ICARUS"):
         alpha = MODA_mc
         return np.log(alpha + dEdx*beta) / (Wion*beta)
     def dEdx2dQdx_data(dEdx): # data parameters
+        
         if det == "SBND":
             return np.log(alpha_sbnd + dEdx*beta_sbnd) / (Wion*beta_sbnd)
         beta = MODB_data / (LAr_density_gmL_data * Efield_data)

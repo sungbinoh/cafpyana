@@ -152,14 +152,14 @@ def run_grid(inputfiles):
 
     submitCMD = '''jobsub_submit \\
 -G sbnd \\
---auth-methods="token,proxy" \\
+--auth-methods="token" \\
 -e LC_ALL=C \\
 --role=Analysis \\
 --resource-provides="usage_model=DEDICATED,OPPORTUNISTIC" \\
 --lines '+FERMIHTC_AutoRelease=True' --lines '+FERMIHTC_GraceMemory=1000' --lines '+FERMIHTC_GraceLifetime=3600' \\
 --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)' \\
 --tar_file_name "dropbox://$(pwd)/bin_dir.tar" \\
---email-to sungbin.oh555@gmail.com \\
+--email-to afropapp13@outlook.com \\
 -N %d \\
 --disk 100GB \\
 --expected-lifetime 10h \\

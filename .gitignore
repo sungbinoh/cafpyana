@@ -3,3 +3,9 @@
 __pycache__/
 *.df
 *.root
+.vscode/
+envs/cmake3
+envs/venv_py39_cafpyana/
+envs/xrootd-5.6.1/
+analysis_village/examples/cc2p_analysis/dune_plot_style*/
+analysis_village/examples/cc2p_analysis/dune_plot_style.tar.gz

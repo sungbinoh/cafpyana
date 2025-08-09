@@ -30,15 +30,38 @@ args = parser.parse_args()
 def save(outf, recodf, truedf):
     with uproot.recreate(outf) as f:
         f["SelectedEvents"] = recodf
-        f["TrueEvents"] = truedf
+
+        if truedf is not None and not truedf.empty:
+            f["TrueEvents"] = truedf.to_dict(orient="list")
+        else:
+            print("Warning: truedf is empty or None — skipping writing 'TrueEvents'")
+        #f["TrueEvents"] = truedf
 
 def run(output, inputs):
 
-    recodfs, truedfs = zip(*list(map(TTREEMKR, inputs)))
-    recodf = pd.concat(recodfs)
-    truedf = pd.concat(truedfs)
+    ## for MC, expect a tuple of two data frames
+    ## for data, expect only one data frame
+    result = list(map(TTREEMKR, inputs))
+
+    if all(isinstance(r, (list, tuple)) and len(r) == 2 and 
+           isinstance(r[0], pd.DataFrame) and isinstance(r[1], pd.DataFrame) for r in result):
+        recodfs, truedfs = zip(*result)
+        recodf = pd.concat(recodfs)
+        truedf = pd.concat(truedfs)
+    elif all(isinstance(r, pd.DataFrame) for r in result):
+        # Only recodf returned; truedf will be empty
+        recodf = pd.concat(result)
+        truedf = pd.DataFrame()
+    else:
+        raise ValueError("TTREEMKR must return either a DataFrame or a tuple of two DataFrames.")
 
     save(output, recodf, truedf)
+
+    #recodfs, truedfs = zip(*list(map(TTREEMKR, inputs)))
+    #recodf = pd.concat(recodfs)
+    #truedf = pd.concat(truedfs)
+
+    #save(output, recodf, truedf)
 
 if __name__ == "__main__":
     printhelp = ((args.inputfiles == "" and args.inputfilelist == "") or args.config == "" or args.output == "")

@@ -47,3 +47,12 @@ def make_cohpi_ttree_mc(dfname):
     truedf_out = pd.concat([truedf_out, truedf_wgt_out], axis = 1)
     
     return recodf, truedf_out
+
+def make_cohpi_ttree_data(dfname):
+    recodf = pd.read_hdf(dfname, key='cohpi')
+    hdrdf = pd.read_hdf(dfname, key='hdr')
+
+    ## Collect POT and scale factor to the target POT
+    POT_scale = sum(hdrdf.pot)
+
+    return recodf

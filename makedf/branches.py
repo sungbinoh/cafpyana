@@ -169,7 +169,7 @@ slcbranches = [
     "rec.slc.producer",
     "rec.slc.nuid.crlongtrkdiry",
     "rec.slc.nu_score",
-    "rec.slc.barycenterFM.flashTime",
+    "rec.slc.barycenterFM.flashTime",    
     "rec.slc.opt0.score",
     "rec.slc.opt0.time"
 ]
