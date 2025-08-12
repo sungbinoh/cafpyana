@@ -57,7 +57,7 @@ def make_pandora_evtdf_wgt(f, include_weights=True, multisim_nuniv=1000, wgt_typ
     return df
 
 
-def make_pandora_evtdf(f, include_weights=True, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=True, 
+def make_pandora_evtdf(f, include_weights=False, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=True, 
                        trkScoreCut=False, trkDistCut=10., cutClearCosmic=True, **trkArgs):
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
@@ -166,7 +166,7 @@ def make_pandora_evtdf(f, include_weights=True, multisim_nuniv=1000, wgt_types=[
     mc_pdf = mcdf.p
     mc_P_mu_col = pad_column_name(("totp",), mc_mudf)
     mc_P_p_col = pad_column_name(("totp",), mc_pdf)
-    tki_mc = get_tki(mc_mudf, mc_pdf, mc_P_mu_col, mc_P_p_col)
+    tki_mc = get_cc1p0pi_tki(mc_mudf, mc_pdf, mc_P_mu_col, mc_P_p_col)
 
     mcdf = multicol_add(mcdf, tki_mc["del_alpha"].rename("mc_del_alpha"))
     mcdf = multicol_add(mcdf, tki_mc["del_phi"].rename("mc_del_phi"))
@@ -174,6 +174,7 @@ def make_pandora_evtdf(f, include_weights=True, multisim_nuniv=1000, wgt_types=[
     mcdf = multicol_add(mcdf, tki_mc["del_p"].rename("mc_del_p"))
 
     # ----- apply cuts for lightweight df -----
+    # comment out for event selection studies!
     # vertex in FV
     slcdf = slcdf[InFV(slcdf.slc.vertex, 0, det=DETECTOR)]
 
@@ -182,8 +183,25 @@ def make_pandora_evtdf(f, include_weights=True, multisim_nuniv=1000, wgt_types=[
 
     # require both muon and proton to be present
     mask = (~np.isnan(slcdf.mu.pfp.trk.P.p_muon)) & (~np.isnan(slcdf.p.pfp.trk.P.p_proton))
-    # mask = mask.reindex(slcdf.index, fill_value=False)
     slcdf = slcdf[mask]
+
+    # muon length cut
+    slcdf = slcdf[slcdf.mu.pfp.trk.len > 50]
+
+    # containment cut
+    slcdf = slcdf[slcdf.mu.pfp.trk.is_contained == True]
+    slcdf = slcdf[slcdf.p.pfp.trk.is_contained == True]
+
+    # mu chi2 cut 
+    slcdf = slcdf[(slcdf.mu.pfp.trk.chi2pid.I2.chi2_muon > 0) & (slcdf.mu.pfp.trk.chi2pid.I2.chi2_muon < 25) & (slcdf.mu.pfp.trk.chi2pid.I2.chi2_proton > 100)]
+
+    # protons chi2 cut
+    slcdf = slcdf[(slcdf.p.pfp.trk.chi2pid.I2.chi2_proton > 0) & (slcdf.p.pfp.trk.chi2pid.I2.chi2_proton < 90)]
+
+    # 1p0pi
+    twoprong_cut = (np.isnan(slcdf.other_shw_length) & np.isnan(slcdf.other_trk_length))
+    slcdf = slcdf[twoprong_cut]
+
 
     # ---- truth match ----
     bad_tmatch = np.invert(slcdf.slc.tmatch.eff > 0.5) & (slcdf.slc.tmatch.idx >= 0)
