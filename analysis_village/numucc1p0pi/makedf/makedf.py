@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from makedf.makedf import *
 from makedf.constants import *
+from makedf.mcstat import mcstat
 
 def make_spine_evtdf(f):
     # load slices and particles
@@ -68,6 +69,7 @@ def make_pandora_evtdf(f, include_weights=False, multisim_nuniv=1000, wgt_types=
 
     assert DETECTOR == "SBND"
     
+    hdrdf = loadbranches(f["recTree"], hdrbranches).rec.hdr
     mcdf = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim)
     trkdf = make_trkdf(f, trkScoreCut, **trkArgs)
     slcdf = make_slcdf(f)
@@ -221,6 +223,10 @@ def make_pandora_evtdf(f, include_weights=False, multisim_nuniv=1000, wgt_types=
                             ("rec.mc.nu..index", "", "")], 
                   how="left"
                   ) 
+
+    # add MCstat weights if requested
+    if include_weights:
+        df, _ = mcstat(df, hdrdf, n_universes=multisim_nuniv)
 
     df = df.set_index(slcdf.index.names, verify_integrity=True)
     
