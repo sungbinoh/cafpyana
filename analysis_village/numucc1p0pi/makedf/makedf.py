@@ -154,7 +154,7 @@ def make_pandora_evtdf(f, include_weights=False, multisim_nuniv=1000, wgt_types=
     slc_pdf = slcdf.p.pfp.trk
     slc_P_mu_col = pad_column_name(("P", "p_muon"), slc_mudf)
     slc_P_p_col = pad_column_name(("P", "p_proton"), slc_pdf)
-    tki_reco = get_tki(slc_mudf, slc_pdf, slc_P_mu_col, slc_P_p_col)
+    tki_reco = get_cc1p0pi_tki(slc_mudf, slc_pdf, slc_P_mu_col, slc_P_p_col)
 
     slcdf = multicol_add(slcdf, tki_reco["del_alpha"].rename("del_alpha"))
     slcdf = multicol_add(slcdf, tki_reco["del_phi"].rename("del_phi"))
