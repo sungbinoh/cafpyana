@@ -37,9 +37,9 @@ class VariableConfig:
     def muon_direction(cls):
         return cls(
             var_save_name="muon-dir_z",
-            var_plot_name="cos(\theta_\mu)",
+            var_plot_name="cos(\\theta_\mu)",
             var_unit="",
-            bins=np.linspace(-1, 1, 6),
+            bins=np.linspace(-1, 1, 11),
             var_evt_reco_col=('mu', 'pfp', 'trk', 'dir', 'z', '', '', ''),
             var_evt_truth_col=('mu', 'pfp', 'trk', 'truth', 'p', 'dir', 'z', ''),
             var_nu_col=('mu', 'dir', 'z')
@@ -51,7 +51,7 @@ class VariableConfig:
             var_save_name="proton-p",
             var_plot_name="P_p",
             var_unit="GeV/c",
-            bins=np.linspace(0.2, 2, 6),
+            bins=np.linspace(0.2, 2, 11),
             var_evt_reco_col=('p', 'pfp', 'trk', 'P', 'p_proton', '', '', ''),
             var_evt_truth_col=('p', 'pfp', 'trk', 'truth', 'p', 'totp', '', ''),
             var_nu_col=('p', 'totp', '')
@@ -61,9 +61,9 @@ class VariableConfig:
     def proton_direction(cls):
         return cls(
             var_save_name="proton-dir_z",
-            var_plot_name="cos(\theta_p)",
+            var_plot_name="cos(\\theta_p)",
             var_unit="",
-            bins=np.linspace(-1, 1, 6),
+            bins=np.linspace(-1, 1, 11),
             var_evt_reco_col=('p', 'pfp', 'trk', 'dir', 'z', '', '', ''),
             var_evt_truth_col=('p', 'pfp', 'trk', 'truth', 'p', 'dir', 'z', ''),
             var_nu_col=('p', 'dir', 'z')

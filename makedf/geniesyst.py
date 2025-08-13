@@ -120,20 +120,16 @@ regen_systematics_sbnd_multisims = [
 
 regen_systematics_sbnd_multisigma = [
     # CCQE
-    # "GENIEReWeight_SBN_v1_multisigma_VecFFCCQEshape", # morph
     "GENIEReWeight_SBN_v1_multisigma_RPA_CCQE",
     "GENIEReWeight_SBN_v1_multisigma_CoulombCCQE",
 
     # MEC
     "GENIEReWeight_SBN_v1_multisigma_NormCCMEC",
     "GENIEReWeight_SBN_v1_multisigma_NormNCMEC",
-    # "GENIEReWeight_SBN_v1_multisigma_DecayAngMEC", # morph
 
     # RES
     "GENIEReWeight_SBN_v1_multisigma_RDecBR1gamma",
     "GENIEReWeight_SBN_v1_multisigma_RDecBR1eta",
-    # "GENIEReWeight_SBN_v1_multisigma_Theta_Delta2Npi", # morph
-    # "GENIEReWeight_SBN_v1_multisigma_ThetaDelta2NRad", # morph
 
     # Non-Res
     "GENIEReWeight_SBN_v1_multisigma_NonRESBGvpCC1pi",
@@ -156,6 +152,18 @@ regen_systematics_sbnd_multisigma = [
     # COH
     "GENIEReWeight_SBN_v1_multisigma_NormCCCOH", # Handled by re-tuning
     "GENIEReWeight_SBN_v1_multisigma_NormNCCOH",
+]
+
+regen_systematics_sbnd_morph = [
+    # CCQE
+    "GENIEReWeight_SBN_v1_multisigma_VecFFCCQEshape", 
+
+    # MEC
+    "GENIEReWeight_SBN_v1_multisigma_DecayAngMEC", 
+
+    # RES
+    "GENIEReWeight_SBN_v1_multisigma_Theta_Delta2Npi", 
+    "GENIEReWeight_SBN_v1_multisigma_ThetaDelta2NRad", 
 ]
 
 
