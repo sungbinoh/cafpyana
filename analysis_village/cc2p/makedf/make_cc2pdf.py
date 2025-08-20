@@ -80,9 +80,9 @@ def make_cc2pdf(f):
     cos_theta_rec_proton_series = cos_theta_rec_proton_series.reset_index(level='rec.slc.reco.pfp..index', drop=True)    
     
     #### add kinematic imbalance vars
-    # imbalance_df = pandora_df.groupby(['entry', 'rec.slc..index']).apply(cc2preco.measure_reco_imbalance)
-
-    # print(imbalance_df.keys())
+    imbalance_df = pandora_df.groupby(['entry', 'rec.slc..index']).apply(cc2preco.measure_reco_imbalance)
+    #imbalance_df = pandora_df.groupby(['entry', 'rec.slc..index']).apply(cc2preco.measure_reco_imbalance)
+    print(imbalance_df.keys())
 
     # reco_deltapt_series = imbalance_df['deltapt']
     # reco_deltaalphat_series = imbalance_df['deltaalphat']

@@ -44,7 +44,7 @@ def Signal(df): # definition
     is_fv = InFV(df.position)
     is_numu = (df.pdg == 14)
     is_cc = (df.iscc == 1)
-    is_2p0pi = (df.nmu_27MeV == 1) & (df.npi_30MeV == 0) & (df.np_50MeV == 2) & (df.npi0 == 0)
+    is_2p0pi = (df.nmu == 1) & (df.npi == 0) & (df.np == 2) & (df.npi0 == 0)
     return is_fv & is_numu & is_cc & is_2p0pi
 
 ## -- reco level flags
@@ -127,9 +127,13 @@ def get_n_recopid_per_slc(df):
 
     this_df.set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index"], inplace=True)
 
-    df[('muon_counter', '', '', '', '', '')] = this_df.n_mu
-    df[('proton_counter', '', '', '', '', '')] = this_df.n_proton
-    df[('pion_counter', '', '', '', '', '')] = this_df.n_pion    
+    df.loc[:, ('muon_counter', '', '', '', '', '')] = this_df['n_mu']
+    df.loc[:, ('proton_counter', '', '', '', '', '')] = this_df['n_proton']
+    df.loc[:, ('pion_counter', '', '', '', '', '')] = this_df['n_pion']
+
+    #df[('muon_counter', '', '', '', '', '')] = this_df.n_mu
+    #df[('proton_counter', '', '', '', '', '')] = this_df.n_proton
+    #df[('pion_counter', '', '', '', '', '')] = this_df.n_pion    
 
     return df
 
@@ -223,6 +227,9 @@ def reco_imbalance(muon_dir_x, muon_dir_y, muon_dir_z, range_P_muon,
     alpha_3d_denom = q * pn
     alpha_3d = np.arccos(alpha_3d_num / alpha_3d_denom) * 180./np.pi
         
+    # invariant mass
+    invm = np.sqrt(np.power((e_lead_p + e_rec_p), 2) - np.power(proton_p, 2));        
+        
     return pd.Series({
                     'deltapt': deltapt,
                     'deltaalphat': deltaalphat,
@@ -232,7 +239,8 @@ def reco_imbalance(muon_dir_x, muon_dir_y, muon_dir_z, range_P_muon,
                     'e_cal': e_cal,
                     'pn':pn,
                     'phi_3d': phi_3d,
-                    'alpha_3d': alpha_3d         
+                    'alpha_3d': alpha_3d,
+                    'invm': invm       
                     })
 
 def measure_reco_imbalance(group):
