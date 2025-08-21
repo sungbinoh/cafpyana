@@ -118,6 +118,54 @@ regen_systematics_sbnd_multisims = [
     "GENIEReWeight_SBN_v1_multisim_NCELVariationResponse",
 ]
 
+regen_systematics_sbnd_multisigma = [
+    # CCQE
+    "GENIEReWeight_SBN_v1_multisigma_RPA_CCQE",
+    "GENIEReWeight_SBN_v1_multisigma_CoulombCCQE",
+
+    # MEC
+    "GENIEReWeight_SBN_v1_multisigma_NormCCMEC",
+    "GENIEReWeight_SBN_v1_multisigma_NormNCMEC",
+
+    # RES
+    "GENIEReWeight_SBN_v1_multisigma_RDecBR1gamma",
+    "GENIEReWeight_SBN_v1_multisigma_RDecBR1eta",
+
+    # Non-Res
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvpCC1pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvpCC2pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvpNC1pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvpNC2pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvnCC1pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvnCC2pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvnNC1pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvnNC2pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvbarpCC1pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvbarpCC2pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvbarpNC1pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvbarpNC2pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvbarnCC1pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvbarnCC2pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvbarnNC1pi",
+    "GENIEReWeight_SBN_v1_multisigma_NonRESBGvbarnNC2pi",
+
+    # COH
+    "GENIEReWeight_SBN_v1_multisigma_NormCCCOH", # Handled by re-tuning
+    "GENIEReWeight_SBN_v1_multisigma_NormNCCOH",
+]
+
+regen_systematics_sbnd_morph = [
+    # CCQE
+    "GENIEReWeight_SBN_v1_multisigma_VecFFCCQEshape", 
+
+    # MEC
+    "GENIEReWeight_SBN_v1_multisigma_DecayAngMEC", 
+
+    # RES
+    "GENIEReWeight_SBN_v1_multisigma_Theta_Delta2Npi", 
+    "GENIEReWeight_SBN_v1_multisigma_ThetaDelta2NRad", 
+]
+
 
 def geniesyst(f, nuind):
     return getsyst.getsyst(f, regen_systematics, nuind)
