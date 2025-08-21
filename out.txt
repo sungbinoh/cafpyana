@@ -1,0 +1,4 @@
+Runing Pool mode
+CPU_COUNT : 64, len(thisglob): 1, nproc: 1
+Received Ctrl-C. Returning dataframes collected so far.
+Saved split info: 1 total splits
