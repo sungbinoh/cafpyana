@@ -123,15 +123,74 @@ def WienerSVD(Response, Signal, Measure, Covariance, C_type, Norm_type):
     unfold = C_inv @ V @ W @ D_t @ U_t @ M_trans
     AddSmear = C_inv @ V @ W0 @ Vh @ C
 
-    # Covariance matrix of the unfolded spectrum.
-    covRotation = C_inv @ V @ W @ D_t @ U_t @ Q
-    CovRotation = covRotation
-    UnfoldCov = covRotation @ Covariance @ covRotation.T
+    # Covariance rotation matrix (for systematics)
+    CovRotation = C_inv @ V @ W @ D_t @ U_t @ Q
+    SystUnfoldCov = CovRotation @ Covariance @ CovRotation.T
+
+    # Assume Poisson statistics: variance = Measure 
+    # TODO: if Measure == 0, set to 1 to avoid zero/negative
+    stat_var = np.where(Measure > 0, Measure, 1.0)
+    StatCov = np.diag(stat_var)
+    StatUnfoldCov = CovRotation @ StatCov @ CovRotation.T
+
+    # Total unfolded covariance is sum of statistical and systematic
+    UnfoldCov = SystUnfoldCov + StatUnfoldCov
 
     return {
         'unfold': unfold,
         'AddSmear': AddSmear,
         'WF': WF,
-        'UnfoldCov': UnfoldCov,
-        'CovRotation': CovRotation
+        'CovRotation': CovRotation,
+        'StatUnfoldCov': StatUnfoldCov,
+        'SystUnfoldCov': SystUnfoldCov,
+        'UnfoldCov': UnfoldCov
     }
+
+
+def Matrix_Decomp(matrix_pred, matrix_syst):
+    """
+    Decompose a covariance matrix into normalization and shape components.
+    Inputs:
+        matrix_pred: 1D numpy array of predicted event counts (length nbins)
+        matrix_syst: 2D numpy array (nbins x nbins) of systematic covariance
+    Returns:
+        (matrix_norm_plus_mixed, matrix_shape): tuple of 2D numpy arrays
+    """
+
+    nbins = len(matrix_pred)
+    matrix_pred = np.asarray(matrix_pred)
+    matrix_syst = np.asarray(matrix_syst)
+
+    # Total predicted events
+    N_T = np.sum(matrix_pred)
+
+    # Total covariance sum
+    M_kl = np.sum(matrix_syst)
+
+    # Initialize output matrices
+    matrix_shape = np.zeros((nbins, nbins))
+    matrix_mixed = np.zeros((nbins, nbins))
+    matrix_norm = np.zeros((nbins, nbins))
+
+    for i in range(nbins):
+        N_i = matrix_pred[i]
+        for j in range(nbins):
+            N_j = matrix_pred[j]
+            M_ij = matrix_syst[i, j]
+            M_ik = np.sum(matrix_syst[i, :])
+            M_kj = np.sum(matrix_syst[:, j])
+            matrix_shape[i, j] = (
+                M_ij
+                - N_j * M_ik / N_T
+                - N_i * M_kj / N_T
+                + N_i * N_j * M_kl / (N_T * N_T)
+            )
+            matrix_mixed[i, j] = (
+                N_j * M_ik / N_T
+                + N_i * M_kj / N_T
+                - 2 * N_i * N_j * M_kl / (N_T * N_T)
+            )
+            matrix_norm[i, j] = N_i * N_j * M_kl / (N_T * N_T)
+
+    matrix_norm_plus_mixed = matrix_norm + matrix_mixed
+    return matrix_norm_plus_mixed, matrix_shape
