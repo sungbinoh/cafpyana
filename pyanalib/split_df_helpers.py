@@ -27,5 +27,5 @@ def load_dfs(file, keys2load, n_max_concat=100):
             this_df = pd.read_hdf(file, key=f"{key}_{i}")
             dfs.append(this_df)
         out_df_dict[key] = pd.concat(dfs, ignore_index=False)
-
+        
     return out_df_dict

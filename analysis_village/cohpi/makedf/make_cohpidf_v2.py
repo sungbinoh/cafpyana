@@ -24,8 +24,8 @@ def InFV_nohiyz_trk(data):
 ## -- truth level flags
 def Signal(df): # definition
     is_fv = InFV_nohiyz(df.position)
-    is_1pi0p = (df.nmu_27MeV == 1) & (df.npi_30MeV == 1) & (df.np_20MeV == 0) & (df.npi0 == 0) & (df.true_t < 0.1)
-    return is_fv & is_1pi0p
+    is_1pi0p0n = (df.nmu_27MeV == 1) & (df.npi_30MeV == 1) & (df.np_20MeV == 0) & (df.npi0 == 0) & (df.nn_0MeV == 0)
+    return is_fv & is_1pi0p0n
 
 ## -- reco level flags
 def pass_slc_with_n_pfps(df, n = 2):
@@ -59,7 +59,7 @@ def apply_dir_z_cut(df):
                         .rank(method='first', ascending=False)
 
     # Step 2: Apply cuts
-    sel_longest  = (df['_trk_rank'] == 1) & (df[trk_dirz_col] > 0.5)
+    sel_longest  = (df['_trk_rank'] == 1) & (df[trk_dirz_col] > 0.7)
     sel_2nd_long = (df['_trk_rank'] == 2) & (df[trk_dirz_col] > 0.5)
 
     # Step 3: Keep only desired rows
@@ -79,8 +79,8 @@ def Avg(df, pid, drop_0=True):  # average score of 3 planes, exclude value if 0
     return average
 
 def add_contained_col(df):
-    containd = InFV_nohiyz_trk(df.pfp.trk.start) & InFV_nohiyz_trk(df.pfp.trk.end)
-    df['containd'] = containd
+    contained = InFV_nohiyz_trk(df.pfp.trk.start) & InFV_nohiyz_trk(df.pfp.trk.end)
+    df['contained'] = contained
 
 def reco_t(dir_x, dir_y, dir_z, range_P_muon, range_P_pion):
     # -- assume first particle is muon and the other is pion
@@ -214,7 +214,7 @@ def make_cohpidf_v2(f):
 
     #### (8) Tracks are contained
     add_contained_col(pandora_df)
-    pandora_df = pandora_df[pandora_df.containd]
+    pandora_df = pandora_df[pandora_df.contained]
     pandora_df = pass_slc_with_n_pfps(pandora_df)
 
     #### (9) collect only slc variables of interest
@@ -255,8 +255,8 @@ def make_cohpidf_v2(f):
     slcdf = pd.DataFrame({
         'range_p_mu': range_p_mu_series,
         'range_p_pi': range_p_pi_series,
-        'cos_theta_mu': cos_theta_mu_series,
-        'cos_theta_pi': cos_theta_pi_series,
+        'reco_cos_theta_mu': cos_theta_mu_series,
+        'reco_cos_theta_pi': cos_theta_pi_series,
         'reco_t': reco_t_series,
         'tmatch_idx': tmatch_idx_series
     })
@@ -305,10 +305,10 @@ def make_cohpi_nudf(f):
     cpi_cos_theta_series = nudf.cpi.genp.z / cpi_p_series
 
     this_nudf = pd.DataFrame({
-        'p_mu': mu_p_series,
-        'p_pi': cpi_p_series,
-        'cos_theta_mu': mu_cos_theta_series,
-        'cos_theta_pi': cpi_cos_theta_series,
+        'true_p_mu': mu_p_series,
+        'true_p_pi': cpi_p_series,
+        'true_cos_theta_mu': mu_cos_theta_series,
+        'true_cos_theta_pi': cpi_cos_theta_series,
         'true_t': true_t_series,
         'nuint_categ': nuint_categ
     })
