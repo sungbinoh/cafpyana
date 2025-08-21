@@ -33,8 +33,9 @@ def get_smear_matrix(true_var_signal_sel_df, var_signal_df, bins_2d, weights=Non
         print(reco_vs_true)
         unif_bin = np.linspace(0., float(len(bins) - 1), len(bins))
         extent = [unif_bin[0], unif_bin[-1], unif_bin[0], unif_bin[-1]]
+        fig, ax = plt.subplots(figsize=(10, 10))
         plt.imshow(Response, extent=extent, origin="lower", cmap="viridis")
-        plt.colorbar(label="Entries")
+        plt.colorbar(label="Entries", shrink=0.7)
 
         x_edges = np.array(bins)
         y_edges = np.array(bins)
@@ -48,8 +49,8 @@ def get_smear_matrix(true_var_signal_sel_df, var_signal_df, bins_2d, weights=Non
         plt.yticks(y_tick_positions, y_labels)
 
         if var_labels is not None:
-            plt.xlabel(var_labels[2])
-            plt.ylabel(var_labels[1])
+            plt.xlabel(var_labels[2], fontsize=20)
+            plt.ylabel(var_labels[1], fontsize=20)
 
         for i in range(Response.shape[0]):      # rows (y)
             for j in range(Response.shape[1]):  # columns (x)
@@ -63,7 +64,7 @@ def get_smear_matrix(true_var_signal_sel_df, var_signal_df, bins_2d, weights=Non
                         fontsize=10
                     )
 
-        plt.title("Smearing")
+        plt.title("Smearing", fontsize=20)
         plt.tight_layout()
 
         if save_fig and save_fig_name is not None:
@@ -92,10 +93,11 @@ def get_response_matrix(reco_vs_true, eff, bins,
     )
 
     if plot:
+        fig, ax = plt.subplots(figsize=(10, 10))
         unif_bin = np.linspace(0., float(len(bins) - 1), len(bins))
         extent = [unif_bin[0], unif_bin[-1], unif_bin[0], unif_bin[-1]]
         plt.imshow(Response, extent=extent, origin="lower", cmap="viridis")
-        plt.colorbar(label="Response")
+        plt.colorbar(label="Response", shrink=0.7)
 
         x_edges = np.array(bins)
         y_edges = np.array(bins)
@@ -109,8 +111,8 @@ def get_response_matrix(reco_vs_true, eff, bins,
         plt.yticks(y_tick_positions, y_labels)
 
         if var_labels is not None:
-            plt.xlabel(var_labels[2])
-            plt.ylabel(var_labels[1])
+            plt.xlabel(var_labels[2], fontsize=20)
+            plt.ylabel(var_labels[1], fontsize=20)
 
         for i in range(Response.shape[0]):      # rows (y)
             for j in range(Response.shape[1]):  # columns (x)
@@ -124,7 +126,7 @@ def get_response_matrix(reco_vs_true, eff, bins,
                         fontsize=10
                     )
 
-        plt.title("Response")
+        plt.title("Response", fontsize=20)
         plt.tight_layout()
 
         if save_fig and save_fig_name is not None:
