@@ -32,6 +32,11 @@ TRUE_KE_THRESHOLDS = {"nmu_27MeV": ["muon", 0.027],
                       "npi_30MeV": ["pipm", 0.03],
                       "nkaon_50MeV": ["kaon_p",0.05]
                       }
+TRUE_P_THRESHOLDS = {"nmu_220MeVc": ["muon", 0.22],
+                      "np_300MeVc": ["proton", 0.3],
+                      "np_200MeVc": ["proton", 0.2],
+                      "npi_70MeVc": ["pipm", 0.07],
+                      }
 
 def make_hdrdf(f):
     hdr = loadbranches(f["recTree"], hdrbranches).rec.hdr
@@ -179,6 +184,11 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
         this_KE = mcprimdf[np.abs(mcprimdf.pdg)==PDG[particle][0]].genE - PDG[particle][2]
         mcdf = multicol_add(mcdf, ((np.abs(mcprimdf.pdg)==PDG[particle][0]) & (this_KE > threshold)).groupby(level=[0,1]).sum().rename(identifier))
  
+    # particle counts w/ threshold in momentum
+    for identifier, (particle, threshold) in TRUE_P_THRESHOLDS.items():
+        this_p = np.sqrt(mcprimdf[np.abs(mcprimdf.pdg)==PDG[particle][0]].genp.x**2 + mcprimdf[np.abs(mcprimdf.pdg)==PDG[particle][0]].genp.y**2 + mcprimdf[np.abs(mcprimdf.pdg)==PDG[particle][0]].genp.z**2)
+        mcdf = multicol_add(mcdf, ((np.abs(mcprimdf.pdg)==PDG[particle][0]) & (this_p > threshold)).groupby(level=[0,1]).sum().rename(identifier))
+
     # lepton info
     mudf = mcprimdf[np.abs(mcprimdf.pdg)==13].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
     mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
