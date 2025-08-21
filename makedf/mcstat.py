@@ -45,7 +45,6 @@ def mcstat(evt_df: pd.DataFrame,
     assert len(meta_seeds) == len(set(meta_seeds))
 
     # generate universes
-    n_universes = 100
     MCstat_univ_events = np.zeros((n_universes, len(evt_df)))
     poisson_mean = 1.0
 
