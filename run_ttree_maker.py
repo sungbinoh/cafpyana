@@ -4,7 +4,9 @@ import datetime
 #from TimeTools import *
 import argparse
 from pyanalib.ntuple_glob import NTupleGlob
+from pyanalib.split_df_helpers import *
 import pandas as pd
+from tqdm.auto import tqdm
 import warnings
 
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
@@ -27,41 +29,42 @@ parser.add_argument('-l', dest='inputfilelist', default="", help="a file of list
 parser.add_argument('-nfile', dest='NFiles', default=0, type=int, help="Number of files to run. Default = 0, run all input files.")
 args = parser.parse_args()
 
-def save(outf, recodf, truedf):
-    with uproot.recreate(outf) as f:
-        f["SelectedEvents"] = recodf
-
-        if truedf is not None and not truedf.empty:
-            f["TrueEvents"] = truedf.to_dict(orient="list")
-        else:
-            print("Warning: truedf is empty or None — skipping writing 'TrueEvents'")
-        #f["TrueEvents"] = truedf
-
 def run(output, inputs):
+    first_fill = True
 
-    ## for MC, expect a tuple of two data frames
-    ## for data, expect only one data frame
-    result = list(map(TTREEMKR, inputs))
+    # count total splits beforehand for nice tqdm bar
+    total_splits = sum(get_n_split(inp) for inp in inputs)
 
-    if all(isinstance(r, (list, tuple)) and len(r) == 2 and 
-           isinstance(r[0], pd.DataFrame) and isinstance(r[1], pd.DataFrame) for r in result):
-        recodfs, truedfs = zip(*result)
-        recodf = pd.concat(recodfs)
-        truedf = pd.concat(truedfs)
-    elif all(isinstance(r, pd.DataFrame) for r in result):
-        # Only recodf returned; truedf will be empty
-        recodf = pd.concat(result)
-        truedf = pd.DataFrame()
-    else:
-        raise ValueError("TTREEMKR must return either a DataFrame or a tuple of two DataFrames.")
+    with uproot.recreate(output) as f, tqdm(total=total_splits, desc="Processing splits") as pbar:
+        for input in inputs:
+            this_n_split = get_n_split(input)
+            for split in range(this_n_split):
+                result = TTREEMKR(input, split)
 
-    save(output, recodf, truedf)
+                if isinstance(result, tuple) and len(result) == 2 \
+                   and isinstance(result[0], pd.DataFrame) and isinstance(result[1], pd.DataFrame):
+                    recodf, truedf = result
+                elif isinstance(result, pd.DataFrame):
+                    recodf, truedf = result, pd.DataFrame()
+                else:
+                    raise TypeError(
+                        "TTREEMKR must return either a (recodf, truedf) tuple of DataFrames "
+                        "or a single reco DataFrame."
+                    )
 
-    #recodfs, truedfs = zip(*list(map(TTREEMKR, inputs)))
-    #recodf = pd.concat(recodfs)
-    #truedf = pd.concat(truedfs)
+                write_true = truedf is not None and not truedf.empty
+                if first_fill:
+                    f["SelectedEvents"] = recodf.to_dict(orient="list")
+                    if write_true:
+                        f["TrueEvents"] = truedf.to_dict(orient="list")
+                    first_fill = False
+                else:
+                    f["SelectedEvents"].extend(recodf.to_dict(orient="list"))
+                    if write_true:
+                        f["TrueEvents"].extend(truedf.to_dict(orient="list"))
 
-    #save(output, recodf, truedf)
+                # update progress bar
+                pbar.update(1)
 
 if __name__ == "__main__":
     printhelp = ((args.inputfiles == "" and args.inputfilelist == "") or args.config == "" or args.output == "")
