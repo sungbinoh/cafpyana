@@ -74,8 +74,8 @@ def Avg(df, pid, drop_0=True):  # exclude value if 0
     return average
 
 def get_pid_result(row):
-    
-    chi2_muon = row[('pfp', 'trk', 'chi2pid', 'I2', 'chi2_muon', '')]
+
+    chi2_muon = row[('pfp', 'trk', 'chi2pid', 'I2', 'chi2_muon', '')]    
     chi2_proton = row[('pfp', 'trk', 'chi2pid', 'I2', 'chi2_proton', '')]
     len = row[('pfp', 'trk', 'len', '', '', '')]
 
