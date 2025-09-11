@@ -67,6 +67,42 @@ def multicol_add(df, s, default=None, **panda_kwargs):
 
     return ret
 
+def getcolumns(branches,depth=None):
+    # Setup branch names so df reflects structure of CAF file
+    bsplit = [b.split(".") for b in branches]
+    # Replace any reserved names
+    bsplit = [[unreserve(s) for s in b] for b in bsplit]
+    if depth is None:
+        depth = max([len(b) for b in bsplit])
+    return [pad(b,depth) for b in bsplit]
+def unreserve(s):
+    #change reserved names
+    if s == "index":
+        return "idx"
+    if s[0].isdigit(): # make the name a legal field 
+        return "I" + s
+    return s
+def pad(b,depth):
+    return tuple(b + [""]*(depth - len(b)))
+def multicol_addkey(df,s,fill=np.nan,inplace=False):
+    
+    #can't handle s larger then length of df
+    if isinstance(s,str):
+        s = [s]
+    nlevel = df.columns.nlevels
+    s_depth = max([len(k.split('.')) for k in s]) #depth of s
+    # Pad DataFrame's keys if s has larger depth
+    if s_depth > nlevel:
+        padding = [''] * (s_depth - nlevel)
+        df.columns = pd.MultiIndex.from_tuples([list(col) + padding for col in df.columns])
+    col = getcolumns(s,depth=nlevel)
+    data = np.full((len(df),len(s)),fill)
+    new = pd.MultiIndex.from_tuples(col)
+    if inplace:
+        df[new] = pd.DataFrame(data, index=df.index, columns=new)
+    else:
+        return pd.concat([df, pd.DataFrame(data, index=df.index, columns=new)], axis=1)
+
 def multicol_merge(lhs, rhs, **panda_kwargs):
     # Fix the columns
     lhs_col = lhs.columns
@@ -97,7 +133,7 @@ def detect_vectors(tree, branch):
 def idarray(ids, lens):
     return np.repeat(ids.values, lens.values)
 
-def loadbranches(tree, branches, **uprargs):
+def loadbranches(tree, branches, trustmebro=False,**uprargs):
     vectors = []
     for i,branch in enumerate(branches):
         this_vectors = detect_vectors(tree, branch)
@@ -106,7 +142,7 @@ def loadbranches(tree, branches, **uprargs):
         elif len(this_vectors) == 0: # This case is ok since it will automatically broadcast
             pass
         # All the branches must have the same vector structure for this to work
-        elif vectors != this_vectors:
+        elif (vectors != this_vectors) and not trustmebro:
             raise ValueError("Branches %s and %s have different vector structures in the CAF." % (branches[0], branch))
 
     lengths = [ak.to_dataframe(tree.arrays([v+"..length"], library="ak", **uprargs), how="inner") for v in vectors]

@@ -202,7 +202,7 @@ def make_pandora_evtdf(f, include_weights=True, multisim_nuniv=1000, wgt_types=[
                   right_on=[("entry", "", ""), 
                             ("rec.mc.nu..index", "", "")], 
                   how="left"
-                  ) 
+                  )
 
     df = df.set_index(slcdf.index.names, verify_integrity=True)
     
