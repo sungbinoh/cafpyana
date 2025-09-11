@@ -27,6 +27,7 @@ PDG = {
 ## ==== "<column name>": ["<particle name>", <KE cut in GeV>]
 ## ==== <particle name> is used to collect PID and mass from the "PDG" dictionary
 TRUE_KE_THRESHOLDS = {"nmu_27MeV": ["muon", 0.027],
+                      "nmu_100MeV": ["muon", 0.1],
                       "np_20MeV": ["proton", 0.02],
                       "np_50MeV": ["proton", 0.05],
                       "npi_30MeV": ["pipm", 0.03],
@@ -63,7 +64,7 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=250, wgt_types=["bnb","
     else:
         det = "ICARUS"
 
-    mcdf = make_mcdf(f)
+    mcdf = make_mcdf(f,include_mu=True)
     mcdf["ind"] = mcdf.index.get_level_values(1)
     if include_weights:
         if len(wgt_types) == 0:
@@ -99,10 +100,11 @@ def make_opflashdf(f):
     opflashdf = loadbranches(f["recTree"], opflashbranches).rec.opflashes
     return opflashdf
 
-def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False):
+def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False, trackScoreCut=0.5):
     trkdf = loadbranches(f["recTree"], trkbranches + shwbranches)
     if scoreCut:
-        trkdf = trkdf.rec.slc.reco[trkdf.rec.slc.reco.pfp.trackScore > 0.5]
+        print('Score cut')
+        trkdf = trkdf.rec.slc.reco[trkdf.rec.slc.reco.pfp.trackScore > trackScoreCut]
     else:
         trkdf = trkdf.rec.slc.reco
 
@@ -146,18 +148,17 @@ def make_slcdf(f):
     slcdf = loadbranches(f["recTree"], slcbranches)
     slcdf = slcdf.rec
 
-    slc_mcdf = make_mcdf(f, slc_mcbranches, slc_mcprimbranches)
+    slc_mcdf = make_mcdf(f, slc_mcbranches, slc_mcprimbranches, include_mu=True)
     slc_mcdf.columns = pd.MultiIndex.from_tuples([tuple(["slc", "truth"] + list(c)) for c in slc_mcdf.columns])
     slcdf = multicol_merge(slcdf, slc_mcdf, left_index=True, right_index=True, how="left", validate="one_to_one")
 
     return slcdf
 
-def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
+def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches, include_mu=False, include_p=False, include_pi=False):
     # load the df
     mcdf = loadbranches(f["recTree"], branches)
     while mcdf.columns.nlevels > 2:
         mcdf.columns = mcdf.columns.droplevel(0)
-
     # Add in primary particle info
     mcprimdf = loadbranches(f["recTree"], primbranches)
     while mcprimdf.columns.nlevels > 2:
@@ -187,31 +188,36 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
         this_KE = mcprimdf[np.abs(mcprimdf.pdg)==PDG[particle][0]].genE - PDG[particle][2]
         mcdf = multicol_add(mcdf, ((np.abs(mcprimdf.pdg)==PDG[particle][0]) & (this_KE > threshold)).groupby(level=[0,1]).sum().rename(identifier))
  
-    # lepton info
-    mudf = mcprimdf[np.abs(mcprimdf.pdg)==13].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
-    mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
+    if include_mu:
+        # lepton info
+        mudf = mcprimdf[np.abs(mcprimdf.pdg)==13].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
+        mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
+        mcdf = multicol_merge(mcdf, mudf, left_index=True, right_index=True, how="left", validate="one_to_one")
+        # primary track variables
+        mcdf.loc[:, ('mu','totp','')] = np.sqrt(mcdf.mu.genp.x**2 + mcdf.mu.genp.y**2 + mcdf.mu.genp.z**2)
+        # opening angles
+        mcdf.loc[:, ('mu','dir','x')] = mcdf.mu.genp.x/mcdf.mu.totp
+        mcdf.loc[:, ('mu','dir','y')] = mcdf.mu.genp.y/mcdf.mu.totp
+        mcdf.loc[:, ('mu','dir','z')] = mcdf.mu.genp.z/mcdf.mu.totp
+        # Is contained
+        mcdf.loc[:, ('mu','is_contained','')] = InFV(mcdf.mu.start, 0, det="SBND AV") & InFV(mcdf.mu.end, 0, det="SBND AV")
 
-    cpidf = mcprimdf[np.abs(mcprimdf.pdg)==211].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
-    cpidf.columns = pd.MultiIndex.from_tuples([tuple(["cpi"] + list(c)) for c in cpidf.columns])
+    if include_pi:
+        cpidf = mcprimdf[np.abs(mcprimdf.pdg)==211].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
+        cpidf.columns = pd.MultiIndex.from_tuples([tuple(["cpi"] + list(c)) for c in cpidf.columns])
+        mcdf = multicol_merge(mcdf, cpidf, left_index=True, right_index=True, how="left", validate="one_to_one")
 
-    pdf = mcprimdf[mcprimdf.pdg==2212].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
-    pdf.columns = pd.MultiIndex.from_tuples([tuple(["p"] + list(c)) for c in pdf.columns])
+    if include_p:
+        pdf = mcprimdf[mcprimdf.pdg==2212].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
+        pdf.columns = pd.MultiIndex.from_tuples([tuple(["p"] + list(c)) for c in pdf.columns])
 
-    mcdf = multicol_merge(mcdf, mudf, left_index=True, right_index=True, how="left", validate="one_to_one")
-    mcdf = multicol_merge(mcdf, cpidf, left_index=True, right_index=True, how="left", validate="one_to_one")
-    mcdf = multicol_merge(mcdf, pdf, left_index=True, right_index=True, how="left", validate="one_to_one")
+        mcdf = multicol_merge(mcdf, pdf, left_index=True, right_index=True, how="left", validate="one_to_one")
 
-    # primary track variables
-    mcdf.loc[:, ('mu','totp','')] = np.sqrt(mcdf.mu.genp.x**2 + mcdf.mu.genp.y**2 + mcdf.mu.genp.z**2)
-    mcdf.loc[:, ('p','totp','')] = np.sqrt(mcdf.p.genp.x**2 + mcdf.p.genp.y**2 + mcdf.p.genp.z**2)
+        mcdf.loc[:, ('p','totp','')] = np.sqrt(mcdf.p.genp.x**2 + mcdf.p.genp.y**2 + mcdf.p.genp.z**2)
 
-    # opening angles
-    mcdf.loc[:, ('mu','dir','x')] = mcdf.mu.genp.x/mcdf.mu.totp
-    mcdf.loc[:, ('mu','dir','y')] = mcdf.mu.genp.y/mcdf.mu.totp
-    mcdf.loc[:, ('mu','dir','z')] = mcdf.mu.genp.z/mcdf.mu.totp
-    mcdf.loc[:, ('p','dir','x')] = mcdf.p.genp.x/mcdf.p.totp
-    mcdf.loc[:, ('p','dir','y')] = mcdf.p.genp.y/mcdf.p.totp
-    mcdf.loc[:, ('p','dir','z')] = mcdf.p.genp.z/mcdf.p.totp
+        mcdf.loc[:, ('p','dir','x')] = mcdf.p.genp.x/mcdf.p.totp
+        mcdf.loc[:, ('p','dir','y')] = mcdf.p.genp.y/mcdf.p.totp
+        mcdf.loc[:, ('p','dir','z')] = mcdf.p.genp.z/mcdf.p.totp
 
     return mcdf
 
@@ -240,23 +246,23 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=10., cutClearCosmic=False, 
 
     return slcdf
 
-def make_spine_df(f, trkDistCut=-1, requireFiducial=True, **trkArgs):
+def make_spine_df(f, trkDistCut=-1, requireFiducial=False, **trkArgs):
     # load
     partdf = make_spinepartdf(f, **trkArgs)
     partdf.columns = pd.MultiIndex.from_tuples([tuple(["particle"] + list(c)) for c in partdf.columns])
-    eslcdf = make_spineslcdf(f)
+    interdf = make_spininterdf(f)
 
     # merge in tracks
-    eslcdf = multicol_merge(eslcdf, partdf, left_index=True, right_index=True, how="right", validate="one_to_many")
-    eslcdf = multicol_add(eslcdf, dmagdf(eslcdf.vertex, eslcdf.particle.start_point).rename("dist_to_vertex"))
+    interdf = multicol_merge(interdf, partdf, left_index=True, right_index=True, how="right", validate="one_to_many")
+    interdf = multicol_add(interdf, dmagdf(interdf.vertex, interdf.particle.start_point).rename("dist_to_vertex"))
 
     if trkDistCut > 0:
-        eslcdf = eslcdf[eslcdf.dist_to_vertex < trkDistCut]
+        interdf = interdf[interdf.dist_to_vertex < trkDistCut]
     # require fiducial verex
     if requireFiducial:
-        eslcdf = eslcdf[InFV(eslcdf.vertex, 50)]
+        interdf = interdf[InFV(interdf.vertex, 50)]
 
-    return eslcdf
+    return interdf
 
 def make_stubs(f, det="ICARUS"):
     alpha_sbnd = 0.930                     
@@ -377,107 +383,104 @@ def make_stubs(f, det="ICARUS"):
 
     #return pd.concat(df_tosave, axis=1)
 
-def make_spineslcdf(f):
-    eslcdf = loadbranches(f["recTree"], eslcbranches)
-    eslcdf = eslcdf.rec.dlp
+def make_spineinterdf(f):
+    interdf = loadbranches(f["recTree"], interbranches)
+    interdf = interdf.rec.dlp
 
-    etintdf = loadbranches(f["recTree"], etruthintbranches)
-    etintdf = etintdf.rec.dlp_true
+    tintdf = loadbranches(f["recTree"], truthinterbranches)
+    tintdf = tintdf.rec.dlp_true
+
+    #The lengths are different, but the structure is the same
+    # Collapse the flash info into one column
+    # TODO: Fix if we ever go to unmerged flashes. This probably won't ever happen, but ensure the structure is sound.
+    # This works since only one flash score is stored. The volume ID is always per module so we don't care.
+    flashinterdf = loadbranches(f["recTree"], flashinterbranches,trustmebro=True)
+    flashinterdf = flashinterdf.rec.dlp
+    
+    # Keep only the rows with the lowest flash_time among duplicate indices
+    flashinterdf = flashinterdf.loc[flashinterdf.groupby(level=list(range(flashinterdf.index.nlevels-1)))['flash_times'].idxmin()]
     
     # match to the truth info
-    mcdf = make_mcdf(f)
+    mcdf = make_mcdf(f,include_mu=True)
     # mc is truth
     mcdf.columns = pd.MultiIndex.from_tuples([tuple(["truth"] + list(c)) for c in mcdf.columns])
 
     # Do matching
     # 
     # First get the ML true particle IDs matched to each reco particle
-    eslc_matchdf = loadbranches(f["recTree"], eslcmatchedbranches)
-    eslc_match_overlap_df = loadbranches(f["recTree"], eslcmatchovrlpbranches)
-    eslc_match_overlap_df.index.names = eslc_matchdf.index.names
+    inter_matchdf = loadbranches(f["recTree"], intermatchedbranches)
+    inter_match_overlap_df = loadbranches(f["recTree"], intermatchovrlpbranches)
+    inter_match_overlap_df.index.names = inter_matchdf.index.names
 
-    eslc_matchdf = multicol_merge(eslc_matchdf, eslc_match_overlap_df, left_index=True, right_index=True, how="left", validate="one_to_one")
-    eslc_matchdf = eslc_matchdf.rec.dlp
+    inter_matchdf = multicol_merge(inter_matchdf, inter_match_overlap_df, left_index=True, right_index=True, how="left", validate="one_to_one")
+    inter_matchdf = inter_matchdf.rec.dlp
 
     # Then use bestmatch.match to get the nu ids in etintdf
-    eslc_matchdf_wids = pd.merge(eslc_matchdf, etintdf, left_on=["entry", "match"], right_on=["entry", "id"], how="left")
-    eslc_matchdf_wids.index = eslc_matchdf.index
+    inter_matchdf_wids = pd.merge(inter_matchdf, tintdf, left_on=["entry", "match_ids"], right_on=["entry", "id"], how="left")
+    inter_matchdf_wids.index = inter_matchdf.index
 
     # Now use nu_ids to get the true interaction information
-    eslc_matchdf_trueints = multicol_merge(eslc_matchdf_wids, mcdf, left_on=["entry", "nu_id"], right_index=True, how="left")
-    eslc_matchdf_trueints.index = eslc_matchdf_wids.index
+    inter_matchdf_trueints = multicol_merge(inter_matchdf_wids, mcdf, left_on=["entry", "nu_id"], right_index=True, how="left")
+    inter_matchdf_trueints.index = inter_matchdf_wids.index
 
     # delete unnecesary matching branches
-    del eslc_matchdf_trueints[("match", "")]
-    del eslc_matchdf_trueints[("nu_id", "")]
-    del eslc_matchdf_trueints[("id", "")]
+    del inter_matchdf_trueints[("match_ids", "")]
+    del inter_matchdf_trueints[("nu_id", "")]
+    del inter_matchdf_trueints[("id", "")]
 
     # first match is best match
-    bestmatch = eslc_matchdf_trueints.groupby(level=list(range(eslc_matchdf_trueints.index.nlevels-1))).first()
+    bestmatch = inter_matchdf_trueints.groupby(level=list(range(inter_matchdf_trueints.index.nlevels-1))).first()
 
-    # add extra levels to eslcdf columns
-    eslcdf.columns = pd.MultiIndex.from_tuples([tuple(list(c) + [""]*2) for c in eslcdf.columns])
+    # add extra levels to interdf columns
+    interdf.columns = pd.MultiIndex.from_tuples([tuple(list(c) + [""]*2) for c in interdf.columns])
 
-    eslcdf_withmc = multicol_merge(eslcdf, bestmatch, left_index=True, right_index=True, how="left")
+    interdf_withmc = multicol_merge(interdf, bestmatch, left_index=True, right_index=True, how="left")
 
-    # Fix position names (I0, I1, I2) -> (x, y, z)
-    def mappos(s):
-        if s == "I0": return "x"
-        if s == "I1": return "y"
-        if s == "I2": return "z"
-        return s
-    def fixpos(c):
-        if c[0] not in ["end_point", "start_point", "start_dir", "vertex", "momentum"]: return c
-        return tuple([c[0]] + [mappos(c[1])] + list(c[2:]))
+    # add flash information
+    interdf_withmc = multicol_merge(interdf_withmc, flashinterdf, left_index=True, right_index=True, how="left")
 
-    eslcdf_withmc.columns = pd.MultiIndex.from_tuples([fixpos(c) for c in eslcdf_withmc.columns])
+    #Drop flash index
+    interdf_withmc.index = interdf_withmc.index.droplevel(-1)
 
-    return eslcdf_withmc
+    return interdf_withmc
 
 def make_spinepartdf(f):
+    # tpartdf = loadbranches(f["recTree"], trueparticlebranches)
+    # tpartdf = tpartdf.rec.true_particles
     epartdf = loadbranches(f["recTree"], eparticlebranches)
     epartdf = epartdf.rec.dlp.particles
 
-    tpartdf = loadbranches(f["recTree"], trueparticlebranches)
-    tpartdf = tpartdf.rec.true_particles
     # cut out EMShowerDaughters
-    # tpartdf = tpartdf[(tpartdf.parent == 0)]
+    #tpartdf = tpartdf[(tpartdf.parent == 0)]
 
     etpartdf = loadbranches(f["recTree"], etrueparticlebranches)
     etpartdf = etpartdf.rec.dlp_true.particles
-    etpartdf.columns = [s for s in etpartdf.columns]
-    
-    # Do matching
-    # 
-    # First get the ML true particle IDs matched to each reco particle
-    epart_matchdf = loadbranches(f["recTree"], eparticlematchedbranches)
-    epart_match_overlap_df = loadbranches(f["recTree"], eparticlematchovrlpbranches)
-    epart_match_overlap_df.index.names = epart_matchdf.index.names
-    epart_matchdf = multicol_merge(epart_matchdf, epart_match_overlap_df, left_index=True, right_index=True, how="left", validate="one_to_one")
-    epart_matchdf = epart_matchdf.rec.dlp.particles
-    # get the best match (highest match_overlap), assume it's sorted
-    bestmatch = epart_matchdf.groupby(level=list(range(epart_matchdf.index.nlevels-1))).first()
-    bestmatch.columns = [s for s in bestmatch.columns]
-
-    # Then use betmatch.match to get the G4 track IDs in etpartdf
-    bestmatch_wids = pd.merge(bestmatch, etpartdf, left_on=["entry", "match"], right_on=["entry", "id"], how="left")
-    bestmatch_wids.index = bestmatch.index
-
-    # Now use the G4 track IDs to get the true particle information
-    bestmatch_trueparticles = multicol_merge(bestmatch_wids, tpartdf, left_on=["entry", "track_id"], right_on=["entry", ("G4ID", "")], how="left")
-    bestmatch_trueparticles.index = bestmatch_wids.index
-
-    # delete unnecesary matching branches
-    del bestmatch_trueparticles[("match", "")]
-    del bestmatch_trueparticles[("track_id", "")]
-    del bestmatch_trueparticles[("id", "")]
+    etpartdf.columns = pd.MultiIndex.from_tuples([tuple(["tpart"] + list(c)) for c in etpartdf.columns])
 
     # add extra level to epartdf columns
     epartdf.columns = pd.MultiIndex.from_tuples([tuple(list(c) + [""]) for c in epartdf.columns])
 
-    # put everything in epartdf
-    for c in bestmatch_trueparticles.columns:
-        epartdf[tuple(["truth"] + list(c))] = bestmatch_trueparticles[c]
+    # Do matching
+    part_matchdf = loadbranches(f["recTree"], eparticlematchedbranches,trustmebro=True)
+    part_matchdf = part_matchdf.rec.dlp.particles
+    # Add level to part_matchdf columns
+    part_matchdf.columns = pd.MultiIndex.from_tuples([tuple([c] + ["",""]) for c in part_matchdf.columns])
+    
+
+    # Use bestmatch.match to get the true particle IDs matched to each reco particle
+    part_matchdf_wids = pd.merge(part_matchdf, etpartdf, left_on=["entry", ("match_ids", "","")], right_on=["entry", ("tpart","id","")], how="left")
+    part_matchdf_wids.index = part_matchdf.index
+
+    # delete unnecesary matching branches
+    del part_matchdf_wids[("match_ids", "","")]
+
+    # first match is best match
+    bestmatch = part_matchdf_wids.groupby(level=list(range(part_matchdf_wids.index.nlevels-1))).first()
+
+    epartdf_withmc = multicol_merge(epartdf, bestmatch, left_index=True, right_index=True, how="left")
+
+    # add extra levels to epartdf columns
+    epartdf_withmc.columns = pd.MultiIndex.from_tuples([tuple(list(c) + [""]*2) for c in epartdf_withmc.columns])
 
     # Fix position names (I0, I1, I2) -> (x, y, z)
     def mappos(s):
@@ -489,6 +492,6 @@ def make_spinepartdf(f):
         if c[0] not in ["end_point", "start_point", "start_dir", "vertex"]: return c
         return tuple([c[0]] + [mappos(c[1])] + list(c[2:]))
 
-    epartdf.columns = pd.MultiIndex.from_tuples([fixpos(c) for c in epartdf.columns])
+    epartdf_withmc.columns = pd.MultiIndex.from_tuples([fixpos(c) for c in epartdf_withmc.columns])
 
-    return epartdf
+    return epartdf_withmc
