@@ -26,7 +26,7 @@ def make_spine_evtdf_wgt(f,include_weights=False, multisim_nuniv=1000, wgt_types
     hdrdf = hdrdf.loc[:,["run","subrun","evt"]]
     
     # load slices and particles
-    interdf = make_spineinterdf(f)
+    interdf = make_spineinterdf(f,include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim)
     partdf = make_spinepartdf(f)
     #mcdf = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim)
 

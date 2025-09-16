@@ -57,4 +57,3 @@
 ('cut', 'fv', '')
 ('cut', 'cosmic', '')
 ('cut', 'cont', '')
-('event_type', '', '')
