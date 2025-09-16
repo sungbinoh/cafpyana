@@ -383,7 +383,7 @@ def make_stubs(f, det="ICARUS"):
 
     #return pd.concat(df_tosave, axis=1)
 
-def make_spineinterdf(f):
+def make_spineinterdf(f,**mcnu_kwargs):
     interdf = loadbranches(f["recTree"], interbranches)
     interdf = interdf.rec.dlp
 
@@ -401,7 +401,7 @@ def make_spineinterdf(f):
     flashinterdf = flashinterdf.loc[flashinterdf.groupby(level=list(range(flashinterdf.index.nlevels-1)))['flash_times'].idxmin()]
     
     # match to the truth info
-    mcdf = make_mcdf(f,include_mu=True)
+    mcdf = make_mcnudf(f,**mcnu_kwargs)
     # mc is truth
     mcdf.columns = pd.MultiIndex.from_tuples([tuple(["truth"] + list(c)) for c in mcdf.columns])
 
