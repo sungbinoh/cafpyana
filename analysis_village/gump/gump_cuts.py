@@ -18,63 +18,84 @@ from makedf.util import *
 # Fiducial volume cuts for SBND and ICARUS
 SBNDFVCuts = {
     "lowYZ": {
-        "x": {"min": -190., "max": 190.},
-        "y": {"min": -190., "max": 190.},
-        "z": {"min": 10., "max": 250.}
+        "x": {"min": -200., "max": 200.},
+        "y": {"min": -200., "max": 200.},
+        "z": {"min": 0., "max": 250.}
     },
     "highYZ": {
-        "x": {"min": -190., "max": 190.},
-        "y": {"min": -190., "max": 100},
-        "z": {"min": 250., "max": 450.}
+        "x": {"min": -200., "max": 200.},
+        "y": {"min": -200., "max": 100},
+        "z": {"min": 250., "max": 500.}
     }
 }
 
 ICARUSFVCuts = {
     "C0": {
-        "x": {"min": -358.49 + 10, "max": -61.94 - 10},
-        "y": {"min": -181.86 + 10, "max": 134.96 - 10},
-        "z": {"min": -894.950652270838 + 10, "max": 894.950652270838 - 50}
+        "x": {"min": -358.49, "max": -61.94},
+        "y": {"min": -181.86, "max": 134.96},
+        "z": {"min": -894.950652270838, "max": 894.950652270838}
     },
     "C1": {
         "x": {"min": 61.94, "max": 358.49},
-        "y": {"min": -181.86 + 10, "max": 134.96 - 10},
-        "z": {"min": -894.950652270838 + 10, "max": 894.950652270838 - 50}
+        "y": {"min": -181.86, "max": 134.96},
+        "z": {"min": -894.950652270838, "max": 894.950652270838}
     }
 }
 
-def fv_cut(df, det):
+def slcfv_cut(df, det):
+    vtx = pd.DataFrame({'x': df.slc_vtx_x,
+                           'y': df.slc_vtx_y,
+                           'z': df.slc_vtx_z})
+    return fv_cut(vtx, det)
+
+def mufv_cut(df, det):
+    vtx = pd.DataFrame({'x': df.mu_end_x,
+                           'y': df.mu_end_y,
+                           'z': df.mu_end_z})
+    return fv_cut(vtx, det, inzback=10)
+
+def pfv_cut(df, det):
+    vtx = pd.DataFrame({'x': df.p_end_x,
+                           'y': df.p_end_y,
+                           'z': df.p_end_z})
+    return fv_cut(vtx, det, inzback=10)
+
+def fv_cut(df, det, inx=10, iny=10, inzfront=10, inzback=50):
     if det == "ICARUS":
-        return (((df.x < ICARUSFVCuts['C0']['x']['max']) & (df.x > ICARUSFVCuts['C0']['x']['min'])) |\
-                ((df.x < ICARUSFVCuts['C1']['x']['max']) & (df.x > ICARUSFVCuts['C1']['x']['min']))) &\
-                 (df.y < ICARUSFVCuts['C0']['y']['max']) & (df.y > ICARUSFVCuts['C0']['y']['min']) &\
-                 (df.z < ICARUSFVCuts['C0']['z']['max']) & (df.z > ICARUSFVCuts['C0']['z']['min'])
+        return (((df.x < (ICARUSFVCuts['C0']['x']['max'] - inx)) & (df.x > (ICARUSFVCuts['C0']['x']['min'] + inx))) |\
+                ((df.x < (ICARUSFVCuts['C1']['x']['max'] - inx)) & (df.x > (ICARUSFVCuts['C1']['x']['min'] + inx)))) &\
+                 (df.y < (ICARUSFVCuts['C0']['y']['max'] - iny)) & (df.y > (ICARUSFVCuts['C0']['y']['min'] + iny)) &\
+                 (df.z < (ICARUSFVCuts['C0']['z']['max'] - inzback)) & (df.z > (ICARUSFVCuts['C0']['z']['min'] + inzfront))
 
 
     elif det == "SBND":
 
-        return ((df.x < SBNDFVCuts['lowYZ']['x']['max']) & (df.x > SBNDFVCuts['lowYZ']['x']['min']) &\
-                (df.y < SBNDFVCuts['lowYZ']['y']['max']) & (df.y > SBNDFVCuts['lowYZ']['y']['min']) &\
-                (df.z < SBNDFVCuts['lowYZ']['z']['max']) & (df.z > SBNDFVCuts['lowYZ']['z']['min'])) |\
-               ((df.x < SBNDFVCuts['highYZ']['x']['max']) & (df.x > SBNDFVCuts['highYZ']['x']['min']) &\
-                (df.y < SBNDFVCuts['highYZ']['y']['max']) & (df.y > SBNDFVCuts['highYZ']['y']['min']) &\
-                (df.z < SBNDFVCuts['highYZ']['z']['max']) & (df.z > SBNDFVCuts['highYZ']['z']['min']))
+        return ((df.x < SBNDFVCuts['lowYZ']['x']['max'] - inx) & (df.x > SBNDFVCuts['lowYZ']['x']['min'] + inx) &\
+                (df.y < SBNDFVCuts['lowYZ']['y']['max'] - iny) & (df.y > SBNDFVCuts['lowYZ']['y']['min'] + iny) &\
+                (df.z < SBNDFVCuts['lowYZ']['z']['max'] - inzback) & (df.z > SBNDFVCuts['lowYZ']['z']['min']) + inzfront) |\
+               ((df.x < SBNDFVCuts['highYZ']['x']['max'] - inx) & (df.x > SBNDFVCuts['highYZ']['x']['min'] + inx) &\
+                (df.y < SBNDFVCuts['highYZ']['y']['max'] - iny) & (df.y > SBNDFVCuts['highYZ']['y']['min'] + iny) &\
+                (df.z < SBNDFVCuts['highYZ']['z']['max'] - inzback) & (df.z > SBNDFVCuts['highYZ']['z']['min']) + inzfront)
 
     else:
         raise NameError("DETECTOR not valid, should be SBND or ICARUS")
 
 def cosmic_cut(df):
     return (df.nu_score > 0.5)
-    #return (df.crlongtrkdiry > 0.5)
 
 def twoprong_cut(df):
     return ((df.p_trackScore > 0.5) & (df.mu_trackScore > 0.5) & np.isnan(df.other_shw_length) & np.isnan(df.other_trk_length))
 
-def pid_cut(mu_chi2_of_mu_cand, mu_chi2_of_prot_cand, prot_chi2_of_mu_cand,
-            prot_chi2_of_prot_cand, mu_len):
+def pid_cut_df(df):
+    return pid_cut(df.mu_chi2_of_mu_cand, df.mu_chi2_of_prot_cand,
+        df.prot_chi2_of_mu_cand, df.prot_chi2_of_prot_cand, df.mu_len)
 
-    MUSEL_MUSCORE_TH, MUSEL_PSCORE_TH, MUSEL_LEN_TH = 25, 100, 50
-    mu_cut = (mu_chi2_of_mu_cand < MUSEL_MUSCORE_TH) & \
-             (prot_chi2_of_mu_cand > MUSEL_PSCORE_TH) & \
+def pid_cut(mu_chi2_mu_cand, mu_chi2_prot_cand, prot_chi2_mu_cand,
+            prot_chi2_prot_cand, mu_len):
+
+    MUSEL_MUSCORE_TH, MUSEL_PSCORE_TH, MUSEL_LEN_TH = 15, 90, 50
+    mu_cut = (mu_chi2_mu_cand < MUSEL_MUSCORE_TH) & \
+             (prot_chi2_mu_cand > MUSEL_PSCORE_TH) & \
              (mu_len > MUSEL_LEN_TH)
 
     PSEL_MUSCORE_TH, PSEL_PSCORE_TH = 0, 90
@@ -120,4 +141,3 @@ def breakdown_top(var, df):
            var[(df.is_sig != True) & (df.is_other_numucc != True) & (df.is_nc != True) & (df.is_fv != False) & (df.is_cosmic != True)]
            ]
     return ret
- 
