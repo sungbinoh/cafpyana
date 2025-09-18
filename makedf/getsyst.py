@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import awkward as ak
 
-def getsyst(f, systematics, nuind, multisim_nuniv=250):
+def getsyst(f, systematics, nuind, multisim_nuniv=100):
     if "globalTree" not in f:
         return pd.DataFrame(index=nuind.index)
 

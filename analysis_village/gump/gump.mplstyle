@@ -1,0 +1,16 @@
+axes.formatter.use_mathtext: True
+axes.titlesize: 14
+axes.labelsize: 14
+axes.linewidth: 2.5
+lines.linewidth: 8.5
+axes.spines.left:   True
+axes.spines.bottom: True
+axes.spines.top:    True
+axes.spines.right:  True
+axes.labelweight: bold
+legend.fontsize: 14
+xtick.labelsize: 14
+ytick.labelsize: 14
+figure.titlesize: 14
+figure.titleweight: bold
+font.size: 12

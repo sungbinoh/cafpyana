@@ -55,7 +55,7 @@ def make_mcnuwgtdf(f):
 def make_mcnuwgtdf_slim(f):
     return make_mcnudf(f, include_weights=True, multisim_nuniv=1000, slim=True)
 
-def make_mcnudf(f, include_weights=False, multisim_nuniv=250, wgt_types=["bnb","genie"], slim=False):
+def make_mcnudf(f, include_weights=False, multisim_nuniv=100, wgt_types=["bnb","genie"], slim=False):
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if (1 == det.unique()):

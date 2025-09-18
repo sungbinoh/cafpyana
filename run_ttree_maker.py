@@ -40,7 +40,6 @@ def run(output, inputs):
             this_n_split = get_n_split(input)
             for split in range(this_n_split):
                 result = TTREEMKR(input, split)
-                print(result)
                 if isinstance(result, tuple) and len(result) == 2 \
                    and isinstance(result[0], pd.DataFrame) and isinstance(result[1], pd.DataFrame):
                     recodf, truedf = result
@@ -52,8 +51,9 @@ def run(output, inputs):
                         "or a single reco DataFrame."
                     )
 
+                del result
+
                 write_true = truedf is not None and not truedf.empty
-                print(recodf.to_dict(orient="list"))
                 if first_fill:
                     f["SelectedEvents"] = recodf.to_dict(orient="list")
                     if write_true:
@@ -65,6 +65,7 @@ def run(output, inputs):
                         f["TrueEvents"].extend(truedf.to_dict(orient="list"))
 
                 # update progress bar
+                sys.exit()
                 pbar.update(1)
 
 if __name__ == "__main__":

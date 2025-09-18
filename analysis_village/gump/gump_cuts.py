@@ -64,9 +64,10 @@ def fv_cut(df, det):
 
 def cosmic_cut(df):
     return (df.nu_score > 0.5)
+    #return (df.crlongtrkdiry > 0.5)
 
 def twoprong_cut(df):
-    return (np.isnan(df.other_shw_length) & np.isnan(df.other_trk_length))
+    return ((df.p_trackScore > 0.5) & (df.mu_trackScore > 0.5) & np.isnan(df.other_shw_length) & np.isnan(df.other_trk_length))
 
 def pid_cut(mu_chi2_of_mu_cand, mu_chi2_of_prot_cand, prot_chi2_of_mu_cand,
             prot_chi2_of_prot_cand, mu_len):
@@ -111,7 +112,6 @@ top_labels = ["Signal",
               "Other"]
 
 def breakdown_top(var, df):
-    print(df.is_cosmic)
     ret = [var[df.is_sig == True],
            var[df.is_other_numucc == True],
            var[df.is_nc == True],
