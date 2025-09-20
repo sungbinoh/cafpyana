@@ -125,9 +125,8 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
         yz_scale = yz_scale.fillna(1)
         yz_scale.index = dqdxdf.index
 
-
-        yzdf['rr'] = dqdxdf.rr
-        yzdf['scale'] = yz_scale
+        #yzdf['rr'] = dqdxdf.rr
+        #yzdf['scale'] = yz_scale
         #print(yzdf[yzdf.rr < 26.].head(50))
         # compute lifetime correction
         iov = dqdxdf.iov ## FIXME: once SBND has time dep. calo, it should be updated
