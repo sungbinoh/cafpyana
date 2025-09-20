@@ -69,8 +69,8 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
         dqdx = dqdxdf.integral / dqdxdf.pitch
 
         # compute y-scale
-        ybin = _yz_ybin(dqdxdf.y)
-        zbin = _yz_zbin(dqdxdf.z)
+        ybin = _yz_ybin(dqdxdf.y, yz_ybin)
+        zbin = _yz_zbin(dqdxdf.z, yz_zbin)
         iov = _yz_iov(dqdxdf.run)
         itpc = dqdxdf.tpc // 2 + dqdxdf.cryo*2
         plane = dqdxdf.plane
@@ -106,23 +106,31 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
         dqdx  = dqdxdf.integral / dqdxdf.pitch
 
         this_yz_cal_df = SBND_yz_cal_mc_df   if isMC else SBND_yz_cal_data_df
+        this_yz_zbin = yz_zbin_sbnd_mc if isMC else yz_zbin_sbnd_data
+        this_yz_ybin = yz_ybin_sbnd_mc if isMC else yz_ybin_sbnd_data
         this_etau_df   = SBND_etau_cal_mc_df if isMC else SBND_etau_cal_data_df
 
         # compute y-scale
-        ybin = _yz_ybin(dqdxdf.y)
-        zbin = _yz_zbin(dqdxdf.z)
-        iov = _yz_iov(dqdxdf.run)
+        ybin = _yz_ybin(dqdxdf.y, this_yz_ybin)
+        zbin = _yz_zbin(dqdxdf.z, this_yz_zbin)
+        bin_test_df = pd.DataFrame({"y":dqdxdf.y, "z": dqdxdf.z, "ybin": ybin, "zbin": zbin, "dqdx": dqdx})
+        dqdxdf['iov'] = 0 ## FIXME: once SBND has time dep. calo, it should be updated
+        iov = dqdxdf.iov ## FIXME: once SBND has time dep. calo, it should be updated
         itpc = dqdxdf.tpc
         plane = dqdxdf.plane
 
         yzdf = pd.DataFrame({"ybin": ybin, "zbin": zbin, "itpc": itpc, "plane": plane, "iov": iov})
         yz_scale = yzdf.merge(this_yz_cal_df, on=["iov", "itpc", "plane", "ybin", "zbin"], how="left", validate="many_to_one").scale
-        yz_scale[yz_scale == -999.000000] = 1.
-        yz_scale = np.clip(yz_scale, 0.7, 1.3).fillna(1)
+        yz_scale[yz_scale < 1e-6] = 1.
+        yz_scale = yz_scale.fillna(1)
         yz_scale.index = dqdxdf.index
 
+
+        yzdf['rr'] = dqdxdf.rr
+        yzdf['scale'] = yz_scale
+        #print(yzdf[yzdf.rr < 26.].head(50))
         # compute lifetime correction
-        iov = _etau_iov(dqdxdf.run)
+        iov = dqdxdf.iov ## FIXME: once SBND has time dep. calo, it should be updated
         etaudf = pd.DataFrame({"itpc": itpc, "iov": iov})
         etau = etaudf.merge(this_etau_df, on=["iov", "itpc"], how="left", validate="many_to_one").etau
         etau = etau.fillna(np.inf)
@@ -132,6 +140,7 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
         t0 = 0 # assume in time
         tdrift = dqdxdf.t / 2000. - 0.2
         dqdx = dqdx * np.exp(tdrift / etau) * yz_scale
+        #dqdx = dqdx / yz_scale
 
     else: # if not specified, rely on input calibration
         dqdx = dqdxdf.dqdx
@@ -157,15 +166,15 @@ def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False):
     if gain == "ICARUS":
         scalegain = ICARUS_CALO_PARAMS['c_cal_frac'][plane]
     elif gain == "SBND":
-        scalegain = SBND_CALO_PARAMS['c_cal_frac'][plane] if isMC else SBND_CALO_PARAMS['c_cal_frac'][plane]
+        scalegain = SBND_CALO_PARAMS['c_cal_frac'][plane]
     else:
         scalegain = 1.
-    return calo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
+    return calo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, SBND_CALO_PARAMS["alpha_emb"], SBND_CALO_PARAMS["beta_90"], SBND_CALO_PARAMS["R_emb"]) if gain=="SBND" else alo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
 
-def _yz_ybin(y):
+def _yz_ybin(y, yz_ybin):
     return np.searchsorted(yz_ybin, y) - 1
 
-def _yz_zbin(z):
+def _yz_zbin(z, yz_zbin):
     return np.searchsorted(yz_zbin, z) - 1
 
 def _yz_iov(run): 
@@ -340,8 +349,9 @@ def call_sbnd_yz_corr(map_f):
 
         corr_mi = pd.MultiIndex.from_product(
             [range(corr.shape[0]), range(corr.shape[1])],
-            names=["ybin", "zbin"]
+            names=["zbin", "ybin"]
         )
+
         corr_df = pd.Series(corr.ravel(), index=corr_mi, name="scale").to_frame()
         corr_df = corr_df.reset_index()
 
