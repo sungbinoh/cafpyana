@@ -90,12 +90,12 @@ def pid_cut_df(df):
     return pid_cut(df.mu_chi2_of_mu_cand, df.mu_chi2_of_prot_cand,
         df.prot_chi2_of_mu_cand, df.prot_chi2_of_prot_cand, df.mu_len)
 
-def pid_cut(mu_chi2_mu_cand, mu_chi2_prot_cand, prot_chi2_mu_cand,
-            prot_chi2_prot_cand, mu_len):
+def pid_cut(mu_chi2_of_mu_cand, mu_chi2_of_prot_cand, prot_chi2_of_mu_cand,
+            prot_chi2_of_prot_cand, mu_len):
 
     MUSEL_MUSCORE_TH, MUSEL_PSCORE_TH, MUSEL_LEN_TH = 15, 90, 50
-    mu_cut = (mu_chi2_mu_cand < MUSEL_MUSCORE_TH) & \
-             (prot_chi2_mu_cand > MUSEL_PSCORE_TH) & \
+    mu_cut = (mu_chi2_of_mu_cand < MUSEL_MUSCORE_TH) & \
+             (prot_chi2_of_mu_cand > MUSEL_PSCORE_TH) & \
              (mu_len > MUSEL_LEN_TH)
 
     PSEL_MUSCORE_TH, PSEL_PSCORE_TH = 0, 90
