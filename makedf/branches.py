@@ -54,6 +54,27 @@ bnbpotbranches = [
     "rec.hdr.bnbinfo.TOR875",
 ]
 
+sbndframebranches = [
+    "rec.sbnd_frames.frameApplyAtCaf",
+    "rec.sbnd_frames.frameHltBeamGate",
+    "rec.sbnd_frames.frameHltCrtt1",
+    "rec.sbnd_frames.frameTdcBes",
+    "rec.sbnd_frames.frameTdcCrtt1",
+    "rec.sbnd_frames.frameTdcRwm",
+    "rec.sbnd_frames.timingType",
+]
+
+sbndtimingbranches = [
+    "rec.sbnd_timings.hltBeamGate",
+    "rec.sbnd_timings.hltCrtt1",
+    "rec.sbnd_timings.hltEtrig",
+    "rec.sbnd_timings.rawDAQHeaderTimestamp",
+    "rec.sbnd_timings.tdcBes",
+    "rec.sbnd_timings.tdcCrtt1",
+    "rec.sbnd_timings.tdcEtrig",
+    "rec.sbnd_timings.tdcRwm",
+]
+
 trueparticlenames = [
     "start_process",
     "end_process",
@@ -164,6 +185,8 @@ trkhitbranches_perplane = lambda IPLANE : [
     trkbranch + "calo.%i.points.pitch"% IPLANE,
     trkbranch + "calo.%i.points.integral"% IPLANE,
     trkbranch + "calo.%i.points.rr"% IPLANE,
+    trkbranch + "calo.%i.points.phi"% IPLANE,
+    trkbranch + "calo.%i.points.efield"% IPLANE,
     trkbranch + "calo.%i.points.wire"% IPLANE,
     trkbranch + "calo.%i.points.tpc"% IPLANE,
     trkbranch + "calo.%i.points.sumadc"% IPLANE,
@@ -185,6 +208,26 @@ trkhitbranches_perplane = lambda IPLANE : [
 trkhitbranches = trkhitbranches_perplane(2)
 trkhitbranches_P1 = trkhitbranches_perplane(1)
 trkhitbranches_P0 = trkhitbranches_perplane(0)
+
+#### ICARUS flat.caf does not have efield and phi for each hit so far,
+trkhitbranches_perplane_icarus = lambda IPLANE : [
+    trkbranch + "calo.%i.points.dedx"% IPLANE,
+    trkbranch + "calo.%i.points.dqdx"% IPLANE,
+    trkbranch + "calo.%i.points.pitch"% IPLANE,
+    trkbranch + "calo.%i.points.integral"% IPLANE,
+    trkbranch + "calo.%i.points.rr"% IPLANE,
+    trkbranch + "calo.%i.points.wire"% IPLANE,
+    trkbranch + "calo.%i.points.tpc"% IPLANE,
+    trkbranch + "calo.%i.points.sumadc"% IPLANE,
+    trkbranch + "calo.%i.points.t"% IPLANE,
+    trkbranch + "calo.%i.points.x"% IPLANE,
+    trkbranch + "calo.%i.points.y"% IPLANE,
+    trkbranch + "calo.%i.points.z"% IPLANE,
+]
+
+trkhitbranches_icarus = trkhitbranches_perplane_icarus(2)
+trkhitbranches_P1_icarus = trkhitbranches_perplane_icarus(1)
+trkhitbranches_P0_icarus = trkhitbranches_perplane_icarus(0)
 
 for n in trueparticlenames: trkbranches.append(trkbranch + "truth.p." + n)
 

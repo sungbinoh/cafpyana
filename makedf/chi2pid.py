@@ -4,6 +4,31 @@ import numpy as np
 import sqlite3
 import uproot
 
+larsoft_data_v = "v1_02_02"
+icarus_data_v = "v10_06_00"
+sbnd_data_v = "v01_35_00"
+
+rr_max_cut_chi2 = 25. ## for resolving MC's hit RR cut, after fixing the issue, put this value to 26.
+
+#### == use pandora_df_calo_update to apply these changes
+ICARUS_CALO_PARAMS = {
+    "alpha_emb": 0.904,
+    "beta_90": 0.204,
+    "R_emb": 1.25,
+    "gains": [0.016751, 0.012755, 0.012513],
+    "c_cal_frac": [1., 1., 1.],
+}
+
+SBND_CALO_PARAMS = {
+    "alpha_emb": 0.904,
+    "beta_90": 0.204,
+    "R_emb": 1.25,
+    "gains": [[0.0203521, 0.0202351, 0.0200727], ## MC
+              [0.0223037, 0.0219534, 0.0215156]], ## Data
+    "c_cal_frac": [1., 1., 1.],
+    "etau": [100., 35.], ## first value for MC and second value for data
+}
+
 def chi2(hitdf, exprr, expdedx, experr, dedxname="dedx"):
     dedx_exp = pd.cut(hitdf.rr, exprr, labels=expdedx).astype(float)
     dedx_err = pd.cut(hitdf.rr, exprr, labels=experr).astype(float)
@@ -12,11 +37,11 @@ def chi2(hitdf, exprr, expdedx, experr, dedxname="dedx"):
 
     v_chi2 = (hitdf[dedxname] - dedx_exp)**2 / (dedx_err**2 + dedx_res**2)
 
-    when_chi2 = (hitdf.rr < np.max(exprr)) & ~hitdf.firsthit & ~hitdf.lasthit & (hitdf[dedxname] < 1000.)
+    when_chi2 = (hitdf.rr < rr_max_cut_chi2) & ~hitdf.firsthit & ~hitdf.lasthit & (hitdf[dedxname] < 1000.)
 
     chi2_group = v_chi2[when_chi2].groupby(level=list(range(hitdf.index.nlevels-1)))
 
-    return chi2_group.sum() / chi2_group.size()
+    return chi2_group.sum() / chi2_group.size(), chi2_group.size()
 
 def chi2u(hitdf, dedxname="dedx"):
     return chi2(hitdf, muon_rr, muon_dedx, muon_yerr, dedxname)
@@ -24,13 +49,21 @@ def chi2u(hitdf, dedxname="dedx"):
 def chi2p(hitdf, dedxname="dedx"):
     return chi2(hitdf, proton_rr, proton_dedx, proton_yerr, dedxname)
 
+def chi2par(hitdf, dedxname="dedx", par=""):
+    if par == "muon":
+        return chi2u(hitdf, dedxname)
+    elif par == "proton":
+        return chi2p(hitdf, dedxname)
+    else:
+        raise ValueError(f"Invalid par={par!r}. Expected 'muon' or 'proton'.")
+
 def chi2_ndof(hitdf):
-    when_chi2 = (hitdf.rr < np.max(exprr)) & ~hitdf.firsthit & ~hitdf.lasthit & (hitdf.dedx < 1000.)
+    when_chi2 = (hitdf.rr < rr_max_cut_chi2) & ~hitdf.firsthit & ~hitdf.lasthit & (hitdf.dedx < 1000.)
     chi2_group = v_chi2[when_chi2].groupby(level=list(range(hitdf.index.nlevels-1)))
 
     return chi2_group.size()
 
-def dqdx(dqdxdf, gain=None, calibrate=None):
+def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
     if calibrate == "ICARUS": 
         # get raw dqdx
         dqdx = dqdxdf.integral / dqdxdf.pitch
@@ -69,27 +102,65 @@ def dqdx(dqdxdf, gain=None, calibrate=None):
 
         dqdx = dqdx * tpc_scale * np.exp(tdrift / etau) / yz_scale
     elif calibrate == "SBND": # TODO: add calibrations?
+        # get raw dqdx
         dqdx  = dqdxdf.integral / dqdxdf.pitch
+
+        this_yz_cal_df = SBND_yz_cal_mc_df   if isMC else SBND_yz_cal_data_df
+        this_etau_df   = SBND_etau_cal_mc_df if isMC else SBND_etau_cal_data_df
+
+        # compute y-scale
+        ybin = _yz_ybin(dqdxdf.y)
+        zbin = _yz_zbin(dqdxdf.z)
+        iov = _yz_iov(dqdxdf.run)
+        itpc = dqdxdf.tpc
+        plane = dqdxdf.plane
+
+        yzdf = pd.DataFrame({"ybin": ybin, "zbin": zbin, "itpc": itpc, "plane": plane, "iov": iov})
+        yz_scale = yzdf.merge(this_yz_cal_df, on=["iov", "itpc", "plane", "ybin", "zbin"], how="left", validate="many_to_one").scale
+        yz_scale[yz_scale == -999.000000] = 1.
+        yz_scale = np.clip(yz_scale, 0.7, 1.3).fillna(1)
+        yz_scale.index = dqdxdf.index
+
+        # compute lifetime correction
+        iov = _etau_iov(dqdxdf.run)
+        etaudf = pd.DataFrame({"itpc": itpc, "iov": iov})
+        etau = etaudf.merge(this_etau_df, on=["iov", "itpc"], how="left", validate="many_to_one").etau
+        etau = etau.fillna(np.inf)
+        etau.index = dqdxdf.index
+
+        # apply the corrections
+        t0 = 0 # assume in time
+        tdrift = dqdxdf.t / 2000. - 0.2
+        dqdx = dqdx * np.exp(tdrift / etau) * yz_scale
+
     else: # if not specified, rely on input calibration
         dqdx = dqdxdf.dqdx
 
     # apply gain
     if gain == "ICARUS":
-        gains = [0.016751, 0.012755, 0.012513]
+        gains = ICARUS_CALO_PARAMS["gains"]
         gain_perhit = pd.Series(1.0, dqdxdf.index)
         for iplane, g in enumerate(gains):
             gain_perhit[dqdxdf.plane == iplane] = 1.0/g
     elif gain == "SBND": # TODO
-        gain_perhit = 1
+        gains = SBND_CALO_PARAMS["gains"][0] if isMC else SBND_CALO_PARAMS["gains"][1]
+        gain_perhit = pd.Series(1.0, dqdxdf.index)
+        for iplane, g in enumerate(gains):
+            gain_perhit[dqdxdf.plane == iplane] = 1.0/g
     else:
         gain_perhit = 1
 
     return dqdx*gain_perhit
 
-def dedx(dqdxdf, gain=None, calibrate=None, scalegain=1):
-    dqdx_v = dqdx(dqdxdf, gain=gain, calibrate=calibrate)
-
-    return calo.recombination_cor(dqdx_v*scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
+def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False):
+    dqdx_v = dqdx(dqdxdf, gain=gain, calibrate=calibrate, isMC=isMC)
+    if gain == "ICARUS":
+        scalegain = ICARUS_CALO_PARAMS['c_cal_frac'][plane]
+    elif gain == "SBND":
+        scalegain = SBND_CALO_PARAMS['c_cal_frac'][plane] if isMC else SBND_CALO_PARAMS['c_cal_frac'][plane]
+    else:
+        scalegain = 1.
+    return calo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
 
 def _yz_ybin(y):
     return np.searchsorted(yz_ybin, y) - 1
@@ -109,8 +180,10 @@ def _tpc_iov(run):
 def __iov(run, df):
     return pd.cut(run, list(df.run) + [np.inf], labels=df.iov)
 
+##############################
 # EXPECTED dE/dx FILES
-datadir = "/exp/icarus/data/users/gputnam/"
+##############################
+datadir = "/cvmfs/larsoft.opensciencegrid.org/products/larsoft_data/" + larsoft_data_v + "/ParticleIdentification/"
 fhist = datadir + "dEdxrestemplates.root"
 
 profp = uproot.open(fhist)["dedx_range_pro"]
@@ -130,16 +203,19 @@ muon_rr = profmu.axis().edges()
 muon_rr_center = profmu.axis().centers()
 muon_yerr = profmu.errors(error_mode="s")
 
+##############################
+# ICARUS TPC calo files
+##############################
 # ICARUS CALIBRATION DATABASES
-IC_yz_cal_f = "/cvmfs/icarus.opensciencegrid.org/products/icarus/icarus_data/v10_06_00/icarus_data/database/tpc_yz_correction_allplanes_data.db"
+IC_yz_cal_f = "/cvmfs/icarus.opensciencegrid.org/products/icarus/icarus_data/" + icarus_data_v + "/icarus_data/database/tpc_yz_correction_allplanes_data.db"
 IC_yz_cal_db = "tpc_yz_correction_allplanes_data_data"
 IC_yz_cal_iov = "tpc_yz_correction_allplanes_data_iovs"
 
-IC_etau_cal_f = "/cvmfs/icarus.opensciencegrid.org/products/icarus/icarus_data/v10_06_00/icarus_data/database/tpc_elifetime_data.db"
+IC_etau_cal_f = "/cvmfs/icarus.opensciencegrid.org/products/icarus/icarus_data/" + icarus_data_v + "/icarus_data/database/tpc_elifetime_data.db"
 IC_etau_cal_db = "tpc_elifetime_data_data"
 IC_etau_cal_iov = "tpc_elifetime_data_iovs"
 
-IC_tpc_cal_f = "/cvmfs/icarus.opensciencegrid.org/products/icarus/icarus_data/v10_06_00/icarus_data/database/tpc_dqdxcalibration_allplanes_data.db"
+IC_tpc_cal_f = "/cvmfs/icarus.opensciencegrid.org/products/icarus/icarus_data/" + icarus_data_v + "/icarus_data/database/tpc_dqdxcalibration_allplanes_data.db"
 IC_tpc_cal_db = "tpc_dqdxcalibration_allplanes_data_data"
 IC_tpc_cal_iov = "tpc_dqdxcalibration_allplanes_data_iovs"
 
@@ -238,3 +314,49 @@ IC_tpc_cal_iovdf["run"] = IC_tpc_cal_iovdf.begin_time % 1000000000
 IC_tpc_cal_iovdf.sort_values(by="run", inplace=True)
 conn.close()
 
+##############################
+# SBND TPC calo files
+##############################
+SBND_yz_cal_mc_f = "/cvmfs/sbnd.opensciencegrid.org/products/sbnd/sbnd_data/" + sbnd_data_v + "/YZmaps/yz_correction_map_mcp2025b5e18.root"
+SBND_yz_cal_data_f = "/cvmfs/sbnd.opensciencegrid.org/products/sbnd/sbnd_data/" + sbnd_data_v + "/YZmaps/yz_correction_map_data1e20.root"
+
+yz_zbin_sbnd_mc = []
+yz_ybin_sbnd_mc = []
+yz_zbin_sbnd_data = []
+yz_ybin_sbnd_data = []
+
+def call_sbnd_yz_corr(map_f):
+    maps = []
+    z_edges = y_edges = None
+    for tpc, plane in [(t, p) for t in range(2) for p in range(3)]:
+        this_hist = uproot.open(map_f)["CzyHist_" + str(plane) + "_" + str(tpc)]
+        this_yz_zbin = this_hist.axis(0).edges()
+        this_yz_ybin = this_hist.axis(1).edges()
+
+        if z_edges is None:
+            z_edges, y_edges = this_yz_zbin, this_yz_ybin
+
+        corr = this_hist.values()
+
+        corr_mi = pd.MultiIndex.from_product(
+            [range(corr.shape[0]), range(corr.shape[1])],
+            names=["ybin", "zbin"]
+        )
+        corr_df = pd.Series(corr.ravel(), index=corr_mi, name="scale").to_frame()
+        corr_df = corr_df.reset_index()
+
+        corr_df['itpc'] = tpc
+        corr_df['plane'] = plane
+        corr_df['iov'] = 0
+        new_order = ["iov", "plane", "ybin", "zbin", "scale", 'itpc']
+        corr_df = corr_df[new_order]
+        maps.append(corr_df)
+
+    out_df = pd.concat(maps, ignore_index=True)
+    return out_df, z_edges, y_edges
+
+SBND_yz_cal_mc_df, yz_zbin_sbnd_mc, yz_ybin_sbnd_mc = call_sbnd_yz_corr(SBND_yz_cal_mc_f)
+SBND_yz_cal_data_df, yz_zbin_sbnd_data, yz_ybin_sbnd_data = call_sbnd_yz_corr(SBND_yz_cal_data_f)
+
+SBND_etau_cal_mc_df = pd.DataFrame( {'iov': [0, 0], 'itpc': [0, 1], 'etau': [SBND_CALO_PARAMS["etau"][0], SBND_CALO_PARAMS["etau"][0]]})
+SBND_etau_cal_data_df = pd.DataFrame( {'iov': [0, 0], 'itpc': [0, 1], 'etau': [SBND_CALO_PARAMS["etau"][1], SBND_CALO_PARAMS["etau"][1]]})

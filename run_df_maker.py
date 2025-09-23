@@ -10,6 +10,7 @@ import warnings
 
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 warnings.filterwarnings("ignore", category=tables.exceptions.NaturalNameWarning)
+pd.set_option('future.no_silent_downcasting', True)
 
 ## Arguments
 parser = argparse.ArgumentParser(
