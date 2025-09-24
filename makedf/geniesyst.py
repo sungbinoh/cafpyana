@@ -84,47 +84,8 @@ regen_systematics = [
     'GENIEReWeight_SBN_v1_multisigma_EtaNCEL',
 ]
 
-def geniesyst(f, nuind, genie_multisim_nuniv=100, slim=False):
-    geniewgtdf = getsyst.getsyst(f, regen_systematics, nuind)
-
-    # one column to save them all
-    genie_cols = pd.MultiIndex.from_product(
-        [["GENIE"], [f"univ_{i}" for i in range(genie_multisim_nuniv)]],
-    )
-    geniewgtdf_slim = pd.DataFrame(
-        1.0,
-        index=geniewgtdf.index,
-        columns=genie_cols,
-    )
-
-    for syst in regen_systematics:
-        # if multisim, just multiply
-        if "multisim" in syst:
-            geniewgtdf_slim *= geniewgtdf[syst].to_numpy()
-
-        # TODO: move to getsyst
-        # if multisigma, use pm1sig
-        elif "syst"
-            for i in range(genie_multisim_nuniv):
-                random_seed = hash(syst+str(i)) % (2**32)
-                np.random.seed(random_seed)
-                random_wgt = np.random.normal(0, 1)
-                wgt = 1 + (geniewgtdf[syst].ps1 - 1) * np.abs(random_wgt)
-                geniewgtdf_slim[("GENIE", f"univ_{i}")] *= wgt
-
-        # if unisim / morph, use 2*sig
-        elif "morph" in syst:
-            for i in range(genie_multisim_nuniv):
-                random_seed = hash(syst+str(i)) % (2**32)
-                np.random.seed(random_seed)
-                random_wgt = np.random.normal(0, 1)
-                wgt = 1 + (geniewgtdf[syst].morph - 1) * np.abs(random_wgt)
-                geniewgtdf_slim[("GENIE", f"univ_{i}")] *= wgt
-        else:
-            raise ValueError(f"Unknown systematic: {syst}")
-
-    # geniewgtdf = pd.concat([geniewgtdf, geniewgtdf_slim], axis=1)
-    if slim:
-        return geniewgtdf_slim
-
+def geniesyst(f, nuind, multisim_nuniv=100, slim=False):
+    geniewgtdf = getsyst.getsyst(f, regen_systematics, nuind, multisim_nuniv=multisim_nuniv, slim=slim)
+    # rename ("slim", "univ_{idx}") -> ("GENIE","univ_{idx}")
+    geniewgtdf.columns = pd.MultiIndex.from_tuples([("GENIE", f"univ_{i}") for i in range(len(geniewgtdf.columns))])
     return geniewgtdf
