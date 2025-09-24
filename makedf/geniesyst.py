@@ -9,10 +9,10 @@ regen_systematics = [
     "GENIEReWeight_SBN_v1_multisigma_VecFFCCQEshape",
     'GENIEReWeight_SBN_v1_multisim_RPA_CCQE',
     'GENIEReWeight_SBN_v1_multisim_CoulombCCQE',
-    'ZExpPCAWeighter_SBNnusyst_b1',
-    'ZExpPCAWeighter_SBNnusyst_b2', 
-    'ZExpPCAWeighter_SBNnusyst_b3',
-    'ZExpPCAWeighter_SBNnusyst_b4'
+    # 'ZExpPCAWeighter_SBNnusyst_b1',
+    # 'ZExpPCAWeighter_SBNnusyst_b2', 
+    # 'ZExpPCAWeighter_SBNnusyst_b3',
+    # 'ZExpPCAWeighter_SBNnusyst_b4'
 
     # "GENIEReWeight_SBN_v1_multisim_ZExpAVariationResponse",
 
