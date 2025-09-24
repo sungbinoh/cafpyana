@@ -80,7 +80,7 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=250, wgt_types=["bnb","
                 bnbwgtdf = bnbsyst.bnbsyst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
                 df_list.append(bnbwgtdf)
             if "genie" in wgt_types:
-                geniewgtdf = geniesyst.geniesyst(f, mcdf.ind)
+                geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
                 df_list.append(geniewgtdf)
 
             wgtdf = pd.concat(df_list, axis=1)
