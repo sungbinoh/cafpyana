@@ -1,20 +1,22 @@
 #!/bin/bash 
 
 export machine=${HOSTNAME}
+echo "working on machine $HOSTNAME"
+
 if [[ $machine == *sbnd* ]]; then
   echo "working on a sbnd machine"
-  source /cvmfs/larsoft.opensciencegrid.org/spack-packages/setup-env.sh
+  source /cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/setup-env.sh
   export CAFPYANA_GRID_OUT_DIR="/pnfs/sbnd/scratch/users/$USER/cafpyana_out"
   mkdir -p $CAFPYANA_GRID_OUT_DIR
 fi
 if [[ $machine == *icarus* ]]; then
   echo "working on a icarus machine"
-  source /cvmfs/larsoft.opensciencegrid.org/spack-packages/setup-env.sh
+  source /cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/setup-env.sh
   export CAFPYANA_GRID_OUT_DIR="/pnfs/icarus/scratch/users/$USER/cafpyana_out"
   mkdir -p $CAFPYANA_GRID_OUT_DIR
 fi
-spack load hdf5@1.14.3
-spack load xrootd@5.6.1
+spack load hdf5@1.14.3%gcc@12.2.0 arch=linux-almalinux9-x86_64_v3
+spack load xrootd@5.6.9%gcc@12.2.0
 
 ######################################################
 #### setup virtual python env if it is not already set
