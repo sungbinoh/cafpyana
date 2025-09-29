@@ -5,10 +5,10 @@ echo "working on machine $HOSTNAME"
 
 source /cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/setup-env.sh
 export CAFPYANA_GRID_OUT_DIR="/pnfs/sbn/scratch/users/$USER/cafpyana_out"
-mkdir -p $CAFPYANA_GRID_OUT_DIR
 spack load hdf5@1.14.3%gcc@12.2.0 arch=linux-almalinux9-x86_64_v3
 spack load xrootd@5.6.9%gcc@12.2.0
-spack load ifdhc@2.7.2
+spack find ifdhc
+spack load ifdhc@2.7.1
 ######################################################
 #### setup virtual python env if it is not already set
 ######################################################
