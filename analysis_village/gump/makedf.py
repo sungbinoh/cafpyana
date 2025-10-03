@@ -248,7 +248,7 @@ def make_pandora_no_cuts_df(f):
     return slcdf
 
 def make_gump_nuwgtdf(f):
-    return make_mcnudf(f, include_weights=True)
+    return make_mcnudf(f, include_weights=True, slim=True)
 
 def make_gump_nudf(f, is_slc=False):
     # note: setting is_slc to false results in pdg for the slice not being used
