@@ -230,6 +230,13 @@ def make_pandora_no_cuts_df(f):
     # include some meta-data
     slcdf['detector'] = DETECTOR
 
+    # Add in crt hit matching for ICARUS
+    if DETECTOR == "ICARUS":
+        crt = make_crthitdf(f)
+        slcdf = slcdf.join((crt.time > -1) & (crt.time < 1.8) & (crt.plane != 50)).groupby(level=[0, 1]).any().rename("crthit")
+    else:
+        slcdf["crthit"] = False
+
     # add in stub info, per range bin
     stubdf = stubdf[stubdf.plane == 2]
 
