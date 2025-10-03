@@ -34,13 +34,40 @@ def make_pandora_no_cuts_df(f):
     # redo chi2 for ICARUS
     if DETECTOR == "ICARUS":
         trkhitdf = make_trkhitdf(f)
+
+        # systematic variations
         dedx_redo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS")
         trkhitdf["dedx_redo"] = dedx_redo
-        trkdf["chi2u"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_redo")
-        trkdf["chi2p"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_redo")
+
+        dedx_hi = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", scale=1.01)
+        trkhitdf["dedx_hi"] = dedx_hi
+        dedx_lo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", scale=0.99)
+        trkhitdf["dedx_lo"] = dedx_lo
+        dedx_smear = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", smear=0.05)
+        trkhitdf["dedx_smear"] = dedx_smear
+
+        trkdf["chi2u"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_redo")[0]
+        trkdf["chi2p"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_redo")[0]
+
+        trkdf["chi2u_lo"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_lo")[0]
+        trkdf["chi2p_lo"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_lo")[0]
+
+        trkdf["chi2u_hi"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_hi")[0]
+        trkdf["chi2p_hi"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_hi")[0]
+
+        trkdf["chi2u_smear"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_smear")[0]
+        trkdf["chi2p_smear"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_smear")[0]
     else:
         trkdf["chi2u"] = trkdf.pfp.trk.chi2pid.I2.chi2_muon
         trkdf["chi2p"] = trkdf.pfp.trk.chi2pid.I2.chi2_proton
+
+        # TODO: implement
+        trkdf["chi2u_lo"] = trkdf.chi2u
+        trkdf["chi2u_hi"] = trkdf.chi2u
+        trkdf["chi2u_smear"] = trkdf.chi2u
+        trkdf["chi2p_lo"] = trkdf.chi2p
+        trkdf["chi2p_hi"] = trkdf.chi2p
+        trkdf["chi2p_smear"] = trkdf.chi2p
 
     trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.chi2u / trkdf.chi2p
 
@@ -151,10 +178,25 @@ def make_pandora_no_cuts_df(f):
         'is_cosmic': (true_pdg == -1),
         'is_contained': is_contained,
         'crlongtrkdiry': crlongtrkdiry,
+
         'mu_chi2_of_mu_cand': mu_chi2_of_mu_cand,
         'mu_chi2_of_prot_cand': mu_chi2_of_prot_cand,
         'prot_chi2_of_mu_cand': prot_chi2_of_mu_cand,
         'prot_chi2_of_prot_cand': prot_chi2_of_prot_cand,
+
+        'mu_chi2lo_of_mu_cand': slc.mu.chi2u_lo
+        'mu_chi2hi_of_mu_cand': slc.mu.chi2u_hi
+        'mu_chi2smear_of_mu_cand': slc.mu.chi2u_smear
+        'mu_chi2lo_of_prot_cand': slc.p.chi2u_lo
+        'mu_chi2hi_of_prot_cand': slc.p.chi2u_hi
+        'mu_chi2smear_of_prot_cand': slc.p.chi2u_smear
+        'prot_chi2lo_of_mu_cand': slc.mu.chi2p_lo
+        'prot_chi2hi_of_mu_cand': slc.mu.chi2p_hi
+        'prot_chi2smear_of_mu_cand': slc.mu.chi2p_smear
+        'prot_chi2lo_of_prot_cand': slc.p.chi2p_lo
+        'prot_chi2hi_of_prot_cand': slc.p.chi2p_hi
+        'prot_chi2smear_of_prot_cand': slc.p.chi2p_smear
+
         'p_len': p_len,
         'mu_len': mu_len,
         'nu_E_calo': nu_E_calo,
