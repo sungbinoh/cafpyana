@@ -152,7 +152,7 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
 
     return dqdx*gain_perhit
 
-def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False):
+def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False, smear=-1, scale=1):
     dqdx_v = dqdx(dqdxdf, gain=gain, calibrate=calibrate, isMC=isMC)
     if gain == "ICARUS":
         scalegain = ICARUS_CALO_PARAMS['c_cal_frac'][plane]
@@ -160,7 +160,13 @@ def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False):
         scalegain = SBND_CALO_PARAMS['c_cal_frac'][plane] if isMC else SBND_CALO_PARAMS['c_cal_frac'][plane]
     else:
         scalegain = 1.
-    return calo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
+
+    dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
+
+    if smear > 0:
+        dedx = dedx*np.random.normal(scale=smear, size=dedx.size)
+
+    return dedx
 
 def _yz_ybin(y):
     return np.searchsorted(yz_ybin, y) - 1
