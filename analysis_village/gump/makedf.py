@@ -81,7 +81,6 @@ def make_pandora_no_cuts_df(f):
 
     # mu candidate is track pfp with smallest chi2_mu/chi2_p
     mudf = trkdf[(trkdf.pfp.trackScore> 0.0)].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid","I2","mu_over_p", "")]).groupby(level=[0, 1]).head(1)
-    # mudf = trkdf[(trkdf.pfp.trackScore> 0.0)].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid","I2","mu_over_p", "")]).groupby(level=[0, 1]).head(1)
     mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
     slcdf = multicol_merge(slcdf, mudf.droplevel(-1), left_index=True, right_index=True, how="left", validate="one_to_one")
     idx_mu = mudf.index
@@ -207,9 +206,11 @@ def make_pandora_no_cuts_df(f):
         'mu_end_x': slcdf.mu.pfp.trk.end.x,
         'mu_end_y': slcdf.mu.pfp.trk.end.y,
         'mu_end_z': slcdf.mu.pfp.trk.end.z,
+        'mu_trackScore': slcdf.mu.pfp.trackScore,
         'p_end_x': slcdf.p.pfp.trk.end.x,
         'p_end_y': slcdf.p.pfp.trk.end.y,
         'p_end_z': slcdf.p.pfp.trk.end.z,
+        'p_trackScore': slcdf.p.pfp.trackScore,
         'mu_dir_x': slcdf.mu.pfp.trk.dir.x,
         'mu_dir_y': slcdf.mu.pfp.trk.dir.y,
         'mu_dir_z': slcdf.mu.pfp.trk.dir.z,
@@ -263,7 +264,7 @@ def make_gump_nudf(f, is_slc=False):
     nudf = make_mcdf(f, slc_mcbranches, slc_mcprimbranches) if is_slc else make_mcdf(f)
     nudf["ind"] = nudf.index.get_level_values(1)
 
-    # wgtdf = pd.concat([bnbsyst.bnbsyst(f, nudf.ind), geniesyst.geniesyst_sbnd(f, nudf.ind)], axis=1)
+    wgtdf = pd.concat([bnbsyst.bnbsyst(f, nudf.ind), geniesyst.geniesyst_sbnd(f, nudf.ind)], axis=1)
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
 
     if det.empty:
@@ -321,5 +322,5 @@ def make_gump_nudf(f, is_slc=False):
     })
 
     this_nudf.columns = pd.MultiIndex.from_tuples([(col, '') for col in this_nudf.columns])
-
+    this_nudf = multicol_concat(this_nudf, wgtdf)
     return this_nudf

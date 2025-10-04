@@ -51,6 +51,8 @@ def run(output, inputs):
                         "or a single reco DataFrame."
                     )
 
+                del result
+
                 write_true = truedf is not None and not truedf.empty
                 if first_fill:
                     f["SelectedEvents"] = recodf.to_dict(orient="list")
@@ -63,6 +65,7 @@ def run(output, inputs):
                         f["TrueEvents"].extend(truedf.to_dict(orient="list"))
 
                 # update progress bar
+                sys.exit()
                 pbar.update(1)
 
 if __name__ == "__main__":
