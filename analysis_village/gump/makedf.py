@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from makedf.makedf import *
 from makedf.constants import *
+from makedf import chi2pid
 from analysis_village.gump.kinematics import *
 from analysis_village.gump.gump_cuts import *
 
@@ -13,6 +14,8 @@ from analysis_village.gump.gump_cuts import *
 
 def make_pandora_no_cuts_df(f):
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
+    if det.empty:
+        return pd.DataFrame()
 
     if (1 == det.unique()):
         DETECTOR = "SBND"
@@ -27,7 +30,46 @@ def make_pandora_no_cuts_df(f):
     trkdf = make_trkdf(f, False)
     trkdf = multicol_add(trkdf, dmagdf(slcdf.slc.vertex, trkdf.pfp.trk.start).rename(("pfp", "dist_to_vertex")))
     trkdf = trkdf[trkdf.pfp.dist_to_vertex < 10]
-    trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.pfp.trk.chi2pid.I2.chi2_muon/trkdf.pfp.trk.chi2pid.I2.chi2_proton
+
+    # redo chi2 for ICARUS
+    if DETECTOR == "ICARUS":
+        trkhitdf = make_trkhitdf(f)
+
+        # systematic variations
+        dedx_redo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS")
+        trkhitdf["dedx_redo"] = dedx_redo
+
+        dedx_hi = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", scale=1.01)
+        trkhitdf["dedx_hi"] = dedx_hi
+        dedx_lo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", scale=0.99)
+        trkhitdf["dedx_lo"] = dedx_lo
+        dedx_smear = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", smear=0.05)
+        trkhitdf["dedx_smear"] = dedx_smear
+
+        trkdf["chi2u"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_redo")[0]
+        trkdf["chi2p"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_redo")[0]
+
+        trkdf["chi2u_lo"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_lo")[0]
+        trkdf["chi2p_lo"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_lo")[0]
+
+        trkdf["chi2u_hi"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_hi")[0]
+        trkdf["chi2p_hi"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_hi")[0]
+
+        trkdf["chi2u_smear"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_smear")[0]
+        trkdf["chi2p_smear"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_smear")[0]
+    else:
+        trkdf["chi2u"] = trkdf.pfp.trk.chi2pid.I2.chi2_muon
+        trkdf["chi2p"] = trkdf.pfp.trk.chi2pid.I2.chi2_proton
+
+        # TODO: implement
+        trkdf["chi2u_lo"] = trkdf.chi2u
+        trkdf["chi2u_hi"] = trkdf.chi2u
+        trkdf["chi2u_smear"] = trkdf.chi2u
+        trkdf["chi2p_lo"] = trkdf.chi2p
+        trkdf["chi2p_hi"] = trkdf.chi2p
+        trkdf["chi2p_smear"] = trkdf.chi2p
+
+    trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.chi2u / trkdf.chi2p
 
     # track containment
     trkdf[("pfp", "trk", "is_contained", "", "", "")] = fv_cut(trkdf.pfp.trk.start, DETECTOR) & fv_cut(trkdf.pfp.trk.end, DETECTOR)
@@ -39,6 +81,7 @@ def make_pandora_no_cuts_df(f):
 
     # mu candidate is track pfp with smallest chi2_mu/chi2_p
     mudf = trkdf[(trkdf.pfp.trackScore> 0.0)].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid","I2","mu_over_p", "")]).groupby(level=[0, 1]).head(1)
+    # mudf = trkdf[(trkdf.pfp.trackScore> 0.0)].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid","I2","mu_over_p", "")]).groupby(level=[0, 1]).head(1)
     mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
     slcdf = multicol_merge(slcdf, mudf.droplevel(-1), left_index=True, right_index=True, how="left", validate="one_to_one")
     idx_mu = mudf.index
@@ -104,10 +147,10 @@ def make_pandora_no_cuts_df(f):
     is_clear_cosmic = slcdf.slc.is_clear_cosmic
     other_shw_length = slcdf.other_shw_length
     other_trk_length = slcdf.other_trk_length
-    mu_chi2_of_mu_cand = slcdf.mu.pfp.trk.chi2pid.I2.chi2_muon
-    prot_chi2_of_mu_cand = slcdf.mu.pfp.trk.chi2pid.I2.chi2_proton
-    mu_chi2_of_prot_cand = slcdf.p.pfp.trk.chi2pid.I2.chi2_muon
-    prot_chi2_of_prot_cand = slcdf.p.pfp.trk.chi2pid.I2.chi2_proton
+    mu_chi2_of_mu_cand = slcdf.mu.chi2u
+    prot_chi2_of_mu_cand = slcdf.mu.chi2p
+    mu_chi2_of_prot_cand = slcdf.p.chi2u
+    prot_chi2_of_prot_cand = slcdf.p.chi2p
     mu_len = slcdf.mu.pfp.trk.len
     p_len = slcdf.p.pfp.trk.len
 
@@ -135,10 +178,25 @@ def make_pandora_no_cuts_df(f):
         'is_cosmic': (true_pdg == -1),
         'is_contained': is_contained,
         'crlongtrkdiry': crlongtrkdiry,
+
         'mu_chi2_of_mu_cand': mu_chi2_of_mu_cand,
         'mu_chi2_of_prot_cand': mu_chi2_of_prot_cand,
         'prot_chi2_of_mu_cand': prot_chi2_of_mu_cand,
         'prot_chi2_of_prot_cand': prot_chi2_of_prot_cand,
+
+        'mu_chi2lo_of_mu_cand': slc.mu.chi2u_lo
+        'mu_chi2hi_of_mu_cand': slc.mu.chi2u_hi
+        'mu_chi2smear_of_mu_cand': slc.mu.chi2u_smear
+        'mu_chi2lo_of_prot_cand': slc.p.chi2u_lo
+        'mu_chi2hi_of_prot_cand': slc.p.chi2u_hi
+        'mu_chi2smear_of_prot_cand': slc.p.chi2u_smear
+        'prot_chi2lo_of_mu_cand': slc.mu.chi2p_lo
+        'prot_chi2hi_of_mu_cand': slc.mu.chi2p_hi
+        'prot_chi2smear_of_mu_cand': slc.mu.chi2p_smear
+        'prot_chi2lo_of_prot_cand': slc.p.chi2p_lo
+        'prot_chi2hi_of_prot_cand': slc.p.chi2p_hi
+        'prot_chi2smear_of_prot_cand': slc.p.chi2p_smear
+
         'p_len': p_len,
         'mu_len': mu_len,
         'nu_E_calo': nu_E_calo,
@@ -149,11 +207,9 @@ def make_pandora_no_cuts_df(f):
         'mu_end_x': slcdf.mu.pfp.trk.end.x,
         'mu_end_y': slcdf.mu.pfp.trk.end.y,
         'mu_end_z': slcdf.mu.pfp.trk.end.z,
-        'mu_trackScore': slcdf.mu.pfp.trackScore,
         'p_end_x': slcdf.p.pfp.trk.end.x,
         'p_end_y': slcdf.p.pfp.trk.end.y,
         'p_end_z': slcdf.p.pfp.trk.end.z,
-        'p_trackScore': slcdf.p.pfp.trackScore,
         'mu_dir_x': slcdf.mu.pfp.trk.dir.x,
         'mu_dir_y': slcdf.mu.pfp.trk.dir.y,
         'mu_dir_z': slcdf.mu.pfp.trk.dir.z,
@@ -174,6 +230,13 @@ def make_pandora_no_cuts_df(f):
     # include some meta-data
     slcdf['detector'] = DETECTOR
 
+    # Add in crt hit matching for ICARUS
+    if DETECTOR == "ICARUS":
+        crt = make_crthitdf(f)
+        slcdf = slcdf.join((crt.time > -1) & (crt.time < 1.8) & (crt.plane != 50)).groupby(level=[0, 1]).any().rename("crthit")
+    else:
+        slcdf["crthit"] = False
+
     # add in stub info, per range bin
     stubdf = stubdf[stubdf.plane == 2]
 
@@ -191,14 +254,20 @@ def make_pandora_no_cuts_df(f):
 
     return slcdf
 
+def make_gump_nuwgtdf(f):
+    return make_mcnudf(f, include_weights=True, slim=True)
+
 def make_gump_nudf(f, is_slc=False):
     # note: setting is_slc to false results in pdg for the slice not being used
     # and instead only mcnu pdg info gets saved, but this excludes the -1 pdg for cosmic
     nudf = make_mcdf(f, slc_mcbranches, slc_mcprimbranches) if is_slc else make_mcdf(f)
     nudf["ind"] = nudf.index.get_level_values(1)
 
-    wgtdf = pd.concat([bnbsyst.bnbsyst(f, nudf.ind), geniesyst.geniesyst_sbnd(f, nudf.ind)], axis=1)
+    # wgtdf = pd.concat([bnbsyst.bnbsyst(f, nudf.ind), geniesyst.geniesyst_sbnd(f, nudf.ind)], axis=1)
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
+
+    if det.empty:
+        return pd.DataFrame()
 
     if (1 == det.unique()):
         DETECTOR = "SBND"
@@ -252,5 +321,5 @@ def make_gump_nudf(f, is_slc=False):
     })
 
     this_nudf.columns = pd.MultiIndex.from_tuples([(col, '') for col in this_nudf.columns])
-    this_nudf = multicol_concat(this_nudf, wgtdf)
+
     return this_nudf

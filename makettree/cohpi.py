@@ -12,7 +12,6 @@ def make_cohpi_ttree_mc(dfname, split):
     mcnuwgtdf_key = 'mcnu_' + str(split)
 
     recodf = pd.read_hdf(dfname, key=recodf_key)
-    print("recodf: ",recodf)
     hdrdf = pd.read_hdf(dfname, key=hdrdf_key)
     mcnuwgtdf = pd.read_hdf(dfname, key=mcnuwgtdf_key)
 
@@ -36,8 +35,6 @@ def make_cohpi_ttree_mc(dfname, split):
         recodf_wgt_out[col] = np.array([matchdf[col][u].values for u in matchdf[col].columns]).T.tolist()
 
     recodf = recodf.reset_index()
-    print("111: ",recodf)
-    print("222: ",recodf_wgt_out)
     recodf = pd.concat([recodf, recodf_wgt_out], axis = 1)
     
     ## Work for the true df

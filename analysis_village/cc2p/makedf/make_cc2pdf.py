@@ -196,4 +196,3 @@ def make_cc2p_nudf(f):
     this_nudf = multicol_concat(this_nudf, wgtdf)
 
     return this_nudf
-
