@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import awkward as ak
 
-def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False):
+def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="slim"):
     if "globalTree" not in f:
         return pd.DataFrame(index=nuind.index)
 
@@ -12,7 +12,7 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False):
     if slim:
         # one column to save them all
         cols = pd.MultiIndex.from_product(
-            [["slim"], [f"univ_{i}" for i in range(multisim_nuniv)]],
+            [[slimname], [f"univ_{i}" for i in range(multisim_nuniv)]],
         )
         systs_slim = pd.DataFrame(
             1.0,
@@ -51,7 +51,7 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False):
                 for i in range(multisim_nuniv):
                     np.random.seed(hash(s+str(i)) % (2**32))
                     wgt = 1 + (s_morph - 1) * 2 * np.abs(np.random.normal(0, 1)) # std -> unc.
-                    systs_slim[("slim", f"univ_{i}")] = systs_slim[("slim", f"univ_{i}")].values * wgt
+                    systs_slim[(slimname, f"univ_{i}")] = systs_slim[(slimname, f"univ_{i}")].values * wgt
 
             else:
                 this_systs.append(s_morph)
@@ -69,7 +69,7 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False):
                         np.random.seed(hash(s+str(i)) % (2**32))
                         wgt = 1 + (s_ps - 1) * np.random.normal(0, 1)
                         wgt = wgt.reset_index(level=2, drop=True)  # Drop the 'iwgt' level to match systs_slim index
-                        systs_slim[("slim", f"univ_{i}")] = systs_slim[("slim", f"univ_{i}")].values * wgt
+                        systs_slim[(slimname, f"univ_{i}")] = systs_slim[(slimname, f"univ_{i}")].values * wgt
     
                 else:
                     this_systs.append(s_ps.droplevel(2))
@@ -87,7 +87,7 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False):
 
             if slim:
                 for i in range(multisim_nuniv):
-                    systs_slim[("slim", f"univ_{i}")] = systs_slim[("slim", f"univ_{i}")].values * this_wgts[(s, f"univ_{i}")]
+                    systs_slim[(slimname, f"univ_{i}")] = systs_slim[(slimname, f"univ_{i}")].values * this_wgts[(s, f"univ_{i}")]
 
             for c in this_wgts.columns:
                 this_systs.append(this_wgts[c])
