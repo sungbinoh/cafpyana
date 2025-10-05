@@ -3,89 +3,126 @@
 #include <vector>
 #include <iostream>
 
-// This macro reads a branch containing a vector of doubles from a TTree
-// and prints the elements of the vector for each entry.
+bool in_array(const std::string &value, const std::vector<std::string> &array)
+{
+    return std::find(array.begin(), array.end(), value) != array.end();
+}
 
 void MakesBruce(const char* fileName = "input.root", const char* output_filename = "output.root") {
-    // --- Configuration ---
-    // Replace "your_file.root" with the actual name of your ROOT file.
-    const char* treeName = "SelectedEvents";
-
-    // --- Open the ROOT file ---
-    // The "READ" option opens the file in read-only mode.
+    const char* treeNames[2] = {"SelectedEvents", "TrueEvents"};
     TFile *file = TFile::Open(fileName, "READ");
+    TFile *outfile = TFile::Open(output_filename, "recreate");
 
-    // Check if the file was opened successfully.
     if (!file || file->IsZombie()) {
         std::cerr << "Error: Could not open file '" << fileName << "'" << std::endl;
         return;
     }
-    std::cout << "Successfully opened file: " << fileName << std::endl;
 
-    // --- Get the TTree ---
-    TTree *tree = nullptr;
-    file->GetObject(treeName, tree);
-    TObjArray *AllBranches = tree->GetListOfBranches();
+    for(int t = 0; t < 2; t++){
+        const char* treeName = treeNames[t];
 
-    // Check if the TTree was retrieved successfully.
-    if (!tree) {
-        std::cerr << "Error: Could not find TTree '" << treeName << "' in file '" << fileName << "'" << std::endl;
-        file->Close();
-        delete file;
-        return;
-    }
-    std::cout << "Successfully accessed TTree: " << treeName << std::endl;
+        TTree *tree = nullptr;
+        file->GetObject(treeName, tree);
+        TObjArray *AllBranches = tree->GetListOfBranches();
 
-    TFile *outfile = TFile::Open(output_filename, "recreate");
-    TTree *wgt_outtree = new TTree("multisigmaTree", "Systematic weights formatted for PROfit");
-
-    tree->SetBranchStatus("*", 0);
-    for(int b=0; b < AllBranches->GetEntries(); b++){
-        TBranch* branch = dynamic_cast<TBranch*>(AllBranches->At(b));
-        const char* branchName = branch->GetName();
-        std::cout << b << ", " << branchName << std::endl;
-
-        std::string branchName_str = branchName;
-        std::string keyword = "multisigma";
-        if(branchName_str.find(keyword) == std::string::npos){
-            std::cout << "Not treating as weight because it doesn't contain the keyword: " << keyword << std::endl;
-            tree->SetBranchStatus(branchName, 1);
-            continue;
+        if (!tree) {
+            std::cerr << "Error: Could not find TTree '" << treeName << "' in file '" << fileName << "'" << std::endl;
+            file->Close();
+            delete file;
+            return;
         }
+        std::cout << "Successfully accessed TTree: " << treeName << std::endl;
 
-        // --- Set up the branch reading ---
-        // We assume the branch contains std::vector<double>.
-        // A pointer to a vector of doubles is created to hold the data.
-        double weights[7];
+        std::map<std::string, std::vector<double>> filler_map;
+        std::map<std::string, std::vector<double>> filler_sigmas_map;
+        bool is_multisigma = false;
+        bool is_multisim = false;
+        std::string multisigma_keyword = "multisigma";
+        std::string multisim_keyword = "Flux";
 
-        // Link the branch in the TTree to our C++ vector pointer.
-        // ROOT will handle the memory allocation for the vector.
-        tree->SetBranchAddress(branchName, &weights);
+        TTree *wgt_multisigma_outtree = new TTree("multisigmaTree", "Systematic weights formatted for PROfit. Using multisigma format.");
+        TTree *wgt_multisim_outtree = new TTree("multisimTree", "Systematic weights formatted for PROfit. Using multisim format.");
 
-        // --- Loop over all entries in the TTree ---
-        Long64_t nEntries = tree->GetEntries();
-        std::cout << "Processing " << nEntries << " entries..." << std::endl;
-        std::vector<double> event_wgts;
-        wgt_outtree->Branch(branchName, &event_wgts);
-        for (Long64_t i = 0; i < nEntries; ++i) {
-            // Load the data for the i-th entry. This fills our 'weights' vector.
-            tree->GetEntry(i);
-            event_wgts.clear();
 
-            // Check if the weights vector is valid and not empty for this entry.
-            // Loop through the elements of the vector and print them.
-            for (size_t j = 0; j < 7; ++j) {
-                std::cout << "  Element[" << j << "]: " << weights[j] << std::endl;
-                event_wgts.push_back(weights[j]);
+        for(int b=0; b < AllBranches->GetEntries(); b++){
+            TBranch* branch = dynamic_cast<TBranch*>(AllBranches->At(b));
+            const char* branchName = branch->GetName();
+            std::string branchName_str = branchName;
+            std::string branchName_sigma = branchName_str+"_sigma";
+            if(branchName_str.find(multisigma_keyword) == std::string::npos && branchName_str.find(multisim_keyword) == std::string::npos){
+                continue;
             }
-            wgt_outtree->Fill();
+
+            if(branchName_str.find(multisigma_keyword) != std::string::npos){
+                is_multisigma = true;
+                std::vector<double> temp(7, 0.0);
+                std::vector<double> temp_sigmas(7, 0.0);
+                filler_map.insert({branchName_str, temp});
+                filler_sigmas_map.insert({branchName_str, temp_sigmas});
+                wgt_multisigma_outtree->Branch(branchName, &filler_map[branchName]);
+                wgt_multisigma_outtree->Branch(branchName_sigma.c_str(), &filler_sigmas_map[branchName]);
+            }
+
+            if(branchName_str.find(multisim_keyword) != std::string::npos){
+                is_multisim = true;
+                std::vector<double> temp(100, 0.0);
+                filler_map.insert({branchName_str, temp});
+                wgt_multisim_outtree->Branch(branchName, &filler_map[branchName]);
+            }
+
         }
 
+        Long64_t nEntries = tree->GetEntries();
+        double weights_multisigma[7]; 
+        double weights_multisim[100];
+        for(Long64_t i = 0; i < nEntries; i++){
+            for(int b=0; b < AllBranches->GetEntries(); b++){
+                TBranch* branch = dynamic_cast<TBranch*>(AllBranches->At(b));
+                const char* branchName = branch->GetName();
+                std::string branchName_str = branchName;
+
+                if(branchName_str.find(multisigma_keyword) == std::string::npos && branchName_str.find(multisim_keyword) == std::string::npos){
+                    continue;
+                }
+
+                 if(branchName_str.find(multisigma_keyword) != std::string::npos){
+                    tree->SetBranchAddress(branchName, &weights_multisigma);
+                    branch->GetEntry(i);
+                    std::vector<double> temp(7, 0.0);
+                    std::vector<double> temp_sigmas = {1, -1, 2, -2, 3, -3, 0};
+                    for (size_t j = 0; j < 7; j++) {
+                        std::cout << "Entry[" << i << "]:" << " Element[" << j << "]: " << weights_multisigma[j] << std::endl;
+                        temp.at(j) = weights_multisigma[j];
+                    }
+                    filler_map[branchName] = temp;
+                    filler_sigmas_map[branchName] = temp_sigmas;
+                }
+
+                if(branchName_str.find(multisim_keyword) != std::string::npos){
+                    tree->SetBranchAddress(branchName, &weights_multisim);
+                    branch->GetEntry(i);
+                    std::vector<double> temp(100, 0.0);
+                    for (size_t j = 0; j < 100; j++) {
+                        std::cout << "Entry[" << i << "]:" << " Element[" << j << "]: " << weights_multisim[j] << std::endl;
+                        temp.at(j) = weights_multisim[j];
+                    }
+                    filler_map[branchName] = temp;
+                }
+                       
+                if(i == nEntries - 1){
+                    tree->SetBranchStatus(branchName, 0);
+                    std::cout << "Done with: " << branchName << std::endl;
+                }
+            }
+           
+            wgt_multisigma_outtree->Fill();
+            wgt_multisim_outtree->Fill();
+        }
+            
+        tree->CopyTree("");
     }
-    tree->CopyTree("");
-    // --- Clean up ---
     std::cout << "--- End of processing ---" << std::endl;
     file->Close();
-    delete file; // Good practice to free the memory.
+    delete file;
     outfile->Write();
 }
