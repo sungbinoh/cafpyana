@@ -6,7 +6,8 @@ import numpy as np
 MODA = 0.906
 B90 = 0.203
 R = 1.25
-Wion = 1e3 / 4.237e7
+#Wion = 1e3 / 4.237e7
+Wion = 23.6 * 1e-6
 def ellipsoid_beta(phi, B90=B90, R=R):
     return B90 / np.sqrt(np.sin(phi)**2 + np.cos(phi)**2/R**2)
 

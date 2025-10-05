@@ -56,13 +56,13 @@ def make_triggerdf(f):
     return  loadbranches(f["recTree"], trigger_info_branches).rec.hdr.triggerinfo
 
 def make_mcnuwgtdf(f):
-    return make_mcnudf(f, include_weights=True, multisim_nuniv=1000)
+    return make_mcnudf(f, include_weights=True, multisim_nuniv=100)
 
 def make_mcnuwgtdf_slim(f):
-    return make_mcnudf(f, include_weights=True, multisim_nuniv=1000, slim=True)
+    return make_mcnudf(f, include_weights=True, multisim_nuniv=100, slim=True)
 
 # TODO: zip the nuniv configs
-def make_mcnudf(f, include_weights=False, multisim_nuniv=1000, genie_multisim_nuniv=100, wgt_types=["bnb","genie"], slim=False):
+def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nuniv=100, wgt_types=["bnb","genie"], slim=False, genie_systematics=None):
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if (1 == det.unique()):
@@ -81,7 +81,7 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=1000, genie_multisim_nu
                 bnbwgtdf = bnbsyst.bnbsyst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
                 df_list.append(bnbwgtdf)
             if "genie" in wgt_types:
-                geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim)
+                geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim, systematics=genie_systematics)
                 df_list.append(geniewgtdf)
 
             wgtdf = pd.concat(df_list, axis=1)
@@ -289,9 +289,13 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=10., cutClearCosmic=False, 
         chi2_pids = []
         for plane in range(0, 3):
             trkhitdf = make_trkhitdf(f, plane)
+            #dqdx_redo = chi2pid.dqdx(trkhitdf, gain=det, calibrate=det, isMC=ismc)
             dedx_redo = chi2pid.dedx(trkhitdf, gain=det, calibrate=det, plane=plane, isMC=ismc)
+            dedx_bias = (dedx_redo - trkhitdf.dedx) / trkhitdf.dedx
             trkhitdf["dedx_redo"] = dedx_redo
-
+            #trkhitdf["dqdx_redo"] = dqdx_redo
+            #trkhitdf["dedx_bias"] = dedx_bias
+            #print(trkhitdf[trkhitdf.rr < 26.].head(50))
             for par in ['muon', 'proton']:
                 this_chi2_new, this_chi2_ndof = chi2pid.chi2par(trkhitdf, dedxname="dedx_redo", par=par)
                 this_chi2_col = ('pfp', 'trk', 'chi2pid', 'I' + str(plane), 'chi2_' + par + '_new', '')
@@ -317,6 +321,7 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=10., cutClearCosmic=False, 
     if requireFiducial:
         slcdf = slcdf[InFV(slcdf.slc.vertex, 50)]
 
+    #print(slcdf.pfp.trk.chi2pid.head(50))
     return slcdf
 
 def make_spine_df(f, trkDistCut=-1, requireFiducial=True, **trkArgs):
