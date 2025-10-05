@@ -121,11 +121,13 @@ def make_pandora_no_cuts_df(f):
         mu_E = pd.Series(dtype='float', name='mu_E', index=empty_index)
         p_E = pd.Series(dtype='float', name='p_E', index=empty_index)
         nu_E_calo = pd.Series(dtype='float', name='nu_E_calo', index=empty_index)
+        nu_E_true = pd.Series(dtype='float', name='nu_E_true', index=empty_index)
         has_stub = pd.Series(dtype='float', name='has_stub', index=empty_index)
         is_contained = pd.Series(dtype='float', name='is_contained', index=empty_index)
     else:
         tki = transverse_kinematics(slcdf.mu.pfp.trk.P.p_muon, slcdf.mu.pfp.trk.dir, slcdf.p.pfp.trk.P.p_proton, slcdf.p.pfp.trk.dir)
         nu_E_calo = neutrino_energy(slcdf.mu.pfp.trk.P.p_muon, slcdf.mu.pfp.trk.dir, slcdf.p.pfp.trk.P.p_proton, slcdf.p.pfp.trk.dir)
+        nu_E_true = neutrino_energy(magdf(slcdf.mu.pfp.trk.truth.p.genp), slcdf.mu.pfp.trk.truth.p.genp, magdf(slcdf.p.pfp.trk.truth.p.genp), slcdf.p.pfp.trk.truth.p.genp)
         del_p = tki['del_p']
 
         del_Tp = tki['del_Tp']
@@ -200,6 +202,7 @@ def make_pandora_no_cuts_df(f):
         'p_len': p_len,
         'mu_len': mu_len,
         'nu_E_calo': nu_E_calo,
+        'nu_E_true': nu_E_true,
         'mu_E': mu_E,
         'mu_T': mu_E - MUON_MASS,
         'p_E': p_E,
@@ -229,6 +232,11 @@ def make_pandora_no_cuts_df(f):
 
     # include some meta-data
     slcdf['detector'] = DETECTOR
+
+    if(DETECTOR == "SBND"):
+        slcdf['baseline'] = 110.
+    elif(DETECTOR == "ICARUS"):
+        slcdf['baseline'] = 600.
 
     # Add in crt hit matching for ICARUS
     if DETECTOR == "ICARUS":
