@@ -168,7 +168,11 @@ def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False, smear=-1, scale
         scalegain = SBND_CALO_PARAMS['c_cal_frac'][plane]
     else:
         scalegain = 1.
-    dedx = calo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, SBND_CALO_PARAMS["alpha_emb"], SBND_CALO_PARAMS["beta_90"], SBND_CALO_PARAMS["R_emb"]) if gain=="SBND" else alo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
+
+    if gain == "SBND":
+        dedx = calo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, SBND_CALO_PARAMS["alpha_emb"], SBND_CALO_PARAMS["beta_90"], SBND_CALO_PARAMS["R_emb"]) 
+    else:
+        dedx = calo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
 
     if smear > 0:
         dedx = dedx*np.random.normal(scale=smear, size=dedx.size)
