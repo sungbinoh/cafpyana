@@ -186,18 +186,18 @@ def make_pandora_no_cuts_df(f):
         'prot_chi2_of_mu_cand': prot_chi2_of_mu_cand,
         'prot_chi2_of_prot_cand': prot_chi2_of_prot_cand,
 
-        'mu_chi2lo_of_mu_cand': slc.mu.chi2u_lo
-        'mu_chi2hi_of_mu_cand': slc.mu.chi2u_hi
-        'mu_chi2smear_of_mu_cand': slc.mu.chi2u_smear
-        'mu_chi2lo_of_prot_cand': slc.p.chi2u_lo
-        'mu_chi2hi_of_prot_cand': slc.p.chi2u_hi
-        'mu_chi2smear_of_prot_cand': slc.p.chi2u_smear
-        'prot_chi2lo_of_mu_cand': slc.mu.chi2p_lo
-        'prot_chi2hi_of_mu_cand': slc.mu.chi2p_hi
-        'prot_chi2smear_of_mu_cand': slc.mu.chi2p_smear
-        'prot_chi2lo_of_prot_cand': slc.p.chi2p_lo
-        'prot_chi2hi_of_prot_cand': slc.p.chi2p_hi
-        'prot_chi2smear_of_prot_cand': slc.p.chi2p_smear
+        'mu_chi2lo_of_mu_cand': slcdf.mu.chi2u_lo,
+        'mu_chi2hi_of_mu_cand': slcdf.mu.chi2u_hi,
+        'mu_chi2smear_of_mu_cand': slcdf.mu.chi2u_smear,
+        'mu_chi2lo_of_prot_cand': slcdf.p.chi2u_lo,
+        'mu_chi2hi_of_prot_cand': slcdf.p.chi2u_hi,
+        'mu_chi2smear_of_prot_cand': slcdf.p.chi2u_smear,
+        'prot_chi2lo_of_mu_cand': slcdf.mu.chi2p_lo,
+        'prot_chi2hi_of_mu_cand': slcdf.mu.chi2p_hi,
+        'prot_chi2smear_of_mu_cand': slcdf.mu.chi2p_smear,
+        'prot_chi2lo_of_prot_cand': slcdf.p.chi2p_lo,
+        'prot_chi2hi_of_prot_cand': slcdf.p.chi2p_hi,
+        'prot_chi2smear_of_prot_cand': slcdf.p.chi2p_smear,
 
         'p_len': p_len,
         'mu_len': mu_len,
