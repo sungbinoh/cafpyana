@@ -61,7 +61,8 @@ def make_mcnuwgtdf(f):
 def make_mcnuwgtdf_slim(f):
     return make_mcnudf(f, include_weights=True, multisim_nuniv=1000, slim=True)
 
-def make_mcnudf(f, include_weights=False, multisim_nuniv=250, wgt_types=["bnb","genie"], slim=False):
+# TODO: zip the nuniv configs
+def make_mcnudf(f, include_weights=False, multisim_nuniv=1000, genie_multisim_nuniv=100, wgt_types=["bnb","genie"], slim=False):
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if (1 == det.unique()):
@@ -80,7 +81,7 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=250, wgt_types=["bnb","
                 bnbwgtdf = bnbsyst.bnbsyst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
                 df_list.append(bnbwgtdf)
             if "genie" in wgt_types:
-                geniewgtdf = geniesyst.geniesyst(f, mcdf.ind)
+                geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim)
                 df_list.append(geniewgtdf)
 
             wgtdf = pd.concat(df_list, axis=1)
