@@ -112,7 +112,7 @@ def make_opflashdf(f):
     return opflashdf
 
 def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False):
-    trkdf = loadbranches(f["recTree"], trkbranches + shwbranches)
+    trkdf = loadbranches(f["recTree"], trkbranches)
     if scoreCut:
         trkdf = trkdf.rec.slc.reco[trkdf.rec.slc.reco.pfp.trackScore > 0.5]
     else:
@@ -137,6 +137,12 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
     trkdf[("pfp", "tindex", "", "", "", "")] = trkdf.index.get_level_values(2)
 
     return trkdf
+
+def make_pfpdf(f):
+    pfpdf = loadbranches(f["recTree"], trkbranches + shwbranches)
+    pfpdf = pfpdf.rec.slc.reco
+    pfpdf[("pfp", "tindex", "", "", "", "")] = pfpdf.index.get_level_values(2)
+    return pfpdf
 
 def make_trkhitdf_plane0(f):
     return make_trkhitdf(f, 0)
