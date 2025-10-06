@@ -242,6 +242,7 @@ trkhitbranches_P1_icarus = trkhitbranches_perplane_icarus(1)
 trkhitbranches_P0_icarus = trkhitbranches_perplane_icarus(0)
 
 for n in trueparticlenames: trkbranches.append(trkbranch + "truth.p." + n)
+for n in trueparticlenames: shwbranches.append(shwbranch + "truth.p." + n)
 
 slcbranches = [
     "rec.slc.is_clear_cosmic",
