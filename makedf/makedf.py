@@ -288,6 +288,8 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=10., cutClearCosmic=False, 
         chi2_pids = []
         for plane in range(0, 3):
             trkhitdf = make_trkhitdf(f, plane)
+            if det == "SBND": ## FIXME
+                trkhitdf = trkhitdf[InFV(df = trkhitdf, inzback = 0., det = "SBND_nohighyz")]
             #dqdx_redo = chi2pid.dqdx(trkhitdf, gain=det, calibrate=det, isMC=ismc)
             dedx_redo = chi2pid.dedx(trkhitdf, gain=det, calibrate=det, plane=plane, isMC=ismc)
             dedx_bias = (dedx_redo - trkhitdf.dedx) / trkhitdf.dedx
