@@ -138,9 +138,20 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
 
     return trkdf
 
-def make_pfpdf(f):
+def make_pfpdf(f, update_shw=True):
     pfpdf = loadbranches(f["recTree"], trkbranches + shwbranches)
     pfpdf = pfpdf.rec.slc.reco
+    
+    if update_shw:
+        ## necessary since "bestplane" stored in the cafs currently is from the dEdx alg
+        ## bestplane for dEdx alg is not the same as bestplane for shower energy
+
+        # set shower energy as the one with the plane that has the most number of hits (maxplane)
+        pfpdf['pfp','shw','maxplane','','',''] = pfpdf.loc(axis=1)['pfp','shw','plane',:,"nHits"].idxmax(axis=1).apply(lambda x: x[3])
+        pfpdf['pfp','shw','maxplane_energy','','',''] = np.nan
+        conditions = [pfpdf['pfp','shw','maxplane','','','']=="I2",pfpdf['pfp','shw','maxplane','','','']=="I1",pfpdf['pfp','shw','maxplane','','','']=="I0"]
+        choices = [pfpdf['pfp','shw','plane','I2','energy',''],pfpdf['pfp','shw','plane','I1','energy',''],pfpdf['pfp','shw','plane','I0','energy','']]
+        pfpdf['pfp','shw','maxplane_energy','','',''] = np.select(conditions,choices,default=np.nan)
     pfpdf[("pfp", "tindex", "", "", "", "")] = pfpdf.index.get_level_values(2)
     return pfpdf
 

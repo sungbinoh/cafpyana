@@ -2,10 +2,14 @@ from makedf.makedf import *
 from pyanalib.pandas_helpers import *
 from makedf.util import *
 
-def make_nueccdf_mc(f):
+def make_nueccdf_mc_wgt(f):
+    df = make_nueccdf_mc(f,include_weights=True)
+    return df
+
+def make_nueccdf_mc(f, include_weights=False,multisim_nuniv=100,slim=True):
     
     slcdf = make_nueccdf(f)
-    mcdf = make_mcnudf(f)
+    mcdf = make_mcnudf(f,include_weights=include_weights,multisim_nuniv=multisim_nuniv,slim=slim)
     # drop mcdf columns not relevant for this analysis
     if 'mu'  in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('mu', axis=1,level=0)
     if 'p'   in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('p',  axis=1,level=0)
@@ -38,15 +42,8 @@ def make_nueccdf(f):
 
     assert DETECTOR == "SBND"
     
-    pfpdf = make_trkdf(f)
+    pfpdf = make_pfpdf(f)
     slcdf = make_slcdf(f)
-    
-    # set shower energy as the one with the plane that has the most number of hits (maxplane)
-    pfpdf['pfp','shw','maxplane','','',''] = pfpdf.loc(axis=1)['pfp','shw','plane',:,"nHits"].idxmax(axis=1).apply(lambda x: x[3])
-    pfpdf['pfp','shw','maxplane_energy','','',''] = np.nan
-    conditions = [pfpdf['pfp','shw','maxplane','','','']=="I2",pfpdf['pfp','shw','maxplane','','','']=="I1",pfpdf['pfp','shw','maxplane','','','']=="I0"]
-    choices = [pfpdf['pfp','shw','plane','I2','energy',''],pfpdf['pfp','shw','plane','I1','energy',''],pfpdf['pfp','shw','plane','I0','energy','']]
-    pfpdf['pfp','shw','maxplane_energy','','',''] = np.select(conditions,choices,default=np.nan)
 
     pfpdf = pfpdf.drop('pfochar',axis=1,level=1)
     ## primary shw candidate is shw pfp with highest energy, valid energy, and score < 0.5
@@ -73,5 +70,40 @@ def make_nueccdf(f):
     slcdf = slcdf[slcdf.slc.is_clear_cosmic==0]
     slcdf = slcdf[slcdf.slc.nu_score > 0.5]
     slcdf = slcdf[InFV(df=slcdf.slc.vertex, inzback=0, det=DETECTOR)]    
+    
+    # recalc dEdx for the primary shower
+    # do after pre-selection to speed up
+    for plane in range(3):
+        trkhitdf = make_trkhitdf(f,plane)
+        slchitdf = multicol_merge(slcdf.reset_index(), 
+                                   trkhitdf.reset_index(),
+                                   left_on=[('entry', '', '', '', '', ''), 
+                                           ('rec.slc..index', '', '', '', '', ''),
+                                           ('primshw','tindex', '', '', '', '')], 
+                                   right_on=[('entry', '', '', '', '', ''), 
+                                           ('rec.slc..index', '', '', '', '', ''),
+                                           ('rec.slc.reco.pfp..index', '', '', '', '', ''),],
+                                   how="left")
+        slchitdf = slchitdf.set_index(trkhitdf.index.names,verify_integrity=True)
+        slchitdf = multicol_add(slchitdf,dmagdf(slchitdf.primshw.shw.start,slchitdf).rename("sp_to_start"))
+        
+        # require that the spacepoints are between 0.5 cm and 5 cm of the shower start
+        # require that the spacepoints are within the AV
+        slchitdf = slchitdf[(slchitdf.sp_to_start < 5) & (slchitdf.sp_to_start > 0.5)]
+        slchitdf = slchitdf[InAV(slchitdf)]
+
+        slchitdf['dedx_reco'] = chi2pid.dedx(slchitdf,gain="SBND",calibrate="SBND",plane=plane)
+        this_dedx_col = ('primshw','shw','plane',f'I{plane}','dEdx_new')
+        this_hits_col = ('primshw','shw','plane',f'I{plane}','nHits_dEdx')
+
+        slcdf = multicol_add(slcdf,slchitdf[('dedx_reco', '', '', '', '', '')].groupby(slchitdf.index.names[:-2]).median().rename(this_dedx_col), default=-999)
+        slcdf = multicol_add(slcdf,slchitdf[('dedx_reco', '', '', '', '', '')].groupby(slchitdf.index.names[:-2]).count().rename(this_hits_col),default=-999)
+    
+    slcdf['primshw','shw','maxplane_dEdx_new','','',''] = np.nan
+    slcdf['primshw','shw','maxplane_idx','','',''] = slcdf.loc(axis=1)['primshw','shw','plane',:,"nHits_dEdx"].idxmax(axis=1).apply(lambda x: x[3])
+
+    conditions = [slcdf['primshw','shw','maxplane_idx','','','']=="I2",slcdf['primshw','shw','maxplane_idx','','','']=="I1",slcdf['primshw','shw','maxplane_idx','','','']=="I0"]
+    choices = [slcdf['primshw','shw','plane','I2','dEdx_new',''],slcdf['primshw','shw','plane','I1','dEdx_new',''],slcdf['primshw','shw','plane','I0','dEdx_new','']]
+    slcdf['primshw','shw','maxplane_dEdx_new','','',''] = np.select(conditions,choices,default=np.nan)
     
     return slcdf 
