@@ -5,138 +5,69 @@ import pandas as pd
 import numpy as np
 from makedf.makedf import *
 from makedf.constants import *
+from makedf import chi2pid
+from analysis_village.gump.kinematics import *
+from analysis_village.gump.gump_cuts import *
 
-def make_spine_evtdf(f):
-    # load slices and particles
-    partdf = make_epartdf(f)
+# to do: make_pandora_with_cuts using correct formatting 
+# and can be turned into ttree for PROfit
 
-    df = make_eslcdf(f)
-
-    # load the proton and muon candidates
-    primary = partdf.is_primary
-    mudf = partdf[primary & (partdf.pid == 2)].sort_values(partdf.index.names[:2] + [("length", "", "")]).groupby(level=[0,1]).last()
-    mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
-
-    pdf = partdf[primary & (partdf.pid == 4)].sort_values(partdf.index.names[:2] + [("length", "", "")]).groupby(level=[0,1]).last()
-    pdf.columns = pd.MultiIndex.from_tuples([tuple(["p"] + list(c)) for c in pdf.columns])
-
-    df = multicol_merge(df, mudf, left_index=True, right_index=True, how="left", validate="one_to_one")
-    df = multicol_merge(df, pdf, left_index=True, right_index=True, how="left", validate="one_to_one")
-
-    # in case we want to cut out other objects -- save the highest energy of each other particle
-    lead_gamma_energy = partdf.ke[primary & (partdf.pid == 0)].groupby(level=[0,1]).max().rename("lead_gamma_energy")
-    df = multicol_add(df, lead_gamma_energy)
-
-    lead_elec_energy = partdf.ke[primary & (partdf.pid == 1)].groupby(level=[0,1]).max().rename("lead_elec_energy")
-    df = multicol_add(df, lead_elec_energy)
-
-    lead_pion_length = partdf.length[primary & (partdf.pid == 3)].groupby(level=[0,1]).max().rename("lead_pion_length")
-    df = multicol_add(df, lead_pion_length)
-
-    subl_muon_length = partdf[primary & (partdf.pid == 2)].sort_values(partdf.index.names[:2] + [("length", "", "")]).length.groupby(level=[0,1]).nth(-2).rename("subl_muon_length")
-    df = multicol_add(df, subl_muon_length)
-
-    subl_proton_length = partdf[primary & (partdf.pid == 4)].sort_values(partdf.index.names[:2] + [("length", "", "")]).length.groupby(level=[0,1]).nth(-2).rename("subl_proton_length")
-    df = multicol_add(df, subl_proton_length)
-
-    # Apply pre-selection: Require fiducial vertex, at least one muon, at least one proton
-
-    # require both muon and proton to be present
-    df = df[~np.isnan(df.mu.pid) & ~np.isnan(df.p.pid)]
-
-    # require fiducial verex
-    df = df[InFV(df.vertex, 50)]
-
-    return df
-
-
-def make_pandora_evtdf_wgt(f, include_weights=True, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=True, 
-                       trkScoreCut=False, trkDistCut=10., cutClearCosmic=True, **trkArgs):
-    df = make_pandora_evtdf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
-                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, **trkArgs)
-    return df
-
-
-def make_pandora_evtdf(f, include_weights=True, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=True, 
-                       trkScoreCut=False, trkDistCut=10., cutClearCosmic=True, **trkArgs):
-    # ----- sbnd or icarus? -----
+def make_pandora_no_cuts_df(f):
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
+    if det.empty:
+        return pd.DataFrame()
+
     if (1 == det.unique()):
         DETECTOR = "SBND"
-    else:
+    elif (2 == det.unique()):
         DETECTOR = "ICARUS"
+    else:
+        print("Detector unclear, check rec.hdr.det!")
 
-    assert DETECTOR == "SBND"
-    
-    mcdf = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim)
-    trkdf = make_trkdf(f, trkScoreCut, **trkArgs)
     slcdf = make_slcdf(f)
+    StartingRows = len(slcdf)
 
-    # stubdf = make_stubs(f, det=DETECTOR)
-    # load stubs
-    # slcdf = multicol_merge(slcdf, stubdf, left_index=True, right_index=True)
-    
-    # ----- merge dfs -----
-    # load pfps
-    # slcdf = multicol_merge(slcdf, trkdf, left_index=True, right_index=True, how="right", validate="one_to_many")
-
+    trkdf = make_trkdf(f, False)
     trkdf = multicol_add(trkdf, dmagdf(slcdf.slc.vertex, trkdf.pfp.trk.start).rename(("pfp", "dist_to_vertex")))
-    if trkDistCut > 0:
-        trkdf = trkdf[trkdf.pfp.dist_to_vertex < trkDistCut]
-    if cutClearCosmic:
-        slcdf = slcdf[slcdf.slc.is_clear_cosmic==0]
+    trkdf = trkdf[trkdf.pfp.dist_to_vertex < 10]
 
-    # ---- calculate additional info ----
-    
+    # redo chi2 for ICARUS
+    if DETECTOR == "ICARUS":
+        trkhitdf = make_trkhitdf(f)
+        dedx_redo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS")
+        trkhitdf["dedx_redo"] = dedx_redo
+        trkdf["chi2u"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_redo")
+        trkdf["chi2p"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_redo")
+    else:
+        trkdf["chi2u"] = trkdf.pfp.trk.chi2pid.I2.chi2_muon
+        trkdf["chi2p"] = trkdf.pfp.trk.chi2pid.I2.chi2_proton
+
+    trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.chi2u / trkdf.chi2p
+
     # track containment
-    trkdf[("pfp", "trk", "is_contained", "", "", "")] = (InFV(trkdf.pfp.trk.start, 0, det=DETECTOR)) & (InFV(trkdf.pfp.trk.end, 0, det=DETECTOR))
+    trkdf[("pfp", "trk", "is_contained", "", "", "")] = fv_cut(trkdf.pfp.trk.start, DETECTOR) & fv_cut(trkdf.pfp.trk.end, DETECTOR)
 
-    # reco momentum -- range for contained, MCS for exiting
-    trkdf[("pfp", "trk", "P", "p_muon", "", "")] = np.nan
-    trkdf.loc[trkdf.pfp.trk.is_contained, ("pfp", "trk", "P", "p_muon", "", "")]  = trkdf.loc[(trkdf.pfp.trk.is_contained), ("pfp", "trk", "rangeP", "p_muon", "", "")]
-    trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "P", "p_muon","", "")] = trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "mcsP", "fwdP_muon", "", "")]
+    # reco momentum -- range-only
+    trkdf[("pfp", "trk", "P", "p_muon", "", "")] = trkdf[("pfp", "trk", "rangeP", "p_muon", "", "")]
+    trkdf[("pfp", "trk", "P", "p_pion", "", "")] = trkdf[("pfp", "trk", "rangeP", "p_pion", "", "")]
+    trkdf[("pfp", "trk", "P", "p_proton", "", "")] = trkdf[("pfp", "trk", "rangeP", "p_proton", "", "")]
 
-    trkdf[("pfp", "trk", "P", "p_pion", "", "")] = np.nan
-    trkdf.loc[trkdf.pfp.trk.is_contained, ("pfp", "trk", "P", "p_pion", "", "")]  = trkdf.loc[(trkdf.pfp.trk.is_contained), ("pfp", "trk", "rangeP", "p_pion", "", "")]
-    trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "P", "p_pion", "", "")] = trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "mcsP", "fwdP_pion", "", "")]
-
-    trkdf[("pfp", "trk", "P", "p_proton", "", "")] = np.nan
-    trkdf.loc[trkdf.pfp.trk.is_contained, ("pfp", "trk", "P", "p_proton", "", "")]  = trkdf.loc[(trkdf.pfp.trk.is_contained), ("pfp", "trk", "rangeP", "p_proton", "", "")]
-    trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "P", "p_proton", "", "")] = trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "mcsP", "fwdP_proton", "", "")]
-
-    # opening angles
-    trkdf[("pfp", "trk", "dir", "x", "", "")] = np.nan
-    trkdf[("pfp", "trk", "dir", "x", "", "")] = (trkdf.pfp.trk.end.x-trkdf.pfp.trk.start.x)/trkdf.pfp.trk.len
-    trkdf[("pfp", "trk", "dir", "y", "", "")] = np.nan
-    trkdf[("pfp", "trk", "dir", "y", "", "")] = (trkdf.pfp.trk.end.y-trkdf.pfp.trk.start.y)/trkdf.pfp.trk.len
-    trkdf[("pfp", "trk", "dir", "z", "", "")] = np.nan
-    trkdf[("pfp", "trk", "dir", "z", "", "")] = (trkdf.pfp.trk.end.z-trkdf.pfp.trk.start.z)/trkdf.pfp.trk.len
-
-    # truth
-    trkdf.loc[:, ("pfp","trk","truth","p","totp","")] = np.sqrt(trkdf.pfp.trk.truth.p.genp.x**2 + trkdf.pfp.trk.truth.p.genp.y**2 + trkdf.pfp.trk.truth.p.genp.z**2)
-    trkdf.loc[:, ("pfp","trk","truth","p","dir","x")] = trkdf.pfp.trk.truth.p.genp.x/trkdf.pfp.trk.truth.p.totp
-    trkdf.loc[:, ("pfp","trk","truth","p","dir","y")] = trkdf.pfp.trk.truth.p.genp.y/trkdf.pfp.trk.truth.p.totp
-    trkdf.loc[:, ("pfp","trk","truth","p","dir","z")] = trkdf.pfp.trk.truth.p.genp.z/trkdf.pfp.trk.truth.p.totp
-
-    # ----- loose PID for candidates ----
-    trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = np.nan
-    trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.pfp.trk.chi2pid.I2.chi2_muon/trkdf.pfp.trk.chi2pid.I2.chi2_proton
-    
     # mu candidate is track pfp with smallest chi2_mu/chi2_p
-    mudf = trkdf[(trkdf.pfp.trackScore > 0.5)].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")]).groupby(level=[0,1]).head(1)
+    mudf = trkdf[(trkdf.pfp.trackScore> 0.0)].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid","I2","mu_over_p", "")]).groupby(level=[0, 1]).head(1)
+    # mudf = trkdf[(trkdf.pfp.trackScore> 0.0)].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid","I2","mu_over_p", "")]).groupby(level=[0, 1]).head(1)
     mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
     slcdf = multicol_merge(slcdf, mudf.droplevel(-1), left_index=True, right_index=True, how="left", validate="one_to_one")
     idx_mu = mudf.index
-        
+
     # p candidate is track pfp with largest chi2_mu/chi2_p of remaining pfps
-    idx_pfps = trkdf.index
+    idx_pfps = trkdf.pfp.index
     idx_not_mu = idx_pfps.difference(idx_mu)
     notmudf = trkdf.loc[idx_not_mu]
-    pdf = notmudf[(notmudf.pfp.trackScore > 0.5)].sort_values(notmudf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")]).groupby(level=[0,1]).tail(1)
+    pdf = notmudf[(notmudf.pfp.trackScore > 0.0)].sort_values(notmudf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")]).groupby(level=[0,1]).tail(1)
     pdf.columns = pd.MultiIndex.from_tuples([tuple(["p"] + list(c)) for c in pdf.columns])
     slcdf = multicol_merge(slcdf, pdf.droplevel(-1), left_index=True, right_index=True, how="left", validate="one_to_one")
     idx_p = pdf.index
-    
+
     # note if there are any other track/showers
     idx_not_mu_p = idx_not_mu.difference(idx_p)
     otherdf = trkdf.loc[idx_not_mu_p]
@@ -149,62 +80,197 @@ def make_pandora_evtdf(f, include_weights=True, multisim_nuniv=1000, wgt_types=[
     other_trk_length = othertrkdf.pfp.trk.len.groupby(level=[0,1]).max().rename("other_trk_length")
     slcdf = multicol_add(slcdf, other_trk_length)
 
-    # calculate and save transverse kinematic variables for reco slices
-    slc_mudf = slcdf.mu.pfp.trk
-    slc_pdf = slcdf.p.pfp.trk
-    slc_P_mu_col = pad_column_name(("P", "p_muon"), slc_mudf)
-    slc_P_p_col = pad_column_name(("P", "p_proton"), slc_pdf)
-    tki_reco = get_tki(slc_mudf, slc_pdf, slc_P_mu_col, slc_P_p_col)
+    if slcdf.empty:
+        print("found empty slice!")
+        empty_index = pd.MultiIndex(
+            levels=[[], []],
+            codes=[[], []],
+            names=['entry','rec.slc..index']
+        )
+        del_p = pd.Series(dtype='float', name='del_p', index=empty_index)
+        del_Tp = pd.Series(dtype='float', name='del_Tp', index=empty_index)
+        del_phi = pd.Series(dtype='float', name='del_phi', index=empty_index)
+        del_alpha = pd.Series(dtype='float', name='del_alpha', index=empty_index)
+        mu_E = pd.Series(dtype='float', name='mu_E', index=empty_index)
+        p_E = pd.Series(dtype='float', name='p_E', index=empty_index)
+        nu_E_calo = pd.Series(dtype='float', name='nu_E_calo', index=empty_index)
+        has_stub = pd.Series(dtype='float', name='has_stub', index=empty_index)
+        is_contained = pd.Series(dtype='float', name='is_contained', index=empty_index)
+    else:
+        tki = transverse_kinematics(slcdf.mu.pfp.trk.P.p_muon, slcdf.mu.pfp.trk.dir, slcdf.p.pfp.trk.P.p_proton, slcdf.p.pfp.trk.dir)
+        nu_E_calo = neutrino_energy(slcdf.mu.pfp.trk.P.p_muon, slcdf.mu.pfp.trk.dir, slcdf.p.pfp.trk.P.p_proton, slcdf.p.pfp.trk.dir)
+        del_p = tki['del_p']
 
-    slcdf = multicol_add(slcdf, tki_reco["del_alpha"].rename("del_alpha"))
-    slcdf = multicol_add(slcdf, tki_reco["del_phi"].rename("del_phi"))
-    slcdf = multicol_add(slcdf, tki_reco["del_Tp"].rename("del_Tp"))
-    slcdf = multicol_add(slcdf, tki_reco["del_p"].rename("del_p"))
+        del_Tp = tki['del_Tp']
+        del_phi = tki['del_phi']
+        del_alpha = tki['del_alpha']
+        mu_E = tki['mu_E']
+        p_E = tki['p_E']
+        is_contained = slcdf.p.pfp.trk.is_contained & slcdf.mu.pfp.trk.is_contained
 
-    # calculate and save transverse kinematic variables for MC
-    mc_mudf = mcdf.mu
-    mc_pdf = mcdf.p
-    mc_P_mu_col = pad_column_name(("totp",), mc_mudf)
-    mc_P_p_col = pad_column_name(("totp",), mc_pdf)
-    tki_mc = get_tki(mc_mudf, mc_pdf, mc_P_mu_col, mc_P_p_col)
-
-    mcdf = multicol_add(mcdf, tki_mc["del_alpha"].rename("mc_del_alpha"))
-    mcdf = multicol_add(mcdf, tki_mc["del_phi"].rename("mc_del_phi"))
-    mcdf = multicol_add(mcdf, tki_mc["del_Tp"].rename("mc_del_Tp"))
-    mcdf = multicol_add(mcdf, tki_mc["del_p"].rename("mc_del_p"))
-
-    # ----- apply cuts for lightweight df -----
-    # vertex in FV
-    slcdf = slcdf[InFV(slcdf.slc.vertex, 0, det=DETECTOR)]
-
-    # neutrino cuts
-    slcdf = slcdf[slcdf.slc.nu_score > 0.5]
-
-    # require both muon and proton to be present
-    mask = (~np.isnan(slcdf.mu.pfp.trk.P.p_muon)) & (~np.isnan(slcdf.p.pfp.trk.P.p_proton))
-    # mask = mask.reindex(slcdf.index, fill_value=False)
-    slcdf = slcdf[mask]
-
-    # ---- truth match ----
+    ######## (9) - c: slc.tmatch.idx for truth matching
     bad_tmatch = np.invert(slcdf.slc.tmatch.eff > 0.5) & (slcdf.slc.tmatch.idx >= 0)
     slcdf.loc[bad_tmatch, ("slc","tmatch","idx", "", "", "", "")] = np.nan
+    tmatch_idx_series = slcdf.slc.tmatch.idx
 
-    mcdf.columns = pd.MultiIndex.from_tuples([tuple(list(c) +["", "", "", "", ""]) for c in mcdf.columns])     # match # of column levels
+    slc_vtx = slcdf.slc.vertex
+    nu_score = slcdf.slc.nu_score
+    true_pdg = slcdf.slc.truth.pdg
+    crlongtrkdiry = slcdf.slc.nuid.crlongtrkdiry
+    is_clear_cosmic = slcdf.slc.is_clear_cosmic
+    other_shw_length = slcdf.other_shw_length
+    other_trk_length = slcdf.other_trk_length
+    mu_chi2_of_mu_cand = slcdf.mu.chi2u
+    prot_chi2_of_mu_cand = slcdf.mu.chi2p
+    mu_chi2_of_prot_cand = slcdf.p.chi2u
+    prot_chi2_of_prot_cand = slcdf.p.chi2p
+    mu_len = slcdf.mu.pfp.trk.len
+    p_len = slcdf.p.pfp.trk.len
 
-    # neutrino cuts
-    slcdf = slcdf[InFV(slcdf.slc.vertex, 0, det=DETECTOR)]
-    slcdf = slcdf[slcdf.slc.nu_score > 0.5]
+    stubdf = make_stubs(f)
+    has_any_stub_series = stubdf.groupby('rec.slc..index')['pass_proton_stub'].transform('any')
+    slc_has_stub_series = pd.Series(index=mu_len.index, dtype=bool)
 
-    df = multicol_merge(slcdf.reset_index(), 
-                  mcdf.reset_index(),
-                  left_on=[("entry", "", "",), 
-                           ("slc", "tmatch", "idx")], 
-                  right_on=[("entry", "", ""), 
-                            ("rec.mc.nu..index", "", "")], 
-                  how="left"
-                  ) 
+    for k in slc_has_stub_series.keys():
+        try:
+            threek = k + (0,)
+            slc_has_stub_series[k] = has_any_stub_series[threek]
+        except KeyError:
+            slc_has_stub_series[k] = False
 
-    df = df.set_index(slcdf.index.names, verify_integrity=True)
+    ## (10) create a slice-based reco df
+    slcdf = pd.DataFrame({
+        'other_shw_length': other_shw_length,
+        'other_trk_length': other_trk_length,
+        'slc_vtx_x': slc_vtx.x,
+        'slc_vtx_y': slc_vtx.y,
+        'slc_vtx_z': slc_vtx.z,
+        'is_clear_cosmic': is_clear_cosmic,
+        'nu_score': nu_score,
+        'true_pdg': true_pdg,
+        'is_cosmic': (true_pdg == -1),
+        'is_contained': is_contained,
+        'crlongtrkdiry': crlongtrkdiry,
+        'mu_chi2_of_mu_cand': mu_chi2_of_mu_cand,
+        'mu_chi2_of_prot_cand': mu_chi2_of_prot_cand,
+        'prot_chi2_of_mu_cand': prot_chi2_of_mu_cand,
+        'prot_chi2_of_prot_cand': prot_chi2_of_prot_cand,
+        'p_len': p_len,
+        'mu_len': mu_len,
+        'nu_E_calo': nu_E_calo,
+        'mu_E': mu_E,
+        'mu_T': mu_E - MUON_MASS,
+        'p_E': p_E,
+        'p_T': p_E - PROTON_MASS,
+        'mu_end_x': slcdf.mu.pfp.trk.end.x,
+        'mu_end_y': slcdf.mu.pfp.trk.end.y,
+        'mu_end_z': slcdf.mu.pfp.trk.end.z,
+        'p_end_x': slcdf.p.pfp.trk.end.x,
+        'p_end_y': slcdf.p.pfp.trk.end.y,
+        'p_end_z': slcdf.p.pfp.trk.end.z,
+        'mu_dir_x': slcdf.mu.pfp.trk.dir.x,
+        'mu_dir_y': slcdf.mu.pfp.trk.dir.y,
+        'mu_dir_z': slcdf.mu.pfp.trk.dir.z,
+        'p_dir_x': slcdf.p.pfp.trk.dir.x,
+        'p_dir_y': slcdf.p.pfp.trk.dir.y,
+        'p_dir_z': slcdf.p.pfp.trk.dir.z,
+        'mu_true_p': magdf(slcdf.mu.pfp.trk.truth.p.genp),
+        'mu_true_pdg': slcdf.mu.pfp.trk.truth.p.pdg,
+        'p_true_p': magdf(slcdf.p.pfp.trk.truth.p.genp),
+        'p_true_pdg': slcdf.p.pfp.trk.truth.p.pdg,
+        'del_p': del_p,
+        'del_Tp': del_Tp,
+        'del_phi': del_phi,
+        'tmatch_idx': tmatch_idx_series,
+        'has_stub': slc_has_stub_series
+    })
+
+    # include some meta-data
+    slcdf['detector'] = DETECTOR
+
+    # add in stub info, per range bin
+    stubdf = stubdf[stubdf.plane == 2]
+
+    stub_length_bins = [0, 0.5, 1, 2, 3, 4]
+    stub_length_name = ["l0_5cm", "l1cm", "l2cm", "l3cm", "l4cm"]
+    tosave = ["dedx", "charge"] # ["dedx_callo", "dedx_calhi", "Q", "length", "inc_charge"]
+
+    for blo, bhi, name in zip(stub_length_bins[:-1], stub_length_bins[1:], stub_length_name):
+        stub_tosave = stubdf.dedx[(stubdf.length > blo) & (stubdf.length < bhi)].groupby(level=[0,1]).idxmax()
+        for col in tosave:
+            s = stubdf.loc[stub_tosave, col]
+            s.name = "stub_%s_%s" % (name, col)
+            s.index = s.index.droplevel(-1)
+            slcdf = slcdf.join(s, how="left", validate="one_to_one")
+
+    return slcdf
+
+def make_gump_nuwgtdf(f):
+    return make_mcnudf(f, include_weights=True)
+
+def make_gump_nudf(f, is_slc=False):
+    # note: setting is_slc to false results in pdg for the slice not being used
+    # and instead only mcnu pdg info gets saved, but this excludes the -1 pdg for cosmic
+    nudf = make_mcdf(f, slc_mcbranches, slc_mcprimbranches) if is_slc else make_mcdf(f)
+    nudf["ind"] = nudf.index.get_level_values(1)
+
+    # wgtdf = pd.concat([bnbsyst.bnbsyst(f, nudf.ind), geniesyst.geniesyst_sbnd(f, nudf.ind)], axis=1)
+    det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
+
+    if det.empty:
+        return pd.DataFrame()
+
+    if (1 == det.unique()):
+        DETECTOR = "SBND"
+    elif (2 == det.unique()):
+        DETECTOR = "ICARUS"
+    else:
+        print("Detector unclear, check rec.hdr.det!")
+
+    is_fv = fv_cut(nudf.position, DETECTOR)
+    is_cc = nudf.iscc
+    is_nc = (nudf.iscc == 0)
+    genie_mode = nudf.genie_mode
+    pdg = nudf.pdg
+    nmu = nudf.nmu_27MeV
+    np = nudf.np_50MeV
+    npi = nudf.npi_30MeV
+    npi0 = nudf.npi0
+    nn = nudf.nn_0MeV
+    is_1p0pi = (nudf.nmu_27MeV == 1) & (nudf.np_50MeV == 1) & (nudf.npi_30MeV == 0) & (nudf.npi0 == 0) 
+    is_numu = (nudf.pdg == 14)
+    is_other_numucc = (is_numu & is_cc & (is_1p0pi == 0) & is_fv)
+    is_sig = is_fv & is_1p0pi & is_numu & is_cc
+
+    nudf['nuint_categ'] = genie_mode 
+
+    muon_p_series = magdf(nudf.mu.genp)
+    proton_p_series = magdf(nudf.p.genp)
     
-    return df
+    true_tki = transverse_kinematics(muon_p_series, nudf.mu.genp, proton_p_series, nudf.mu.genp)
+    true_del_p = true_tki['del_p']
 
+    true_nu_E = neutrino_energy(muon_p_series, nudf.mu.genp, proton_p_series, nudf.mu.genp)
+
+    this_nudf = pd.DataFrame({
+        'true_nu_E': true_nu_E,
+        'true_del_p': true_del_p,
+        'genie_mode': genie_mode, 
+        'is_sig': is_sig, 
+        'is_nc': is_nc, 
+        'is_other_numucc': is_other_numucc, 
+        'is_fv': is_fv, 
+        'pos_x' : nudf.position.x,
+        'pos_y' : nudf.position.y,
+        'pos_z' : nudf.position.z,
+        'pdg': pdg,
+        'nmu': nmu,
+        'nn': nn,
+        'np': np,
+        'npi': npi,
+        'npi0': npi0 
+    })
+
+    this_nudf.columns = pd.MultiIndex.from_tuples([(col, '') for col in this_nudf.columns])
+
+    return this_nudf

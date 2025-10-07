@@ -2,6 +2,7 @@
 .python-version
 __pycache__/
 *.df
+*.png
 *.root
 envs/cmake3
 envs/venv_py39_cafpyana/

@@ -10,6 +10,7 @@ import warnings
 
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 warnings.filterwarnings("ignore", category=tables.exceptions.NaturalNameWarning)
+pd.set_option('future.no_silent_downcasting', True)
 
 ## Arguments
 parser = argparse.ArgumentParser(
@@ -202,12 +203,12 @@ if __name__ == "__main__":
                 
         ### check if it is grid mode for pool mode
         if args.NGridJobs == 0:
-            print("Runing Pool mode");
+            print("Running Pool mode");
             exec(open(args.config).read())
             run_pool(args.output, InputSamples)
 
         elif args.NGridJobs > 0:
-            print("Runing Grid mode");
+            print("Running Grid mode");
             run_grid(InputSamples)
             
         else:

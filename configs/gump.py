@@ -1,4 +1,4 @@
 from analysis_village.gump.makedf import *
 
-DFS = [make_pandora_evtdf, make_mcnuwgtdf_slim, make_hdrdf]
-NAMES = ["evt", "mcnuwgtslim", "hdr"]
+DFS = [make_pandora_gump_df, make_gump_nudf, make_hdrdf, make_stubs]
+NAMES = ["evt", "mcnu", "hdr", "stubs"]

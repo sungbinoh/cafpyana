@@ -40,7 +40,6 @@ def run(output, inputs):
             this_n_split = get_n_split(input)
             for split in range(this_n_split):
                 result = TTREEMKR(input, split)
-
                 if isinstance(result, tuple) and len(result) == 2 \
                    and isinstance(result[0], pd.DataFrame) and isinstance(result[1], pd.DataFrame):
                     recodf, truedf = result

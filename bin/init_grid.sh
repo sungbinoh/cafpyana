@@ -52,3 +52,4 @@ cd ..
 
 export PYTHONPATH=$PYTHONPATH:$PWD/..
 export CAFPYANA_WD=`pwd`
+echo $CAFPYANA_WD
