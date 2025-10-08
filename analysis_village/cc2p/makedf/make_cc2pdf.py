@@ -30,7 +30,7 @@ def make_cc2pdf(f):
     
     #### (3) Track multiplicity cut
     ######## (3) - a: keep only pfp objects with length > 4 cm and dist_to_vertex < 6 cm
-    pandora_df = pandora_df[(pandora_df.pfp.trk.len > 4.) & (pandora_df.pfp.dist_to_vertex < 6.)]
+    pandora_df = pandora_df[(pandora_df.pfp.trk.len > 15.) & (pandora_df.pfp.dist_to_vertex < 2.)]
     ######## (3) - b: keep only slices with exactly three pfp object passing the requirement
     pandora_df = cc2preco.pass_slc_with_n_pfps(pandora_df)
 
@@ -80,9 +80,9 @@ def make_cc2pdf(f):
     cos_theta_rec_proton_series = cos_theta_rec_proton_series.reset_index(level='rec.slc.reco.pfp..index', drop=True)    
     
     #### add kinematic imbalance vars
-    # imbalance_df = pandora_df.groupby(['entry', 'rec.slc..index']).apply(cc2preco.measure_reco_imbalance)
-
-    # print(imbalance_df.keys())
+    imbalance_df = pandora_df.groupby(['entry', 'rec.slc..index']).apply(cc2preco.measure_reco_imbalance)
+    #imbalance_df = pandora_df.groupby(['entry', 'rec.slc..index']).apply(cc2preco.measure_reco_imbalance)
+    print(imbalance_df.keys())
 
     # reco_deltapt_series = imbalance_df['deltapt']
     # reco_deltaalphat_series = imbalance_df['deltaalphat']
