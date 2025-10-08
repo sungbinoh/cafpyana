@@ -19,6 +19,16 @@ def dotdf(df1, df2):
 def unitdf(df):
     return df.divide(magdf(df), axis=0)
 
+def InAV(df,det="SBND"):
+    if det == "SBND":
+        xmin = -195
+        ymin = -195
+        zmin = 5
+        xmax = 195
+        ymax = 195
+        zmax = 495
+    return (df.x > xmin) & (df.x < xmax) & (df.y > ymin) & (df.y < ymax) & (df.z > zmin) & (df.z < zmax)
+
 def InFV(df, inzback, inx=10, iny=10, inzfront=10, det="ICARUS"):
     if det == "ICARUS":
         xmin_C0 = -358.49

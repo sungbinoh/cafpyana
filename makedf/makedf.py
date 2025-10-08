@@ -52,6 +52,10 @@ def make_potdf_numi(f):
     pot = loadbranches(f["recTree"], numipotbranches).rec.hdr.numiinfo
     return pot
 
+def make_framedf(f):
+    frame = loadbranches(f["recTree"],sbndframebranches).rec.sbnd_frames
+    return frame
+
 def make_triggerdf(f):
     return  loadbranches(f["recTree"], trigger_info_branches).rec.hdr.triggerinfo
 
@@ -109,7 +113,7 @@ def make_opflashdf(f):
     return opflashdf
 
 def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False):
-    trkdf = loadbranches(f["recTree"], trkbranches + shwbranches)
+    trkdf = loadbranches(f["recTree"], trkbranches)
     if scoreCut:
         trkdf = trkdf.rec.slc.reco[trkdf.rec.slc.reco.pfp.trackScore > 0.5]
     else:
@@ -134,6 +138,23 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
     trkdf[("pfp", "tindex", "", "", "", "")] = trkdf.index.get_level_values(2)
 
     return trkdf
+
+def make_pfpdf(f, update_shw=True):
+    pfpdf = loadbranches(f["recTree"], trkbranches + shwbranches)
+    pfpdf = pfpdf.rec.slc.reco
+    
+    if update_shw:
+        ## necessary since "bestplane" stored in the cafs currently is from the dEdx alg
+        ## bestplane for dEdx alg is not the same as bestplane for shower energy
+
+        # set shower energy as the one with the plane that has the most number of hits (maxplane)
+        pfpdf['pfp','shw','maxplane','','',''] = pfpdf.loc(axis=1)['pfp','shw','plane',:,"nHits"].idxmax(axis=1).apply(lambda x: x[3])
+        pfpdf['pfp','shw','maxplane_energy','','',''] = np.nan
+        conditions = [pfpdf['pfp','shw','maxplane','','','']=="I2",pfpdf['pfp','shw','maxplane','','','']=="I1",pfpdf['pfp','shw','maxplane','','','']=="I0"]
+        choices = [pfpdf['pfp','shw','plane','I2','energy',''],pfpdf['pfp','shw','plane','I1','energy',''],pfpdf['pfp','shw','plane','I0','energy','']]
+        pfpdf['pfp','shw','maxplane_energy','','',''] = np.select(conditions,choices,default=np.nan)
+    pfpdf[("pfp", "tindex", "", "", "", "")] = pfpdf.index.get_level_values(2)
+    return pfpdf
 
 def make_trkhitdf_plane0(f):
     return make_trkhitdf(f, 0)
@@ -236,7 +257,7 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
         this_KE = mcprimdf[np.abs(mcprimdf.pdg)==PDG[particle][0]].genE - PDG[particle][2]
         mcdf = multicol_add(mcdf, ((np.abs(mcprimdf.pdg)==PDG[particle][0]) & (this_KE > threshold)).groupby(level=[0,1]).sum().rename(identifier))
  
-    # lepton info
+    # muon info
     mudf = mcprimdf[np.abs(mcprimdf.pdg)==13].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
     mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
 
@@ -246,9 +267,14 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     pdf = mcprimdf[mcprimdf.pdg==2212].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
     pdf.columns = pd.MultiIndex.from_tuples([tuple(["p"] + list(c)) for c in pdf.columns])
 
+    # electron info
+    edf = mcprimdf[np.abs(mcprimdf.pdg)==11].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
+    edf.columns = pd.MultiIndex.from_tuples([tuple(["e"] + list(c)) for c in edf.columns])
+
     mcdf = multicol_merge(mcdf, mudf, left_index=True, right_index=True, how="left", validate="one_to_one")
     mcdf = multicol_merge(mcdf, cpidf, left_index=True, right_index=True, how="left", validate="one_to_one")
     mcdf = multicol_merge(mcdf, pdf, left_index=True, right_index=True, how="left", validate="one_to_one")
+    mcdf = multicol_merge(mcdf, edf, left_index=True, right_index=True, how="left", validate="one_to_one")
 
     # primary track variables
     mcdf.loc[:, ('mu','totp','')] = np.sqrt(mcdf.mu.genp.x**2 + mcdf.mu.genp.y**2 + mcdf.mu.genp.z**2)
