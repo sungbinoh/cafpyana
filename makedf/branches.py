@@ -33,6 +33,10 @@ trigger_info_branches = [
     "rec.hdr.triggerinfo.gate_delta",
     "rec.hdr.triggerinfo.global_trigger_time",
     "rec.hdr.triggerinfo.prev_global_trigger_time",
+    "rec.hdr.triggerinfo.global_trigger_det_time",
+    "rec.hdr.triggerinfo.trigger_within_gate",
+    "rec.hdr.triggerinfo.beam_gate_det_time",
+    "rec.hdr.triggerinfo.beam_gate_time_abs",
 ]
 
 opflashbranches = [
@@ -248,6 +252,7 @@ slcbranches = [
 
 mcbranches = [
     "rec.mc.nu.E",
+    "rec.mc.nu.baseline",
     "rec.mc.nu.time",
     "rec.mc.nu.bjorkenX",
     "rec.mc.nu.inelasticityY",

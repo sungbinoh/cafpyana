@@ -34,13 +34,40 @@ def make_pandora_no_cuts_df(f):
     # redo chi2 for ICARUS
     if DETECTOR == "ICARUS":
         trkhitdf = make_trkhitdf(f)
+
+        # systematic variations
         dedx_redo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS")
         trkhitdf["dedx_redo"] = dedx_redo
-        trkdf["chi2u"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_redo")
-        trkdf["chi2p"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_redo")
+
+        dedx_hi = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", scale=1.01)
+        trkhitdf["dedx_hi"] = dedx_hi
+        dedx_lo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", scale=0.99)
+        trkhitdf["dedx_lo"] = dedx_lo
+        dedx_smear = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", smear=0.05)
+        trkhitdf["dedx_smear"] = dedx_smear
+
+        trkdf["chi2u"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_redo")[0]
+        trkdf["chi2p"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_redo")[0]
+
+        trkdf["chi2u_lo"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_lo")[0]
+        trkdf["chi2p_lo"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_lo")[0]
+
+        trkdf["chi2u_hi"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_hi")[0]
+        trkdf["chi2p_hi"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_hi")[0]
+
+        trkdf["chi2u_smear"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_smear")[0]
+        trkdf["chi2p_smear"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_smear")[0]
     else:
         trkdf["chi2u"] = trkdf.pfp.trk.chi2pid.I2.chi2_muon
         trkdf["chi2p"] = trkdf.pfp.trk.chi2pid.I2.chi2_proton
+
+        # TODO: implement
+        trkdf["chi2u_lo"] = trkdf.chi2u
+        trkdf["chi2u_hi"] = trkdf.chi2u
+        trkdf["chi2u_smear"] = trkdf.chi2u
+        trkdf["chi2p_lo"] = trkdf.chi2p
+        trkdf["chi2p_hi"] = trkdf.chi2p
+        trkdf["chi2p_smear"] = trkdf.chi2p
 
     trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.chi2u / trkdf.chi2p
 
@@ -151,10 +178,25 @@ def make_pandora_no_cuts_df(f):
         'is_cosmic': (true_pdg == -1),
         'is_contained': is_contained,
         'crlongtrkdiry': crlongtrkdiry,
+
         'mu_chi2_of_mu_cand': mu_chi2_of_mu_cand,
         'mu_chi2_of_prot_cand': mu_chi2_of_prot_cand,
         'prot_chi2_of_mu_cand': prot_chi2_of_mu_cand,
         'prot_chi2_of_prot_cand': prot_chi2_of_prot_cand,
+
+        'mu_chi2lo_of_mu_cand': slcdf.mu.chi2u_lo,
+        'mu_chi2hi_of_mu_cand': slcdf.mu.chi2u_hi,
+        'mu_chi2smear_of_mu_cand': slcdf.mu.chi2u_smear,
+        'mu_chi2lo_of_prot_cand': slcdf.p.chi2u_lo,
+        'mu_chi2hi_of_prot_cand': slcdf.p.chi2u_hi,
+        'mu_chi2smear_of_prot_cand': slcdf.p.chi2u_smear,
+        'prot_chi2lo_of_mu_cand': slcdf.mu.chi2p_lo,
+        'prot_chi2hi_of_mu_cand': slcdf.mu.chi2p_hi,
+        'prot_chi2smear_of_mu_cand': slcdf.mu.chi2p_smear,
+        'prot_chi2lo_of_prot_cand': slcdf.p.chi2p_lo,
+        'prot_chi2hi_of_prot_cand': slcdf.p.chi2p_hi,
+        'prot_chi2smear_of_prot_cand': slcdf.p.chi2p_smear,
+
         'p_len': p_len,
         'mu_len': mu_len,
         'nu_E_calo': nu_E_calo,
@@ -178,6 +220,8 @@ def make_pandora_no_cuts_df(f):
         'mu_true_pdg': slcdf.mu.pfp.trk.truth.p.pdg,
         'p_true_p': magdf(slcdf.p.pfp.trk.truth.p.genp),
         'p_true_pdg': slcdf.p.pfp.trk.truth.p.pdg,
+        'baseline': slcdf.slc.truth.baseline, 
+        'nu_E_true': slcdf.slc.truth.E,
         'del_p': del_p,
         'del_Tp': del_Tp,
         'del_phi': del_phi,
@@ -187,6 +231,13 @@ def make_pandora_no_cuts_df(f):
 
     # include some meta-data
     slcdf['detector'] = DETECTOR
+
+    # Add in crt hit matching for ICARUS
+    if DETECTOR == "ICARUS":
+        crt = make_crthitdf(f)
+        slcdf = slcdf.join(((crt.time > -1) & (crt.time < 1.8) & (crt.plane != 50)).groupby(level=[0]).any().rename("crthit"))
+    else:
+        slcdf["crthit"] = False
 
     # add in stub info, per range bin
     stubdf = stubdf[stubdf.plane == 2]
@@ -205,8 +256,68 @@ def make_pandora_no_cuts_df(f):
 
     return slcdf
 
+gump_genie_systematics = [
+    # CCQE
+    "GENIEReWeight_SBN_v1_multisigma_VecFFCCQEshape",
+    'GENIEReWeight_SBN_v1_multisigma_RPA_CCQE',
+    'GENIEReWeight_SBN_v1_multisigma_CoulombCCQE',
+
+    'GENIEReWeight_SBN_v1_multisigma_ZExpA1CCQE',
+    'GENIEReWeight_SBN_v1_multisigma_ZExpA2CCQE',
+    'GENIEReWeight_SBN_v1_multisigma_ZExpA3CCQE',
+    'GENIEReWeight_SBN_v1_multisigma_ZExpA4CCQE',
+
+    # MEC
+    # "GENIEReWeight_SBN_v1_multisigma_NormNCMEC",
+    'GENIEReWeight_SBN_v1_multisigma_NormCCMEC',
+    'GENIEReWeight_SBN_v1_multisigma_NormNCMEC',
+    "GENIEReWeight_SBN_v1_multisigma_DecayAngMEC",
+
+    # RES
+    "GENIEReWeight_SBN_v1_multisigma_Theta_Delta2Npi",
+    "GENIEReWeight_SBN_v1_multisigma_ThetaDelta2NRad",
+    "GENIEReWeight_SBN_v1_multisigma_MaCCRES",
+    "GENIEReWeight_SBN_v1_multisigma_MaNCRES",
+    "GENIEReWeight_SBN_v1_multisigma_MvCCRES",
+    "GENIEReWeight_SBN_v1_multisigma_MvNCRES",
+
+    # Non-Res
+
+    # DIS
+    # "GENIEReWeight_SBN_v1_multisim_DISBYVariationResponse",
+    'GENIEReWeight_SBN_v1_multisigma_AhtBY',
+    'GENIEReWeight_SBN_v1_multisigma_BhtBY',
+    'GENIEReWeight_SBN_v1_multisigma_CV1uBY',
+    'GENIEReWeight_SBN_v1_multisigma_CV2uBY',
+
+    # COH
+    "GENIEReWeight_SBN_v1_multisigma_NormCCCOH",
+    "GENIEReWeight_SBN_v1_multisigma_NormNCCOH",
+
+    # FSI
+    # "GENIEReWeight_SBN_v1_multisim_FSI_pi_VariationResponse",
+    # "GENIEReWeight_SBN_v1_multisim_FSI_N_VariationResponse",
+    'GENIEReWeight_SBN_v1_multisigma_MFP_pi',
+    'GENIEReWeight_SBN_v1_multisigma_FrCEx_pi',
+    'GENIEReWeight_SBN_v1_multisigma_FrInel_pi',
+    'GENIEReWeight_SBN_v1_multisigma_FrAbs_pi',
+    'GENIEReWeight_SBN_v1_multisigma_FrPiProd_pi',
+    'GENIEReWeight_SBN_v1_multisigma_MFP_N',
+    'GENIEReWeight_SBN_v1_multisigma_FrCEx_N',
+    'GENIEReWeight_SBN_v1_multisigma_FrInel_N',
+    'GENIEReWeight_SBN_v1_multisigma_FrAbs_N',
+    'GENIEReWeight_SBN_v1_multisigma_FrPiProd_N',
+
+    # NCEL
+    'GENIEReWeight_SBN_v1_multisigma_MaNCEL',
+    'GENIEReWeight_SBN_v1_multisigma_EtaNCEL',
+]
+
+def make_gump_nuslimwgtdf(f):
+    return make_mcnudf(f, include_weights=True, slim=True, genie_systematics=gump_genie_systematics)
+
 def make_gump_nuwgtdf(f):
-    return make_mcnudf(f, include_weights=True)
+    return make_mcnudf(f, include_weights=True, slim=False, genie_systematics=gump_genie_systematics)
 
 def make_gump_nudf(f, is_slc=False):
     # note: setting is_slc to false results in pdg for the slice not being used

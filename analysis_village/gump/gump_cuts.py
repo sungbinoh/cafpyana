@@ -99,8 +99,8 @@ def pid_cut(mu_chi2_mu_cand, mu_chi2_prot_cand, prot_chi2_mu_cand,
              (mu_len > MUSEL_LEN_TH)
 
     PSEL_MUSCORE_TH, PSEL_PSCORE_TH = 0, 90
-    p_cut = (mu_chi2_of_prot_cand > PSEL_MUSCORE_TH) & \
-            (prot_chi2_of_prot_cand < PSEL_PSCORE_TH)
+    p_cut = (mu_chi2_prot_cand > PSEL_MUSCORE_TH) & \
+            (prot_chi2_prot_cand < PSEL_PSCORE_TH)
 
     return mu_cut & p_cut
 
@@ -115,6 +115,9 @@ def clear_cosmic_cut(df):
 def contained_cut(df):
     cut = (df.is_contained == 1)
     return cut
+
+def crthitveto(df):
+    return ~df.crthit
 
 mode_list = [0, 10, 1, 2, 3]
 mode_labels = ['QE', 'MEC', 'RES', 'SIS/DIS', 'COH', "other"]

@@ -56,13 +56,13 @@ def make_triggerdf(f):
     return  loadbranches(f["recTree"], trigger_info_branches).rec.hdr.triggerinfo
 
 def make_mcnuwgtdf(f):
-    return make_mcnudf(f, include_weights=True, multisim_nuniv=1000)
+    return make_mcnudf(f, include_weights=True, multisim_nuniv=100)
 
 def make_mcnuwgtdf_slim(f):
-    return make_mcnudf(f, include_weights=True, multisim_nuniv=1000, slim=True)
+    return make_mcnudf(f, include_weights=True, multisim_nuniv=100, slim=True)
 
 # TODO: zip the nuniv configs
-def make_mcnudf(f, include_weights=False, multisim_nuniv=1000, genie_multisim_nuniv=100, wgt_types=["bnb","genie"], slim=False):
+def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nuniv=100, wgt_types=["bnb","genie"], slim=False, genie_systematics=None):
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if (1 == det.unique()):
@@ -81,7 +81,7 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=1000, genie_multisim_nu
                 bnbwgtdf = bnbsyst.bnbsyst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
                 df_list.append(bnbwgtdf)
             if "genie" in wgt_types:
-                geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim)
+                geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim, systematics=genie_systematics)
                 df_list.append(geniewgtdf)
 
             wgtdf = pd.concat(df_list, axis=1)
