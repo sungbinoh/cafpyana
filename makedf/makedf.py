@@ -2,7 +2,7 @@ from pyanalib.pandas_helpers import *
 from .branches import *
 from .util import *
 from .calo import *
-from . import numisyst, g4syst, geniesyst, bnbsyst
+from . import numisyst, g4syst, geniesyst, bnbsyst, getenv
 from makedf import chi2pid
 
 pd.set_option('future.no_silent_downcasting', True)
@@ -35,6 +35,10 @@ TRUE_KE_THRESHOLDS = {"nmu_27MeV": ["muon", 0.027],
                       "npi_30MeV": ["pipm", 0.03],
                       "nn_0MeV": ["neutron", 0.0]
                       }
+
+def make_envdf(f):
+    env = getenv.get_env(f)
+    return env
 
 def make_hdrdf(f):
     hdr = loadbranches(f["recTree"], hdrbranches).rec.hdr
@@ -189,6 +193,22 @@ def make_trkhitdf(f, plane=2):
     lasthit["lasthit"] = True
     df["lasthit"] = lasthit.lasthit
     df.lasthit = df.lasthit.fillna(False).infer_objects()
+
+    return df
+
+def make_trktruehitdf_plane0(f):
+    return make_trktruehitdf(f, 0)
+
+def make_trktruehitdf_plane1(f):
+    return make_trktruehitdf(f, 1)
+
+def make_trktruehitdf_plane2(f):
+    return make_trktruehitdf(f, 2)
+
+def make_trktruehitdf(f, plane=2):
+    branches = [trktruehitbranches_P0, trktruehitbranches_P1, trktruehitbranches][plane]
+    df = loadbranches(f["recTree"], branches).rec.slc.reco.pfp.trk.calo
+    df = df["I" + str(plane)].points.truth
 
     return df
 

@@ -198,16 +198,20 @@ trkhitbranches_perplane = lambda IPLANE : [
     #trkbranch + "calo.%i.points.width"% IPLANE,
     #trkbranch + "calo.%i.points.mult"% IPLANE,
     #trkbranch + "calo.%i.points.tdc0"% IPLANE,
+]
 
-    # trkbranch + "calo.%i.points.truth.h_e"% IPLANE,
-    # trkbranch + "calo.%i.points.truth.h_nelec"% IPLANE,
-    # trkbranch + "calo.%i.points.truth.pitch"% IPLANE,
-    # trkbranch + "calo.%i.points.truth.rr"% IPLANE,
+trktruehitbranches_perplane = lambda IPLANE : [
+    trkbranch + "calo.%i.points.truth.h_e"% IPLANE,
+    trkbranch + "calo.%i.points.truth.h_nelec"% IPLANE,
 ]
 
 trkhitbranches = trkhitbranches_perplane(2)
 trkhitbranches_P1 = trkhitbranches_perplane(1)
 trkhitbranches_P0 = trkhitbranches_perplane(0)
+
+trktruehitbranches = trktruehitbranches_perplane(2)
+trktruehitbranches_P1 = trktruehitbranches_perplane(1)
+trktruehitbranches_P0 = trktruehitbranches_perplane(0)
 
 #### ICARUS flat.caf does not have efield and phi for each hit so far,
 trkhitbranches_perplane_icarus = lambda IPLANE : [
