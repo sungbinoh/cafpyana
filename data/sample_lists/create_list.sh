@@ -4,7 +4,7 @@
 # in an sl7 container
 # source /exp/$(id -ng)/data/users/vito/podman/start_SL7dev_jsl.sh
 source /cvmfs/sbnd.opensciencegrid.org/products/sbnd/setup_sbnd.sh
-setup sbndcode v10_06_00_02 -q e26:prof
+setup sbndcode v10_10_03_01 -q e26:prof
 htgettoken -a htvaultprod.fnal.gov -i sbnd
 
 # example usage

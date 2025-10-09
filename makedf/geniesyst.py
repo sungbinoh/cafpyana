@@ -84,8 +84,14 @@ regen_systematics = [
     'GENIEReWeight_SBN_v1_multisigma_EtaNCEL',
 ]
 
-def geniesyst(f, nuind, multisim_nuniv=100, slim=False):
-    geniewgtdf = getsyst.getsyst(f, regen_systematics, nuind, multisim_nuniv=multisim_nuniv, slim=slim)
-    # rename ("slim", "univ_{idx}") -> ("GENIE","univ_{idx}")
-    geniewgtdf.columns = pd.MultiIndex.from_tuples([("GENIE", f"univ_{i}") for i in range(len(geniewgtdf.columns))])
+def geniesyst(f, nuind, multisim_nuniv=100, slim=False, systematics=None):
+    if systematics is None:
+        systematics = regen_systematics
+
+    geniewgtdf = getsyst.getsyst(f, systematics, nuind, multisim_nuniv=multisim_nuniv, slim=slim, slimname="GENIE")
+
+    if slim:  # keep only the multiplied "GENIE.univ_" columns
+        genie_cols = [c for c in geniewgtdf.columns if c[0] == "GENIE"]
+        geniewgtdf = geniewgtdf[genie_cols]
+        
     return geniewgtdf

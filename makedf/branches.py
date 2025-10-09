@@ -33,6 +33,10 @@ trigger_info_branches = [
     "rec.hdr.triggerinfo.gate_delta",
     "rec.hdr.triggerinfo.global_trigger_time",
     "rec.hdr.triggerinfo.prev_global_trigger_time",
+    "rec.hdr.triggerinfo.global_trigger_det_time",
+    "rec.hdr.triggerinfo.trigger_within_gate",
+    "rec.hdr.triggerinfo.beam_gate_det_time",
+    "rec.hdr.triggerinfo.beam_gate_time_abs",
 ]
 
 opflashbranches = [
@@ -172,7 +176,19 @@ trkmcsbranches = [
 ]
 
 shwbranches = [
-  shwbranch + "len"
+    shwbranch + "start.x", shwbranch + "start.y", shwbranch + "start.z",
+    shwbranch + "end.x",   shwbranch + "end.y", shwbranch + "end.z",
+    shwbranch + 'conversion_gap', 
+    shwbranch + "density",
+    shwbranch + "open_angle",
+    shwbranch + 'bestplane',
+    shwbranch + 'bestplane_dEdx', shwbranch + 'bestplane_energy',
+    shwbranch + 'plane.0.dEdx',   shwbranch + 'plane.1.dEdx', shwbranch + 'plane.2.dEdx',
+    shwbranch + 'plane.0.energy', shwbranch + 'plane.1.energy', shwbranch + 'plane.2.energy',
+    shwbranch + 'plane.0.nHits',  shwbranch + 'plane.1.nHits',  shwbranch + 'plane.2.nHits',
+    shwbranch + "len",
+    shwbranch + "truth.eff",
+    shwbranch + "truth.pur",
 ]
 
 trkhitadcbranches = [
@@ -234,6 +250,7 @@ trkhitbranches_P1_icarus = trkhitbranches_perplane_icarus(1)
 trkhitbranches_P0_icarus = trkhitbranches_perplane_icarus(0)
 
 for n in trueparticlenames: trkbranches.append(trkbranch + "truth.p." + n)
+for n in trueparticlenames: shwbranches.append(shwbranch + "truth.p." + n)
 
 slcbranches = [
     "rec.slc.is_clear_cosmic",
@@ -252,6 +269,7 @@ slcbranches = [
 
 mcbranches = [
     "rec.mc.nu.E",
+    "rec.mc.nu.baseline",
     "rec.mc.nu.time",
     "rec.mc.nu.bjorkenX",
     "rec.mc.nu.inelasticityY",

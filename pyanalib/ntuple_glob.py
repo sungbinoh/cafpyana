@@ -64,6 +64,11 @@ def _loaddf(applyfs, g):
     try:
         # Open AND close strictly within the context manager
         with _open_with_retries(fname) as f:
+
+            if "recTree" not in f:
+                print("File (%s) missing recTree. Skipping..." % fname)
+                return None
+
             dfs = []
             for applyf in applyfs:
                 df = applyf(f)  # must fully read from 'f' here
@@ -91,9 +96,6 @@ def _loaddf(applyfs, g):
     except (OSError, ValueError) as e:
         print(f"Could not open file ({fname}). Skipping...")
         print(e)
-        return None
-    if "recTree" not in f:
-        print("File (%s) missing recTree. Skipping..." % fname)
         return None
 
     with f:
