@@ -314,6 +314,14 @@ def make_mcprimdf(f):
     mcprimdf = loadbranches(f["recTree"], mcprimbranches)
     return mcprimdf
 
+def make_mcprimvisEdf(f):
+    mcprimvisEdf = loadbranches(f["recTree"], mcprimvisEbranches)
+    return mcprimvisEdf
+
+def make_mcprimdaughtersdf(f):
+    mcprimdaughtersdf = loadbranches(f["recTree"], mcprimdaughtersbranches)
+    return mcprimdaughtersdf
+
 def make_pandora_df_calo_update(f, **trkArgs):
     pandoradf = make_pandora_df(f, trkScoreCut=False, trkDistCut=10., cutClearCosmic=True, requireFiducial=False, updatecalo=True, **trkArgs)
     return pandoradf

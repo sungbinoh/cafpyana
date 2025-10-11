@@ -115,6 +115,14 @@ def check_flipped(hitdf, plane=2):
     hitdf = hitdf.reset_index().set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index", "rec.slc.reco.pfp.trk.calo.{}.points..index".format(plane)])
     return hitdf
 
+def thetazx_cut(df):
+    dirx = df.pfp.trk.dir.x
+    dirz = df.pfp.trk.dir.z
+    coszx = np.abs(dirx / np.hypot(dirx, dirz))
+    coszx_pass = coszx < 0.75
+    
+    return df[coszx_pass]
+
 ###############################################
 #### Hit level selections
 ###############################################
@@ -227,6 +235,9 @@ def make_protonhit_df(f):
     # 1 prong 
     longer_data, shorter_data = select_topology(pandoradf, nprong=1, max_len_cut=25, min_len_cut=25, contained=True)
     proton_candidate = select_calorimetry(shorter_data, muscore_cut_val=20, pscore_cut_val=80)
+    proton_candidate = thetazx_cut(proton_candidate)
+
+    proton_candidate_ture_pdg = proton_candidate.pfp.trk.truth.p.pdg
     
     proton_candidate_chi2_muon = proton_candidate.pfp.trk.chi2pid.I2.chi2_muon
     proton_candidate_chi2_proton = proton_candidate.pfp.trk.chi2pid.I2.chi2_proton
@@ -235,6 +246,7 @@ def make_protonhit_df(f):
     proton_hits = proton_hits.reset_index().set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index", "rec.slc.reco.pfp.trk.calo.{}.points..index".format(2)])
     proton_hits['chi2_muon'] = proton_candidate_chi2_muon
     proton_hits['chi2_proton'] = proton_candidate_chi2_proton
+    proton_hits['true_pdg'] = proton_candidate_ture_pdg
     
     if len(proton_hits) == 0:
         return None ### FIXME
@@ -245,6 +257,9 @@ def make_protonhit_df(f):
     # 2 prong
     longer_data, shorter_data = select_topology(pandoradf, nprong=2, max_len_cut=25, min_len_cut=25, contained=True)
     proton_candidate = select_calorimetry(shorter_data, muscore_cut_val=20, pscore_cut_val=80)
+    proton_candidate = thetazx_cut(proton_candidate)
+
+    proton_candidate_ture_pdg = proton_candidate.pfp.trk.truth.p.pdg
     
     proton_candidate_chi2_muon = proton_candidate.pfp.trk.chi2pid.I2.chi2_muon
     proton_candidate_chi2_proton = proton_candidate.pfp.trk.chi2pid.I2.chi2_proton
@@ -253,6 +268,7 @@ def make_protonhit_df(f):
     proton_hits = proton_hits.reset_index().set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index", "rec.slc.reco.pfp.trk.calo.{}.points..index".format(2)])
     proton_hits['chi2_muon'] = proton_candidate_chi2_muon
     proton_hits['chi2_proton'] = proton_candidate_chi2_proton
+    proton_hits['true_pdg'] = proton_candidate_ture_pdg
 
     if len(proton_hits) == 0:
         return None ### FIXME
@@ -272,6 +288,8 @@ def make_protonhit_df(f):
     proton_hits = check_wireskip(proton_hits)
 
     proton_hits = proton_hits[(proton_hits.pitch < 1) & (proton_hits.badorder == False)]
+
+    #print(proton_hits)
 
     # output dfs
     proton_hits_selected = proton_hits.loc[:, [
@@ -296,6 +314,7 @@ def make_protonhit_df(f):
         ("efield"),
         ("chi2_muon"),
         ("chi2_proton"),
+        ("true_pdg"),
     ]].copy()
 
     proton_hits_selected.columns = [
@@ -319,7 +338,8 @@ def make_protonhit_df(f):
         "phi",
         "efield",
         "trk_chi2_mu",
-        "trk_chi2_p"
+        "trk_chi2_p",
+        "true_pdg",
     ]
     proton_hits_selected = proton_hits_selected.reset_index()
 

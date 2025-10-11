@@ -95,7 +95,11 @@ trueparticlenames = [
     "interaction_id"
 ]
 
-trueparticlebranches = ["rec.true_particles.%s" % s for s in trueparticlenames]
+trueparticlebranches = [
+    *["rec.true_particles.%s" % s for s in trueparticlenames],
+    "rec.true_particles.plane.0.2.visE",
+    "rec.true_particles.plane.1.2.visE",
+]
 
 crtspbranches = [
     "rec.crt_spacepoints.pe",
@@ -297,6 +301,14 @@ mcprimbranches = [
     "rec.mc.nu.prim.genp.z",
     "rec.mc.nu.prim.start.x", "rec.mc.nu.prim.start.y", "rec.mc.nu.prim.start.z",
     "rec.mc.nu.prim.end.x", "rec.mc.nu.prim.end.y", "rec.mc.nu.prim.end.z",
+]
+
+mcprimvisEbranches = [
+    "rec.mc.nu.prim.plane.0.2.visE", "rec.mc.nu.prim.plane.1.2.visE"
+]
+
+mcprimdaughtersbranches = [
+    "rec.mc.nu.prim.daughters",
 ]
 
 slc_mcbranches = ["rec.slc.truth." + ".".join(s.split(".")[3:]) for s in mcbranches]
