@@ -20,7 +20,6 @@ void MakesBruce(const char* fileName = "input.root", const char* output_filename
 
     for(int t = 0; t < 1; t++){
         const char* treeName = treeNames[t];
-
         TTree *tree = nullptr;
         file->GetObject(treeName, tree);
         TObjArray *AllBranches = tree->GetListOfBranches();
@@ -80,7 +79,7 @@ void MakesBruce(const char* fileName = "input.root", const char* output_filename
                 TBranch* branch = dynamic_cast<TBranch*>(AllBranches->At(b));
                 const char* branchName = branch->GetName();
                 std::string branchName_str = branchName;
-
+                std::cout << branchName << std::endl;
                 if(branchName_str.find(multisigma_keyword) == std::string::npos && branchName_str.find(multisim_keyword) == std::string::npos){
                     continue;
                 }
@@ -104,7 +103,13 @@ void MakesBruce(const char* fileName = "input.root", const char* output_filename
                     std::vector<double> temp(100, 0.0);
                     for (size_t j = 0; j < 100; j++) {
                         std::cout << "Entry[" << i << "]:" << " Element[" << j << "]: " << weights_multisim[j] << std::endl;
-                        temp.at(j) = weights_multisim[j];
+                        if(isnan(weights_multisim[j])){
+                            std::cout << "Found nan!" << std::endl;
+                            temp.at(j) = 1.0;
+                        }
+                        else{
+                            temp.at(j) = weights_multisim[j];
+                        }
                     }
                     filler_map[branchName] = temp;
                 }
