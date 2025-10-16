@@ -116,7 +116,7 @@ def contained_cut(df):
     cut = (df.is_contained == 1)
     return cut
 
-def crthitveto(df):
+def crthitveto_cut(df):
     return ~df.crthit
 
 mode_list = [0, 10, 1, 2, 3]
