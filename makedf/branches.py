@@ -92,7 +92,8 @@ trueparticlenames = [
     "parent",
     "cont_tpc",
     "genE",
-    "interaction_id"
+    "interaction_id",
+    "crosses_tpc",
 ]
 
 trueparticlebranches = [
@@ -301,6 +302,7 @@ mcprimbranches = [
     "rec.mc.nu.prim.genp.z",
     "rec.mc.nu.prim.start.x", "rec.mc.nu.prim.start.y", "rec.mc.nu.prim.start.z",
     "rec.mc.nu.prim.end.x", "rec.mc.nu.prim.end.y", "rec.mc.nu.prim.end.z",
+    "rec.mc.nu.prim.interaction_id", "rec.mc.nu.prim.crosses_tpc", "rec.mc.nu.prim.contained",
 ]
 
 mcprimvisEbranches = [
