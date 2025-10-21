@@ -191,7 +191,10 @@ slcbranches = [
     "rec.slc.nu_score",
     "rec.slc.barycenterFM.flashTime",    
     "rec.slc.opt0.score",
-    "rec.slc.opt0.time"
+    "rec.slc.opt0.time",
+    "rec.slc.reco.npfp",
+    "rec.slc.reco.nstub",
+
 ]
 
 mcbranches = [
