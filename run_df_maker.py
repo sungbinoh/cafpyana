@@ -54,7 +54,7 @@ def run_pool(output, inputs):
         for dfs in dfss:
             for k, df in zip(reversed(NAMES), reversed(dfs)):
                 this_key = k + "_" + str(k_idx)
-                size_bytes = df.memory_usage(deep=True).sum()
+                size_bytes = df.memory_usage(deep=True).sum() if df is not None else 0
                 size_gb = size_bytes / (1024**3)
                 size_counters[k] += size_gb
                 df_buffers[k].append(df)  # accumulate

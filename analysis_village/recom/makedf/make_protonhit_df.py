@@ -342,5 +342,6 @@ def make_protonhit_df(f):
         "true_pdg",
     ]
     proton_hits_selected = proton_hits_selected.reset_index()
+    #print(proton_hits_selected)
 
     return proton_hits_selected
