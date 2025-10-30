@@ -113,9 +113,9 @@ def bkg_other(df): # definition
     is_1p1pi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 == 1) & (df.np_50MeV == 1)    
     is_2pNpi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 > 0) & (df.np_50MeV == 2)   
     is_1pMpi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 > 1) & (df.np_50MeV == 1)
-    is_out_range = (df.nmu_27MeV == 0) & (df.nmu == 1) & (df.np_50MeV == 0) & (df.np == 1)    
+    #is_out_range = (df.nmu_27MeV == 0) & (df.nmu == 1) & (df.np_50MeV == 0) & (df.np == 1)    
 
-    mask = is_fv & is_numu & is_cc & ~is_1p0pi & ~is_2p0pi & ~is_2pNpi & ~is_1p1pi & ~is_1pMpi & ~is_out_range
+    mask = is_fv & is_numu & is_cc & ~is_1p0pi & ~is_2p0pi & ~is_2pNpi & ~is_1p1pi & ~is_1pMpi
     # if mask.any():
     #     print(df.loc[mask, ['nmu_27MeV', 'np_50MeV', 'npi', 'npi0']])        
         
