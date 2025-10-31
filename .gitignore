@@ -7,3 +7,6 @@ __pycache__/
 envs/cmake3
 envs/venv_py39_cafpyana/
 envs/xrootd-5.6.1/
+#*
+.#
+*~

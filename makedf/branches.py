@@ -33,6 +33,10 @@ trigger_info_branches = [
     "rec.hdr.triggerinfo.gate_delta",
     "rec.hdr.triggerinfo.global_trigger_time",
     "rec.hdr.triggerinfo.prev_global_trigger_time",
+    "rec.hdr.triggerinfo.global_trigger_det_time",
+    "rec.hdr.triggerinfo.trigger_within_gate",
+    "rec.hdr.triggerinfo.beam_gate_det_time",
+    "rec.hdr.triggerinfo.beam_gate_time_abs",
 ]
 
 opflashbranches = [
@@ -88,10 +92,15 @@ trueparticlenames = [
     "parent",
     "cont_tpc",
     "genE",
-    "interaction_id"
+    "interaction_id",
+    "crosses_tpc",
 ]
 
-trueparticlebranches = ["rec.true_particles.%s" % s for s in trueparticlenames]
+trueparticlebranches = [
+    *["rec.true_particles.%s" % s for s in trueparticlenames],
+    "rec.true_particles.plane.0.2.visE",
+    "rec.true_particles.plane.1.2.visE",
+]
 
 crtspbranches = [
     "rec.crt_spacepoints.pe",
@@ -210,16 +219,20 @@ trkhitbranches_perplane = lambda IPLANE : [
     #trkbranch + "calo.%i.points.width"% IPLANE,
     #trkbranch + "calo.%i.points.mult"% IPLANE,
     #trkbranch + "calo.%i.points.tdc0"% IPLANE,
+]
 
-    # trkbranch + "calo.%i.points.truth.h_e"% IPLANE,
-    # trkbranch + "calo.%i.points.truth.h_nelec"% IPLANE,
-    # trkbranch + "calo.%i.points.truth.pitch"% IPLANE,
-    # trkbranch + "calo.%i.points.truth.rr"% IPLANE,
+trktruehitbranches_perplane = lambda IPLANE : [
+    trkbranch + "calo.%i.points.truth.h_e"% IPLANE,
+    trkbranch + "calo.%i.points.truth.h_nelec"% IPLANE,
 ]
 
 trkhitbranches = trkhitbranches_perplane(2)
 trkhitbranches_P1 = trkhitbranches_perplane(1)
 trkhitbranches_P0 = trkhitbranches_perplane(0)
+
+trktruehitbranches = trktruehitbranches_perplane(2)
+trktruehitbranches_P1 = trktruehitbranches_perplane(1)
+trktruehitbranches_P0 = trktruehitbranches_perplane(0)
 
 #### ICARUS flat.caf does not have efield and phi for each hit so far,
 trkhitbranches_perplane_icarus = lambda IPLANE : [
@@ -267,6 +280,7 @@ slcbranches = [
 
 mcbranches = [
     "rec.mc.nu.E",
+    "rec.mc.nu.baseline",
     "rec.mc.nu.time",
     "rec.mc.nu.bjorkenX",
     "rec.mc.nu.inelasticityY",
@@ -295,7 +309,15 @@ mcprimbranches = [
     "rec.mc.nu.prim.genp.z",
     "rec.mc.nu.prim.start.x", "rec.mc.nu.prim.start.y", "rec.mc.nu.prim.start.z",
     "rec.mc.nu.prim.end.x", "rec.mc.nu.prim.end.y", "rec.mc.nu.prim.end.z",
-    "rec.mc.nu.prim.interaction_id",
+    "rec.mc.nu.prim.interaction_id", "rec.mc.nu.prim.crosses_tpc", "rec.mc.nu.prim.contained",
+]
+
+mcprimvisEbranches = [
+    "rec.mc.nu.prim.plane.0.2.visE", "rec.mc.nu.prim.plane.1.2.visE"
+]
+
+mcprimdaughtersbranches = [
+    "rec.mc.nu.prim.daughters",
 ]
 
 slc_mcbranches = ["rec.slc.truth." + ".".join(s.split(".")[3:]) for s in mcbranches]

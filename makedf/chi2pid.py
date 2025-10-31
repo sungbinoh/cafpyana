@@ -19,15 +19,19 @@ ICARUS_CALO_PARAMS = {
     "c_cal_frac": [1., 1., 1.],
 }
 
+#### Default
+#### == For each element, the first entry is for MC and the second entry is for the data
 SBND_CALO_PARAMS = {
-    "alpha_emb": 0.904,
-    "beta_90": 0.204,
-    "R_emb": 1.25,
-    "gains": [[0.0203521, 0.0202351, 0.0200727], ## MC
-              [0.0223037, 0.0219534, 0.0215156]], ## Data
+    "alpha_emb": [0.904, 0.904],
+    "beta_90": [0.204, 0.204],
+    "R_emb": [1.25, 1.25],
+    "gains": [
+        [0.0203521, 0.0202351, 0.0200727], ## MC
+        [0.0223037, 0.0219534, 0.0215156]], ## Data
     "c_cal_frac": [1., 1., 1.],
     "etau": [100., 35.], ## first value for MC and second value for data
 }
+
 
 def chi2(hitdf, exprr, expdedx, experr, dedxname="dedx"):
     dedx_exp = pd.cut(hitdf.rr, exprr, labels=expdedx).astype(float)
@@ -160,7 +164,7 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
 
     return dqdx*gain_perhit
 
-def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False):
+def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False, smear=-1, scale=1):
     dqdx_v = dqdx(dqdxdf, gain=gain, calibrate=calibrate, isMC=isMC)
     if gain == "ICARUS":
         scalegain = ICARUS_CALO_PARAMS['c_cal_frac'][plane]
@@ -168,7 +172,19 @@ def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False):
         scalegain = SBND_CALO_PARAMS['c_cal_frac'][plane]
     else:
         scalegain = 1.
-    return calo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, SBND_CALO_PARAMS["alpha_emb"], SBND_CALO_PARAMS["beta_90"], SBND_CALO_PARAMS["R_emb"]) if gain=="SBND" else alo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
+
+    if gain == "SBND":
+        this_alpha_emb = SBND_CALO_PARAMS["alpha_emb"][0] if isMC else SBND_CALO_PARAMS["alpha_emb"][1]
+        this_beta_90 = SBND_CALO_PARAMS["beta_90"][0] if isMC else SBND_CALO_PARAMS["beta_90"][1]
+        this_R_emb = SBND_CALO_PARAMS["R_emb"][0] if isMC else SBND_CALO_PARAMS["R_emb"][1]
+        dedx = calo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, this_alpha_emb, this_beta_90, this_R_emb)
+    else:
+        dedx = calo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
+
+    if smear > 0:
+        dedx = dedx*np.random.normal(scale=smear, size=dedx.size)
+
+    return dedx
 
 def _yz_ybin(y, yz_ybin):
     return np.searchsorted(yz_ybin, y) - 1

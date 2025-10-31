@@ -2,7 +2,7 @@ from pyanalib.pandas_helpers import *
 from .branches import *
 from .util import *
 from .calo import *
-from . import numisyst, g4syst, geniesyst, bnbsyst
+from . import numisyst, g4syst, geniesyst, bnbsyst, getenv
 from makedf import chi2pid
 
 pd.set_option('future.no_silent_downcasting', True)
@@ -36,6 +36,10 @@ TRUE_KE_THRESHOLDS = {"nmu_27MeV": ["muon", 0.027],
                       "nn_0MeV": ["neutron", 0.0]
                       }
 
+def make_envdf(f):
+    env = getenv.get_env(f)
+    return env
+
 def make_hdrdf(f):
     hdr = loadbranches(f["recTree"], hdrbranches).rec.hdr
     return hdr
@@ -60,13 +64,13 @@ def make_triggerdf(f):
     return  loadbranches(f["recTree"], trigger_info_branches).rec.hdr.triggerinfo
 
 def make_mcnuwgtdf(f):
-    return make_mcnudf(f, include_weights=True, multisim_nuniv=1000)
+    return make_mcnudf(f, include_weights=True, multisim_nuniv=100)
 
 def make_mcnuwgtdf_slim(f):
-    return make_mcnudf(f, include_weights=True, multisim_nuniv=1000, slim=True)
+    return make_mcnudf(f, include_weights=True, multisim_nuniv=100, slim=True)
 
 # TODO: zip the nuniv configs
-def make_mcnudf(f, include_weights=False, multisim_nuniv=1000, genie_multisim_nuniv=100, wgt_types=["bnb","genie"], slim=False):
+def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nuniv=100, wgt_types=["bnb","genie"], slim=False, genie_systematics=None):
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if (1 == det.unique()):
@@ -85,7 +89,7 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=1000, genie_multisim_nu
                 bnbwgtdf = bnbsyst.bnbsyst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
                 df_list.append(bnbwgtdf)
             if "genie" in wgt_types:
-                geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim)
+                geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim, systematics=genie_systematics)
                 df_list.append(geniewgtdf)
 
             wgtdf = pd.concat(df_list, axis=1)
@@ -213,6 +217,22 @@ def make_trkhitdf(f, plane=2):
 
     return df
 
+def make_trktruehitdf_plane0(f):
+    return make_trktruehitdf(f, 0)
+
+def make_trktruehitdf_plane1(f):
+    return make_trktruehitdf(f, 1)
+
+def make_trktruehitdf_plane2(f):
+    return make_trktruehitdf(f, 2)
+
+def make_trktruehitdf(f, plane=2):
+    branches = [trktruehitbranches_P0, trktruehitbranches_P1, trktruehitbranches][plane]
+    df = loadbranches(f["recTree"], branches).rec.slc.reco.pfp.trk.calo
+    df = df["I" + str(plane)].points.truth
+
+    return df
+
 def make_slcdf(f):
     slcdf = loadbranches(f["recTree"], slcbranches)
     slcdf = slcdf.rec
@@ -294,11 +314,19 @@ def make_mcprimdf(f):
     mcprimdf = loadbranches(f["recTree"], mcprimbranches)
     return mcprimdf
 
+def make_mcprimvisEdf(f):
+    mcprimvisEdf = loadbranches(f["recTree"], mcprimvisEbranches)
+    return mcprimvisEdf
+
+def make_mcprimdaughtersdf(f):
+    mcprimdaughtersdf = loadbranches(f["recTree"], mcprimdaughtersbranches)
+    return mcprimdaughtersdf
+
 def make_pandora_df_calo_update(f, **trkArgs):
-    pandoradf = make_pandora_df(f, trkScoreCut=False, trkDistCut=10., cutClearCosmic=True, requireFiducial=False, updatecalo=True, **trkArgs)
+    pandoradf = make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=True, requireFiducial=False, updatecalo=True, **trkArgs)
     return pandoradf
 
-def make_pandora_df(f, trkScoreCut=False, trkDistCut=10., cutClearCosmic=False, requireFiducial=False, updatecalo=False, **trkArgs):
+def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, requireFiducial=False, updatecalo=False, **trkArgs):
     # load
     trkdf = make_trkdf(f, trkScoreCut, **trkArgs)
     if updatecalo:
@@ -315,6 +343,8 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=10., cutClearCosmic=False, 
         chi2_pids = []
         for plane in range(0, 3):
             trkhitdf = make_trkhitdf(f, plane)
+            if det == "SBND": ## FIXME
+                trkhitdf = trkhitdf[InFV(df = trkhitdf, inzback = 0., det = "SBND_nohighyz")]
             #dqdx_redo = chi2pid.dqdx(trkhitdf, gain=det, calibrate=det, isMC=ismc)
             dedx_redo = chi2pid.dedx(trkhitdf, gain=det, calibrate=det, plane=plane, isMC=ismc)
             dedx_bias = (dedx_redo - trkhitdf.dedx) / trkhitdf.dedx
