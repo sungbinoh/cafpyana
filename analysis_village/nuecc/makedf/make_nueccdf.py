@@ -2,6 +2,14 @@ from makedf.makedf import *
 from pyanalib.pandas_helpers import *
 from makedf.util import *
 
+def make_mcnudf_nuecc(f,**args):
+    mcdf = make_mcnudf(f,**args)
+    # drop mcdf columns not relevant for this analysis
+    if 'mu'  in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('mu', axis=1,level=0)
+    if 'p'   in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('p',  axis=1,level=0)
+    if 'cpi' in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('cpi',axis=1,level=0)
+    return mcdf
+
 def make_nueccdf_mc_wgt(f):
     df = make_nueccdf_mc(f,include_weights=True)
     return df
@@ -9,11 +17,7 @@ def make_nueccdf_mc_wgt(f):
 def make_nueccdf_mc(f, include_weights=False,multisim_nuniv=100,slim=True):
     
     slcdf = make_nueccdf(f)
-    mcdf = make_mcnudf(f,include_weights=include_weights,multisim_nuniv=multisim_nuniv,slim=slim)
-    # drop mcdf columns not relevant for this analysis
-    if 'mu'  in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('mu', axis=1,level=0)
-    if 'p'   in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('p',  axis=1,level=0)
-    if 'cpi' in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('cpi',axis=1,level=0)
+    mcdf = make_mcnudf_nuecc(f,include_weights=include_weights,multisim_nuniv=multisim_nuniv,slim=slim)
 
     nslcdf_col = len(slcdf.columns[0])
     nmcdf_col  = len(mcdf.columns[0])
