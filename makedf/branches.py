@@ -254,9 +254,15 @@ slcbranches = [
     "rec.slc.producer",
     "rec.slc.nuid.crlongtrkdiry",
     "rec.slc.nu_score",
+    "rec.slc.barycenterFM.chargeTotal",    
     "rec.slc.barycenterFM.flashTime",    
+    "rec.slc.barycenterFM.flashPEs",    
+    "rec.slc.barycenterFM.chi2",    
+    "rec.slc.barycenterFM.score",    
     "rec.slc.opt0.score",
-    "rec.slc.opt0.time"
+    "rec.slc.opt0.time",
+    "rec.slc.opt0.measPE",
+    "rec.slc.opt0.hypoPE",
 ]
 
 mcbranches = [
@@ -277,6 +283,7 @@ mcbranches = [
     "rec.mc.nu.genie_mode",
     "rec.mc.nu.parent_pdg",
     "rec.mc.nu.parent_dcy_E",
+    "rec.mc.nu.genie_evtrec_idx",
 ]
 
 mcprimbranches = [
@@ -288,6 +295,7 @@ mcprimbranches = [
     "rec.mc.nu.prim.genp.z",
     "rec.mc.nu.prim.start.x", "rec.mc.nu.prim.start.y", "rec.mc.nu.prim.start.z",
     "rec.mc.nu.prim.end.x", "rec.mc.nu.prim.end.y", "rec.mc.nu.prim.end.z",
+    "rec.mc.nu.prim.interaction_id",
 ]
 
 slc_mcbranches = ["rec.slc.truth." + ".".join(s.split(".")[3:]) for s in mcbranches]
