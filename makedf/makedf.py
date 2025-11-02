@@ -40,13 +40,6 @@ def make_envdf(f):
     env = getenv.get_env(f)
     return env
 
-def make_histpotdf(f):
-    # get the value from the TotalPOT histogram
-    pot = f['TotalPOT'].values()
-    histpot = pd.DataFrame(data={'TotalPOT':pot})
-    histpot.index.name = 'entry'
-    return histpot
-
 def make_hdrdf(f):
     hdr = loadbranches(f["recTree"], hdrbranches).rec.hdr
     return hdr

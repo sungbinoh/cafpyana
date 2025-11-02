@@ -48,25 +48,16 @@ def run_pool(output, inputs):
     k_idx = 0
     split_margin = args.SplitSize
     with pd.HDFStore(output) as hdf_pd:
-        NAMES.append("histpotdf")
         size_counters = {k: 0 for k in NAMES}
         df_buffers = {k: [] for k in NAMES}
 
         for dfs in dfss:
-            this_NAMES = NAMES
-            if len(dfs) == 1: ## no recTree but with TotalPOT histogram
-                this_NAMES = ["histpotdf"]
-
-            for k, df in zip(reversed(this_NAMES), reversed(dfs)):
+            for k, df in zip(reversed(NAMES), reversed(dfs)):
                 this_key = k + "_" + str(k_idx)
                 size_bytes = df.memory_usage(deep=True).sum() if df is not None else 0
                 size_gb = size_bytes / (1024**3)
-                if len(dfs) == 1: ## no recTree but with TotalPOT histogram
-                    size_counters[0] += size_gb
-                    df_buffers[0].append(df)
-                else:
-                    size_counters[k] += size_gb
-                    df_buffers[k].append(df)  # accumulate
+                size_counters[k] += size_gb
+                df_buffers[k].append(df)  # accumulate
 
                 #print(f"{k}_{k_idx}: added {size_gb:.4f} GB (total {size_counters[k]:.4f} GB)")
 
@@ -86,8 +77,8 @@ def run_pool(output, inputs):
                         del concat_df
                 # Reset counters and buffers
                 k_idx += 1
-                size_counters = {k: 0 for k in this_NAMES}
-                df_buffers = {k: [] for k in this_NAMES}
+                size_counters = {k: 0 for k in NAMES}
+                df_buffers = {k: [] for k in NAMES}
 
         for k, buffer in df_buffers.items():
             if buffer:
