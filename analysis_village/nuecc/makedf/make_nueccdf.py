@@ -36,6 +36,18 @@ def make_nueccdf_mc(f, include_weights=False,multisim_nuniv=100,slim=True):
     df = df.set_index(slcdf.index.names, verify_integrity=True)
     return df
 
+def make_nueccdf_data(f):
+    slcdf = make_nueccdf(f)
+    ## keep the only relevant column (for now)
+    framedf = make_framedf(f)[['frameApplyAtCaf']]
+    
+    df = multicol_merge(slcdf.reset_index(), 
+                        framedf.reset_index(),
+                        left_on=[('entry', '', '', '', '', '')],
+                        right_on=[('entry', '', '', '', '', '')], 
+                        how="left")
+    df = df.set_index(slcdf.index.names, verify_integrity=True)
+    return df
 
 def make_nueccdf(f):
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
