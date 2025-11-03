@@ -211,7 +211,7 @@ if __name__ == "__main__":
         if args.NGridJobs == 0:
             print("Running Pool mode");
             exec(open(args.config).read())
-            run_pool(args.output, InputSamples)
+            run_pool(args.output, InputSamples, "auto" if args.NCPU < 0 else args.NCPU)
 
         elif args.NGridJobs > 0:
             print("Running Grid mode");
