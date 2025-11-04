@@ -205,20 +205,27 @@ if PROCESS_PANDORA:
     slc_list = [slc,slc_data]
   else:
     slc_list = [slc]
-  for s in slc_list:
+  for i,s in enumerate(slc_list):
     s.clean(dummy_vals=[-9999,-999,999,9999,-5])
 
     s.add_has_muon()
     s.add_in_av()
     s.add_in_fv()
+    #Make slc signal to store the true signal information
+    if i == 0:
+      #I know there is an offbeam sample combined. There is a nan check in the function that assigns these as cosmics
+      s.add_event_type()
+      s.add_stat_unc()
+      slc_signal = s.copy()
+      #Keep only true signal events
+      is_signal = np.isin(s.data.truth.event_type,[0,1])
+      slc_signal.data = s.data[is_signal]
+
     s.cut_cosmic(cut=APPLY_CUTS,fmatch_score=320,nu_score=0.5,use_opt0=True,use_isclearcosmic=True)
     s.cut_fv(cut=APPLY_CUTS)
     s.cut_muon(cut=APPLY_CUTS,min_ke=0.1)
     s.cut_is_cont(cut=False) #Don't apply containment cut
 
-  #I know there is an offbeam sample combined. There is a nan check in the function that assigns these as cosmics
-  slc.add_event_type()
-  slc.add_stat_unc()
 
   with open('slc_keys.txt','w') as f:
     for k in slc.data.keys():
@@ -286,10 +293,19 @@ if PROCESS_SPINE:
     inter_list = [inter,inter_data]
   else:
     inter_list = [inter]
-  for iinter in inter_list:
+  for i,iinter in enumerate(inter_list):
     iinter.clean(dummy_vals=[-9999,-999,999,9999,-5,np.inf,-np.inf])
     iinter.add_in_fv()
     iinter.add_in_av()
+
+    if i == 0:
+      #I know there is an offbeam sample combined. There is a nan check in the function that assigns these as cosmics
+      iinter.add_event_type()
+      iinter.add_stat_unc()
+      inter_signal = iinter.copy()
+      #Keep only true signal events
+      is_signal = np.isin(iinter.data.truth.event_type,[0,1])
+      inter_signal.data = iinter.data[is_signal]
 
     iinter.cut_cosmic(cut=APPLY_CUTS)
     iinter.cut_fv(cut=APPLY_CUTS)
@@ -297,9 +313,6 @@ if PROCESS_SPINE:
     iinter.cut_is_cont(cut=False) #Don't apply containment cut
     iinter.cut_start_dedx(cut=APPLY_CUTS,dedx=4.17)
     iinter.cut_cosmic_score(cut=APPLY_CUTS,score=102.35)
-
-  inter.add_event_type()
-  inter.add_stat_unc()
 
   with open('inter_keys.txt','w') as f:
     for k in inter.data.keys():
@@ -334,8 +347,10 @@ if PROCESS_MCNU:
   mcnu.data.to_hdf(f"{DATA_DIR}/{MC_FNAME.replace('.df',f'_{suffix}.df')}",key='mcnu')
 if PROCESS_PANDORA:
   slc.data.to_hdf(f"{DATA_DIR}/{MC_FNAME.replace('.df',f'_{suffix}.df')}",key='pandora')
+  slc_signal.data.to_hdf(f"{DATA_DIR}/{MC_FNAME.replace('.df',f'_{suffix}.df')}",key='pandora_signal')
 if PROCESS_SPINE:
   inter.data.to_hdf(f"{DATA_DIR}/{MC_FNAME.replace('.df',f'_{suffix}.df')}",key='spine')
+  inter_signal.data.to_hdf(f"{DATA_DIR}/{MC_FNAME.replace('.df',f'_{suffix}.df')}",key='spine_signal')
 print('Not saving data files, uncomment these lines to do that')
 # if slc_data is not None:
 #   slc_data.data.to_hdf(f"{DATA_DIR}/{DATA_FNAME.replace('.df',f'_{suffix}.df')}",key='pandora')

@@ -10,7 +10,9 @@ import numpy as np
 from makedf.makedf import *
 from makedf.constants import *
 
-def make_spine_evtdf_wgt(f,include_weights=False, multisim_nuniv=1000, wgt_types=["bnb","genie"],prelim_cuts=False,
+INCLUDE_WEIGHTS = True
+
+def make_spine_evtdf_wgt(f,include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, wgt_types=["bnb","genie"],prelim_cuts=False,
                         slim=False):
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
@@ -98,14 +100,14 @@ def make_spine_evtdf_wgt(f,include_weights=False, multisim_nuniv=1000, wgt_types
     return interdf
 
 
-def make_pandora_evtdf_wgt(f, include_weights=False, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=False, 
+def make_pandora_evtdf_wgt(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=False, 
                        trkScoreCut=False, trkDistCut=-1., cutClearCosmic=True, **trkArgs):
     df = make_pandora_evtdf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
                             trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, **trkArgs)
     return df
 
 
-def make_pandora_evtdf(f, include_weights=False, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=True, 
+def make_pandora_evtdf(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=False, 
                        trkScoreCut=False, trkDistCut=-1., cutClearCosmic=True, prelim_cuts=False, **trkArgs):
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det

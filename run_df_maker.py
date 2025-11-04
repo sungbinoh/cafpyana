@@ -114,6 +114,12 @@ def run_grid(inputfiles):
     NInputfiles = len(inputfiles)
     print("Number of Grid Jobs: %d, number of input caf files: %d" % (ngrid, NInputfiles))
 
+    # Copy config file to MasterJobDir
+    config_basename = os.path.basename(args.config)
+    config_copy_path = MasterJobDir + '/' + config_basename
+    os.system('cp ' + args.config + ' ' + config_copy_path)
+    print(f"Copied {args.config} to {config_copy_path}")
+
     # 4) prepare bash scripts for each job and make tarball
     flistForEachJob = []
     for i in range(0,ngrid):
@@ -126,7 +132,11 @@ def run_grid(inputfiles):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
+        # Copy config file from tar to current directory (same as grid_executable.sh does for run_X.sh)
+        out.write('cp ${CONDOR_DIR_INPUT}/bin_dir/' + config_basename + ' ./\n')
+        # Use the basename since it will be in the same directory as run_X.sh
+        cmd = 'python run_df_maker.py -c ' + config_basename + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
+        print(f"Command: {cmd}")
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
             if i_f == 0:
@@ -134,7 +144,7 @@ def run_grid(inputfiles):
             else: 
                 cmd += ',' + flist[i_f]
             #out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
-        out.write(cmd)
+        out.write(cmd + '\n')
         out.close()
 
     os.system('cp ./bin/grid_executable.sh %s' %MasterJobDir)

@@ -6,7 +6,7 @@ if [[ $machine == *sbnd* || $machine == *jupyter* ]]; then
   source /cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/setup-env.sh
   export CAFPYANA_GRID_OUT_DIR="/pnfs/sbnd/scratch/users/$USER/cafpyana_out"
   mkdir -p $CAFPYANA_GRID_OUT_DIR
-  #htgettoken -a htvaultprod.fnal.gov -i sbnd
+  htgettoken -a htvaultprod.fnal.gov -i sbnd
 fi
 if [[ $machine == *icarus* ]]; then
   echo "working on a icarus machine"

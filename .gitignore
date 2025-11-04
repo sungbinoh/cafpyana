@@ -2,7 +2,15 @@
 .python-version
 __pycache__/
 *.df
+*.png
 *.root
 envs/cmake3
 envs/venv_py39_cafpyana/
 envs/xrootd-5.6.1/
+#*
+.#
+*~
+analysis_village/numuincl/sbnd
+*__pycache__*
+analysis_village/numuincl/*.txt
+analysis_village/numuincl/unfolding.ipynb

@@ -283,7 +283,7 @@ inter = "rec.dlp."
 interbranches = [
     inter + "id",
     inter + "is_cathode_crosser",
-    #inter + "is_time_contained",
+    inter + "is_time_contained",
     inter + "is_contained",
     inter + "is_fiducial",
     inter + "is_flash_matched",
@@ -324,7 +324,7 @@ truthinterbranches = [
     truthinter + "interaction_mode",
     truthinter + "interaction_type",
     truthinter + "is_cathode_crosser",
-    #truthinter + "is_time_contained",
+    truthinter + "is_time_contained",
     truthinter + "is_contained",
     truthinter + "is_fiducial",
     truthinter + "lepton_p",

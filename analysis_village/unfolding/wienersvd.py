@@ -1,4 +1,5 @@
 import numpy as np
+from pyanalib.stat_helpers import return_data_stat_err
 
 def Matrix_C(n, matrix_type):
     """
@@ -50,7 +51,7 @@ def Matrix_C(n, matrix_type):
     return C
 
 
-def WienerSVD(Response, Signal, Measure, Covariance, C_type, Norm_type):
+def WienerSVD(Response, Signal, Measure, Covariance, C_type, Norm_type, verbose=False):
     """
     Perform Wiener-SVD unfolding.
 
@@ -61,6 +62,7 @@ def WienerSVD(Response, Signal, Measure, Covariance, C_type, Norm_type):
       Covariance : 2D numpy array (m x m) - covariance matrix.
       C_type     : int - type specifier for the smoothness matrix.
       Norm_type  : float - normalization exponent for Signal.
+      verbose    : bool - print verbose output.
 
     Returns:
       A dictionary containing:
@@ -70,12 +72,24 @@ def WienerSVD(Response, Signal, Measure, Covariance, C_type, Norm_type):
          'UnfoldCov'   : covariance matrix of the unfolded spectrum (2D numpy array),
          'CovRotation' : covariance rotation matrix (2D numpy array).
     """
+    if verbose:
+        print(f'-Response: {Response}')
+        print(f'-Signal: {Signal}')
+        print(f'-Measure: {Measure}')
+        print(f'-Covariance: {Covariance}')
+        print(f'-C_type: {C_type}')
+        print(f'-Norm_type: {Norm_type}')
     m, n = Response.shape  # m measure, n signal bins
 
     # Decomposition of the Covariance matrix to obtain Q.
     U_cov, s_cov, Vh_cov = np.linalg.svd(Covariance)
     # Q0 is the transpose of V from the SVD (numpy's Vh is already V^T).
     Q0 = Vh_cov
+    if verbose:
+        print(f'-U_cov: {U_cov}')
+        print(f'-s_cov: {s_cov}')
+        print(f'-Q0: {Q0}')
+
     # Build a diagonal matrix of 1/sqrt(s) (with protection against division by zero)
     err_diag = np.array([1/np.sqrt(val) if val != 0 else 0 for val in s_cov])
     err = np.diag(err_diag)
@@ -84,6 +98,10 @@ def WienerSVD(Response, Signal, Measure, Covariance, C_type, Norm_type):
     # Transform Measure and Response
     M_trans = Q @ Measure
     R = Q @ Response
+    if verbose:
+        print(f'-Q: {Q}')
+        print(f'-M_trans: {M_trans}')
+        print(f'-R: {R}')
 
     # Build the smoothness matrix
     C0 = Matrix_C(n, C_type)
@@ -97,19 +115,30 @@ def WienerSVD(Response, Signal, Measure, Covariance, C_type, Norm_type):
     C_inv = np.linalg.inv(C0)
     Signal_mod = C @ Signal
     R = R @ C_inv
+    
+    if verbose:
+        print(f'-C0: {C0}')
+        print(f'-C_inv: {C_inv}')
+        print(f'-R: {R}')
 
     # SVD decomposition of R
     U, D, Vh = np.linalg.svd(R, full_matrices=False)
     U_t = U.T
     V = Vh.T
+    if verbose:
+        print(f'-V: {V}')
+        print(f'-Vh: {Vh}')
+        print(f'-U: {U}')
+        print(f'-D: {D}')
     # Construct D_t (an n x m matrix with diagonal elements set to D)
     D_t = np.zeros((n, m), dtype=float)
     for i in range(min(n, m)):
         D_t[i, i] = D[i]
-
     # Compute S = V_t * Signal_mod, where V_t is V^T (Vh in numpy)
     S_vec = Vh @ Signal_mod
-
+    if verbose:
+        print(f'-D_t: {D_t}')
+        print(f'-S_vec: {S_vec}')
     # Wiener Filter
     W = np.zeros((n, n))
     W0 = np.zeros((n, n))
@@ -118,20 +147,84 @@ def WienerSVD(Response, Signal, Measure, Covariance, C_type, Norm_type):
         W[i, i] = (S_vec[i]**2) / ((D[i]**2 * S_vec[i]**2) + 1)
         WF[i] = D[i]**2 * W[i, i]
         W0[i, i] = WF[i]
-
+    if verbose:
+        print(f'-W: {W}')
+        print(f'-W0: {W0}')
+        print(f'-WF: {WF}')
     # Compute unfolded spectrum
     unfold = C_inv @ V @ W @ D_t @ U_t @ M_trans
     AddSmear = C_inv @ V @ W0 @ Vh @ C
 
-    # Covariance matrix of the unfolded spectrum.
-    covRotation = C_inv @ V @ W @ D_t @ U_t @ Q
-    CovRotation = covRotation
-    UnfoldCov = covRotation @ Covariance @ covRotation.T
+    # Covariance rotation matrix (for systematics)
+    CovRotation = C_inv @ V @ W @ D_t @ U_t @ Q
+    SystUnfoldCov = CovRotation @ Covariance @ CovRotation.T
+
+    # Assume Poisson statistics: variance = Measure 
+    # TODO: if Measure == 0, set to 1 to avoid zero/negative
+    # stat_var = np.where(Measure > 0, Measure, 1.0)
+
+    data_eylow, data_eyhigh = return_data_stat_err(Measure)
+    StatCov = np.diag((data_eyhigh - data_eylow) / 2)
+    StatUnfoldCov = CovRotation @ StatCov @ CovRotation.T
+
+    # Total unfolded covariance is sum of statistical and systematic
+    UnfoldCov = SystUnfoldCov + StatUnfoldCov
 
     return {
         'unfold': unfold,
         'AddSmear': AddSmear,
         'WF': WF,
-        'UnfoldCov': UnfoldCov,
-        'CovRotation': CovRotation
+        'CovRotation': CovRotation,
+        'StatUnfoldCov': StatUnfoldCov,
+        'SystUnfoldCov': SystUnfoldCov,
+        'UnfoldCov': UnfoldCov
     }
+
+
+def Matrix_Decomp(matrix_pred, matrix_syst):
+    """
+    Decompose a covariance matrix into normalization and shape components.
+    Inputs:
+        matrix_pred: 1D numpy array of predicted event counts (length nbins)
+        matrix_syst: 2D numpy array (nbins x nbins) of systematic covariance
+    Returns:
+        (matrix_norm_plus_mixed, matrix_shape): tuple of 2D numpy arrays
+    """
+
+    nbins = len(matrix_pred)
+    matrix_pred = np.asarray(matrix_pred)
+    matrix_syst = np.asarray(matrix_syst)
+
+    # Total predicted events
+    N_T = np.sum(matrix_pred)
+
+    # Total covariance sum
+    M_kl = np.sum(matrix_syst)
+
+    # Initialize output matrices
+    matrix_shape = np.zeros((nbins, nbins))
+    matrix_mixed = np.zeros((nbins, nbins))
+    matrix_norm = np.zeros((nbins, nbins))
+
+    for i in range(nbins):
+        N_i = matrix_pred[i]
+        for j in range(nbins):
+            N_j = matrix_pred[j]
+            M_ij = matrix_syst[i, j]
+            M_ik = np.sum(matrix_syst[i, :])
+            M_kj = np.sum(matrix_syst[:, j])
+            matrix_shape[i, j] = (
+                M_ij
+                - N_j * M_ik / N_T
+                - N_i * M_kj / N_T
+                + N_i * N_j * M_kl / (N_T * N_T)
+            )
+            matrix_mixed[i, j] = (
+                N_j * M_ik / N_T
+                + N_i * M_kj / N_T
+                - 2 * N_i * N_j * M_kl / (N_T * N_T)
+            )
+            matrix_norm[i, j] = N_i * N_j * M_kl / (N_T * N_T)
+
+    matrix_norm_plus_mixed = matrix_norm + matrix_mixed
+    return matrix_norm_plus_mixed, matrix_shape
