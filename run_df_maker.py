@@ -10,6 +10,7 @@ import warnings
 
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 warnings.filterwarnings("ignore", category=tables.exceptions.NaturalNameWarning)
+pd.set_option('future.no_silent_downcasting', True)
 
 ## Arguments
 parser = argparse.ArgumentParser(
@@ -32,17 +33,25 @@ parser.add_argument('-c', dest='config', default="", help="Path to the data fram
 parser.add_argument('-o', dest='output', default="", help="output data frame name prefix")
 parser.add_argument('-i', dest='inputfiles', default="", help="input root file path, you can submit multiple files using comma, i.e.) -i input_0.root,input_1.root")
 parser.add_argument('-l', dest='inputfilelist', default="", help="a file of list for input root files")
+parser.add_argument('-ncpu', dest='NCPU', default=-1, type=int, help="Number of CPUs to run on. Default is set to number on server.")
 parser.add_argument('-ngrid', dest='NGridJobs', default=0, type=int, help="Number of grid jobs. Default = 0, no grid submission.")
 parser.add_argument('-nfile', dest='NFiles', default=0, type=int, help="Number of files to run. Default = 0, run all input files.")
 parser.add_argument('-split', dest='SplitSize', default=1.0, type=float, help="Split size in GB before writing to HDF5. Default = 1.0 GB.")
 
 args = parser.parse_args()
 
-def run_pool(output, inputs):
+def run_pool(output, inputs, nproc):
     os.nice(10)
     ntuples = NTupleGlob(inputs, None)
 
-    dfss = ntuples.dataframes(nproc="auto", fs=DFS)
+    # if PREPROCESS doesn't exist, set it to None
+    global PREPROCESS
+    try:
+        PREPROCESS
+    except:
+        PREPROCESS = []
+
+    dfss = ntuples.dataframes(nproc=nproc, fs=DFS, preprocess=PREPROCESS)
     output = output + ".df"
     k_idx = 0
     split_margin = args.SplitSize
@@ -53,14 +62,12 @@ def run_pool(output, inputs):
         for dfs in dfss:
             for k, df in zip(reversed(NAMES), reversed(dfs)):
                 this_key = k + "_" + str(k_idx)
-                size_bytes = df.memory_usage(deep=True).sum()
+                size_bytes = df.memory_usage(deep=True).sum() if df is not None else 0
                 size_gb = size_bytes / (1024**3)
                 size_counters[k] += size_gb
-                df_buffers[k].append(df)  # accumulate
-
-                #print(f"{k}_{k_idx}: added {size_gb:.4f} GB (total {size_counters[k]:.4f} GB)")
-
-                del df
+                if df is not None:
+                    df_buffers[k].append(df)  # accumulate
+                    del df
 
             if any(val > split_margin for val in size_counters.values()):
                 # Concatenate and save accumulated DataFrames
@@ -212,12 +219,12 @@ if __name__ == "__main__":
                 
         ### check if it is grid mode for pool mode
         if args.NGridJobs == 0:
-            print("Runing Pool mode");
+            print("Running Pool mode");
             exec(open(args.config).read())
-            run_pool(args.output, InputSamples)
+            run_pool(args.output, InputSamples, "auto" if args.NCPU < 0 else args.NCPU)
 
         elif args.NGridJobs > 0:
-            print("Runing Grid mode");
+            print("Running Grid mode");
             run_grid(InputSamples)
             
         else:

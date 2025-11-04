@@ -23,14 +23,20 @@ hdrbranches = [
     "rec.hdr.cluster",
     "rec.hdr.fno",
     "rec.hdr.noffbeambnb",
+]
 
-    # "rec.hdr.triggerinfo.trigger_id",
-    # "rec.hdr.triggerinfo.gate_id",
-    # "rec.hdr.triggerinfo.trigger_count",
-    # "rec.hdr.triggerinfo.gate_count",
-    # "rec.hdr.triggerinfo.gate_delta",
-    # "rec.hdr.triggerinfo.global_trigger_time",
-    # "rec.hdr.triggerinfo.prev_global_trigger_time",
+trigger_info_branches = [
+    "rec.hdr.triggerinfo.trigger_id",
+    "rec.hdr.triggerinfo.gate_id",
+    "rec.hdr.triggerinfo.trigger_count",
+    "rec.hdr.triggerinfo.gate_count",
+    "rec.hdr.triggerinfo.gate_delta",
+    "rec.hdr.triggerinfo.global_trigger_time",
+    "rec.hdr.triggerinfo.prev_global_trigger_time",
+    "rec.hdr.triggerinfo.global_trigger_det_time",
+    "rec.hdr.triggerinfo.trigger_within_gate",
+    "rec.hdr.triggerinfo.beam_gate_det_time",
+    "rec.hdr.triggerinfo.beam_gate_time_abs",
 ]
 
 opflashbranches = [
@@ -52,6 +58,27 @@ bnbpotbranches = [
     "rec.hdr.bnbinfo.TOR875",
 ]
 
+sbndframebranches = [
+    "rec.sbnd_frames.frameApplyAtCaf",
+    "rec.sbnd_frames.frameHltBeamGate",
+    "rec.sbnd_frames.frameHltCrtt1",
+    "rec.sbnd_frames.frameTdcBes",
+    "rec.sbnd_frames.frameTdcCrtt1",
+    "rec.sbnd_frames.frameTdcRwm",
+    "rec.sbnd_frames.timingType",
+]
+
+sbndtimingbranches = [
+    "rec.sbnd_timings.hltBeamGate",
+    "rec.sbnd_timings.hltCrtt1",
+    "rec.sbnd_timings.hltEtrig",
+    "rec.sbnd_timings.rawDAQHeaderTimestamp",
+    "rec.sbnd_timings.tdcBes",
+    "rec.sbnd_timings.tdcCrtt1",
+    "rec.sbnd_timings.tdcEtrig",
+    "rec.sbnd_timings.tdcRwm",
+]
+
 trueparticlenames = [
     "start_process",
     "end_process",
@@ -66,10 +93,15 @@ trueparticlenames = [
     "cont_tpc",
     "contained",
     "genE",
-    "interaction_id"
+    "interaction_id",
+    "crosses_tpc",
 ]
 
-trueparticlebranches = ["rec.true_particles.%s" % s for s in trueparticlenames]
+trueparticlebranches = [
+    *["rec.true_particles.%s" % s for s in trueparticlenames],
+    "rec.true_particles.plane.0.2.visE",
+    "rec.true_particles.plane.1.2.visE",
+]
 
 crtspbranches = [
     "rec.crt_spacepoints.pe",
@@ -81,6 +113,14 @@ crtspbranches = [
     "rec.crt_spacepoints.position_err.z",
     "rec.crt_spacepoints.time",
     "rec.crt_spacepoints.time_err"
+]
+
+crthitbranches = [
+  "rec.crt_hits.time",
+  "rec.crt_hits.t1",
+  "rec.crt_hits.t0",
+  "rec.crt_hits.pe",
+  "rec.crt_hits.plane",
 ]
 
 
@@ -142,7 +182,19 @@ trkmcsbranches = [
 ]
 
 shwbranches = [
-  shwbranch + "len"
+    shwbranch + "start.x", shwbranch + "start.y", shwbranch + "start.z",
+    shwbranch + "end.x",   shwbranch + "end.y", shwbranch + "end.z",
+    shwbranch + 'conversion_gap', 
+    shwbranch + "density",
+    shwbranch + "open_angle",
+    shwbranch + 'bestplane',
+    shwbranch + 'bestplane_dEdx', shwbranch + 'bestplane_energy',
+    shwbranch + 'plane.0.dEdx',   shwbranch + 'plane.1.dEdx', shwbranch + 'plane.2.dEdx',
+    shwbranch + 'plane.0.energy', shwbranch + 'plane.1.energy', shwbranch + 'plane.2.energy',
+    shwbranch + 'plane.0.nHits',  shwbranch + 'plane.1.nHits',  shwbranch + 'plane.2.nHits',
+    shwbranch + "len",
+    shwbranch + "truth.eff",
+    shwbranch + "truth.pur",
 ]
 
 trkhitadcbranches = [
@@ -155,6 +207,8 @@ trkhitbranches_perplane = lambda IPLANE : [
     trkbranch + "calo.%i.points.pitch"% IPLANE,
     trkbranch + "calo.%i.points.integral"% IPLANE,
     trkbranch + "calo.%i.points.rr"% IPLANE,
+    trkbranch + "calo.%i.points.phi"% IPLANE,
+    trkbranch + "calo.%i.points.efield"% IPLANE,
     trkbranch + "calo.%i.points.wire"% IPLANE,
     trkbranch + "calo.%i.points.tpc"% IPLANE,
     trkbranch + "calo.%i.points.sumadc"% IPLANE,
@@ -166,18 +220,43 @@ trkhitbranches_perplane = lambda IPLANE : [
     #trkbranch + "calo.%i.points.width"% IPLANE,
     #trkbranch + "calo.%i.points.mult"% IPLANE,
     #trkbranch + "calo.%i.points.tdc0"% IPLANE,
+]
 
+trktruehitbranches_perplane = lambda IPLANE : [
     trkbranch + "calo.%i.points.truth.h_e"% IPLANE,
     trkbranch + "calo.%i.points.truth.h_nelec"% IPLANE,
-    trkbranch + "calo.%i.points.truth.pitch"% IPLANE,
-    trkbranch + "calo.%i.points.truth.rr"% IPLANE,
 ]
 
 trkhitbranches = trkhitbranches_perplane(2)
 trkhitbranches_P1 = trkhitbranches_perplane(1)
 trkhitbranches_P0 = trkhitbranches_perplane(0)
 
+trktruehitbranches = trktruehitbranches_perplane(2)
+trktruehitbranches_P1 = trktruehitbranches_perplane(1)
+trktruehitbranches_P0 = trktruehitbranches_perplane(0)
+
+#### ICARUS flat.caf does not have efield and phi for each hit so far,
+trkhitbranches_perplane_icarus = lambda IPLANE : [
+    trkbranch + "calo.%i.points.dedx"% IPLANE,
+    trkbranch + "calo.%i.points.dqdx"% IPLANE,
+    trkbranch + "calo.%i.points.pitch"% IPLANE,
+    trkbranch + "calo.%i.points.integral"% IPLANE,
+    trkbranch + "calo.%i.points.rr"% IPLANE,
+    trkbranch + "calo.%i.points.wire"% IPLANE,
+    trkbranch + "calo.%i.points.tpc"% IPLANE,
+    trkbranch + "calo.%i.points.sumadc"% IPLANE,
+    trkbranch + "calo.%i.points.t"% IPLANE,
+    trkbranch + "calo.%i.points.x"% IPLANE,
+    trkbranch + "calo.%i.points.y"% IPLANE,
+    trkbranch + "calo.%i.points.z"% IPLANE,
+]
+
+trkhitbranches_icarus = trkhitbranches_perplane_icarus(2)
+trkhitbranches_P1_icarus = trkhitbranches_perplane_icarus(1)
+trkhitbranches_P0_icarus = trkhitbranches_perplane_icarus(0)
+
 for n in trueparticlenames: trkbranches.append(trkbranch + "truth.p." + n)
+for n in trueparticlenames: shwbranches.append(shwbranch + "truth.p." + n)
 
 slcbranches = [
     "rec.slc.is_clear_cosmic",
@@ -199,6 +278,7 @@ slcbranches = [
 
 mcbranches = [
     "rec.mc.nu.E",
+    "rec.mc.nu.baseline",
     "rec.mc.nu.time",
     "rec.mc.nu.bjorkenX",
     "rec.mc.nu.inelasticityY",
@@ -226,6 +306,15 @@ mcprimbranches = [
     "rec.mc.nu.prim.genp.z",
     "rec.mc.nu.prim.start.x", "rec.mc.nu.prim.start.y", "rec.mc.nu.prim.start.z",
     "rec.mc.nu.prim.end.x", "rec.mc.nu.prim.end.y", "rec.mc.nu.prim.end.z",
+    "rec.mc.nu.prim.interaction_id", "rec.mc.nu.prim.crosses_tpc", "rec.mc.nu.prim.contained",
+]
+
+mcprimvisEbranches = [
+    "rec.mc.nu.prim.plane.0.2.visE", "rec.mc.nu.prim.plane.1.2.visE"
+]
+
+mcprimdaughtersbranches = [
+    "rec.mc.nu.prim.daughters",
 ]
 
 slc_mcbranches = ["rec.slc.truth." + ".".join(s.split(".")[3:]) for s in mcbranches]
