@@ -59,8 +59,9 @@ def make_nueccdf(f):
     assert DETECTOR == "SBND"
     
     pfpdf = make_pfpdf(f)
-    slcdf = make_slcdf(f)
-
+    slcdf = loadbranches(f["recTree"], slcbranches)
+    slcdf = slcdf.rec
+    
     pfpdf = pfpdf.drop('pfochar',axis=1,level=1)
     ## primary shw candidate is shw pfp with highest energy, valid energy, and score < 0.5
     shwdf = pfpdf[(pfpdf.pfp.trackScore < 0.5) & (pfpdf.pfp.shw.maxplane_energy > 0)].sort_values(pfpdf.pfp.index.names[:-1] + [('pfp','shw','maxplane_energy','','','')]).groupby(level=[0,1]).nth(-1)
