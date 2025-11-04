@@ -65,6 +65,14 @@ def InFV(df, inzback, inx=10, iny=10, inzfront=10, det="ICARUS"):
         ymax =  190
         zmax =  450.
         return (df.x > xmin) & (df.x < xmax) & (df.y > ymin) & (df.y < ymax) & (df.z > zmin) & (df.z < zmax)
+    elif det == "SBND AV": #Active volume with 5 cm margin
+        xmin = -195
+        xmax = 195
+        ymin = -195
+        ymax = 195
+        zmin = 5
+        zmax = 495.
+        return (df.x > xmin) & (df.x < xmax) & (df.y > ymin) & (df.y < ymax) & (df.z > zmin) & (df.z < zmax)
 
     elif det == "SBND_nohighyz":
         xmax = 190.

@@ -21,7 +21,7 @@ def bin_range_labels(edges):
 
 ## get smearing matrix
 def get_smear_matrix(true_var_signal_sel_df, var_signal_df, bins_2d, weights=None, 
-                     plot=True, var_labels=None,
+                     plot=False, var_labels=None,
                      save_fig=False, save_fig_name=None):
     if weights is not None:
         reco_vs_true, bins, _ = np.histogram2d(true_var_signal_sel_df, var_signal_df, bins=bins_2d, weights=weights)
