@@ -1,20 +1,30 @@
 #!/bin/bash 
 
 export machine=${HOSTNAME}
+
+# try: get SAM Web from FNAL tools env. Do this first, since next
+# spack will override this one
+SPACK_ROOT_FNAL_TOOLS="/cvmfs/fermilab.opensciencegrid.org/packages/common/setup-env.sh"
+source "${SPACK_ROOT_FNAL_TOOLS}"
+spack load sam-web-client@3.6%gcc@11.4.1 arch=linux-almalinux9-x86_64_v2
+
+which samweb > /dev/null 2>&1 && echo "SAMWeb client set up" || echo "Warning: SAMWeb client not set up"
+
+SPACK_ROOT="/cvmfs/larsoft.opensciencegrid.org/spack-fnal-v1.0.0/setup-env.sh"
 if [[ $machine == *sbnd* || $machine == *jupyter* ]]; then
   echo "working on a sbnd machine"
-  source /cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/setup-env.sh
+  source "${SPACK_ROOT}"
   export CAFPYANA_GRID_OUT_DIR="/pnfs/sbnd/scratch/users/$USER/cafpyana_out"
   mkdir -p $CAFPYANA_GRID_OUT_DIR
 fi
 if [[ $machine == *icarus* ]]; then
   echo "working on a icarus machine"
-  source /cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/setup-env.sh
+  source "${SPACK_ROOT}"
   export CAFPYANA_GRID_OUT_DIR="/pnfs/icarus/scratch/users/$USER/cafpyana_out"
   mkdir -p $CAFPYANA_GRID_OUT_DIR
 fi
-spack load hdf5@1.14.3%gcc@12.2.0 arch=linux-almalinux9-x86_64_v3
-spack load xrootd@5.6.9%gcc@12.2.0
+spack load hdf5@1.12.2%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
+spack load xrootd@5.6.9%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
 
 ######################################################
 #### setup virtual python env if it is not already set
