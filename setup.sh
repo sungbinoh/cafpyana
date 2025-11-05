@@ -5,7 +5,7 @@ export machine=${HOSTNAME}
 # try: get SAM Web from FNAL tools env. Do this first, since next
 # spack will override this one
 SPACK_ROOT_FNAL_TOOLS="/cvmfs/fermilab.opensciencegrid.org/packages/common/setup-env.sh"
-source "${SPACK_ROOT_FNAL_TOOLS}"
+source "${SPACK_ROOT_FNAL_TOOLS}" > /dev/null 2>&1
 spack load sam-web-client@3.6%gcc@11.4.1 arch=linux-almalinux9-x86_64_v2
 
 which samweb > /dev/null 2>&1 && echo "SAMWeb client set up" || echo "Warning: SAMWeb client not set up"
@@ -83,6 +83,7 @@ cd ..
 # need to install uuid in the EAF
 ######################################################
 if [[ $machine == *jupyter* ]]; then
+    cd envs
     echo "Installing uuid for since you are in EAF"
     wget https://www.kernel.org/pub/linux/utils/util-linux/v2.39/util-linux-2.39.3.tar.xz
     tar xvf util-linux-2.39.3.tar.xz
@@ -101,18 +102,24 @@ fi
 ######################################################
 # Needed to install xrootd -- which, by the way, is super annoying
 ###################################################### 
-# OLDPATH=$PATH
-# PATH=$PATH:$PWD
-# cd envs
-# ln -s /cvmfs/larsoft.opensciencegrid.org/products/cmake/v3_22_2/Linux64bit+3.10-2.17/bin/cmake cmake3
-# which cmake3
-# wget https://files.pythonhosted.org/packages/96/e9/32107ac154c33c6bafd53a5f8444290938c3557210276e5deabb82f74b8f/xrootd-5.6.1.tar.gz
-# tar -zxvf xrootd-5.6.1.tar.gz
-# rm xrootd-5.6.1.tar.gz
-# cd xrootd-5.6.1
-# python setup.py install
-# cd ../..
-# PATH=$OLDPATH
+python -c "import XRootD" > /dev/null 2>&1 || {
+    echo "Could not import XRootD! Attempting to install from source..."
+    cd envs
+    XROOTLOG=${LOGDIR}/init_xroot.log
+    echo $(date) >> ${XROOTLOG}
+
+    OLDPATH=$PATH
+    PATH=$PATH:$PWD
+    ln -s /cvmfs/larsoft.opensciencegrid.org/products/cmake/v3_22_2/Linux64bit+3.10-2.17/bin/cmake cmake3
+    echo "Using cmake at $(which cmake3)" | tee -a ${XROOTLOG}
+    wget https://files.pythonhosted.org/packages/96/e9/32107ac154c33c6bafd53a5f8444290938c3557210276e5deabb82f74b8f/xrootd-5.6.1.tar.gz
+    tar -zxvf xrootd-5.6.1.tar.gz
+    rm xrootd-5.6.1.tar.gz
+    cd xrootd-5.6.1
+    python setup.py install 2>&1 | tee -a ${XROOTLOG}
+    cd ../..
+    PATH=$OLDPATH
+}
 
 ###################################################### 
 
