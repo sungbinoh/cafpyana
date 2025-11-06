@@ -84,6 +84,7 @@ trueparticlenames = [
     "end_process",
     "pdg",
     "startE",
+    "endE",
     "start.x", "start.y", "start.z",
     "end.x", "end.y", "end.z",
     "genp.x", "genp.y", "genp.z",
