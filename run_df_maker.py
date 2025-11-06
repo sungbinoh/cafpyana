@@ -53,7 +53,7 @@ def run_pool(output, inputs, nproc):
         PREPROCESS = []
 
     dfss = ntuples.dataframes(nproc=nproc, fs=DFS, preprocess=PREPROCESS)
-    output = pathlib.Path(output).with_suffix('df')
+    output = pathlib.Path(output).with_suffix('.df')
     k_idx = 0
     split_margin = args.SplitSize
     with pd.HDFStore(output) as hdf_pd:

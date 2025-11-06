@@ -112,11 +112,11 @@ python -c "import XRootD" > /dev/null 2>&1 || {
     PATH=$PATH:$PWD
     ln -s /cvmfs/larsoft.opensciencegrid.org/products/cmake/v3_22_2/Linux64bit+3.10-2.17/bin/cmake cmake3
     echo "Using cmake at $(which cmake3)" | tee -a ${XROOTLOG}
-    wget https://files.pythonhosted.org/packages/96/e9/32107ac154c33c6bafd53a5f8444290938c3557210276e5deabb82f74b8f/xrootd-5.6.1.tar.gz
-    tar -zxvf xrootd-5.6.1.tar.gz
-    rm xrootd-5.6.1.tar.gz
-    cd xrootd-5.6.1
-    python setup.py install 2>&1 | tee -a ${XROOTLOG}
+    wget https://files.pythonhosted.org/packages/fd/4f/419b8caec575ab4133f41c37c39bd742251a4dc6a208a97a3fd772031fe7/xrootd-5.6.9.tar.gz
+    tar -zxvf xrootd-5.6.9.tar.gz
+    rm xrootd-5.6.9.tar.gz
+    cd xrootd-5.6.9
+    python setup.py install 2>&1 | tee -a ../${XROOTLOG}
     cd ../..
     PATH=$OLDPATH
 }
@@ -124,5 +124,5 @@ python -c "import XRootD" > /dev/null 2>&1 || {
 ###################################################### 
 
 export PYTHONPATH=$PYTHONPATH:$PWD/..
-export LD_LIBRARY_PATH=$VIRTUAL_ENV/lib/python3.9/site-packages/xrootd-5.6.1-py3.9-linux-x86_64.egg/pyxrootd:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$VIRTUAL_ENV/lib/python3.9/site-packages/xrootd-5.6.9-py3.9-linux-x86_64.egg/pyxrootd:$LD_LIBRARY_PATH
 export CAFPYANA_WD=`pwd`
