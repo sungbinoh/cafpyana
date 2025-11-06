@@ -18,13 +18,7 @@ def make_nueccdf_mc(f, include_weights=False,multisim_nuniv=100,slim=True):
     
     slcdf = make_nueccdf(f)
     mcdf = make_mcnudf_nuecc(f,include_weights=include_weights,multisim_nuniv=multisim_nuniv,slim=slim)
-
-    nslcdf_col = len(slcdf.columns[0])
-    nmcdf_col  = len(mcdf.columns[0])
-    # add extra columns to mcdf
-    if nslcdf_col > nmcdf_col:    
-        mcdf.columns = pd.MultiIndex.from_tuples([tuple(list(c) +[""]*(nslcdf_col - nmcdf_col)) for c in mcdf.columns])     # match # of column levels
-
+    mcdf.columns = pd.MultiIndex.from_tuples([tuple(["slc", "truth"] + list(c)) for c in mcdf.columns])
     df = multicol_merge(slcdf.reset_index(), 
                         mcdf.reset_index(),
                         left_on=[('entry', '', '', '', '', ''), 
@@ -32,12 +26,15 @@ def make_nueccdf_mc(f, include_weights=False,multisim_nuniv=100,slim=True):
                         right_on=[('entry', '', '', '', '', ''), 
                                 ('rec.mc.nu..index', '', '')], 
                         how="left")
-
     df = df.set_index(slcdf.index.names, verify_integrity=True)
     return df
 
 def make_nueccdf_data(f):
     slcdf = make_nueccdf(f)
+    # drop truth cols for data
+    slcdf = slcdf.drop('tmatch', axis=1,level=1) # slc level
+    slcdf = slcdf.drop('truth',  axis=1,level=2) # pfp level
+    
     ## keep the only relevant column (for now)
     framedf = make_framedf(f)[['frameApplyAtCaf']]
     
