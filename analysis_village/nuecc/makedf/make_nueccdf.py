@@ -2,6 +2,14 @@ from makedf.makedf import *
 from pyanalib.pandas_helpers import *
 from makedf.util import *
 
+def make_mcnudf_nuecc(f,**args):
+    mcdf = make_mcnudf(f,**args)
+    # drop mcdf columns not relevant for this analysis
+    if 'mu'  in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('mu', axis=1,level=0)
+    if 'p'   in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('p',  axis=1,level=0)
+    if 'cpi' in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('cpi',axis=1,level=0)
+    return mcdf
+
 def make_nueccdf_mc_wgt(f):
     df = make_nueccdf_mc(f,include_weights=True)
     return df
@@ -9,18 +17,8 @@ def make_nueccdf_mc_wgt(f):
 def make_nueccdf_mc(f, include_weights=False,multisim_nuniv=100,slim=True):
     
     slcdf = make_nueccdf(f)
-    mcdf = make_mcnudf(f,include_weights=include_weights,multisim_nuniv=multisim_nuniv,slim=slim)
-    # drop mcdf columns not relevant for this analysis
-    if 'mu'  in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('mu', axis=1,level=0)
-    if 'p'   in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('p',  axis=1,level=0)
-    if 'cpi' in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('cpi',axis=1,level=0)
-
-    nslcdf_col = len(slcdf.columns[0])
-    nmcdf_col  = len(mcdf.columns[0])
-    # add extra columns to mcdf
-    if nslcdf_col > nmcdf_col:    
-        mcdf.columns = pd.MultiIndex.from_tuples([tuple(list(c) +[""]*(nslcdf_col - nmcdf_col)) for c in mcdf.columns])     # match # of column levels
-
+    mcdf = make_mcnudf_nuecc(f,include_weights=include_weights,multisim_nuniv=multisim_nuniv,slim=slim)
+    mcdf.columns = pd.MultiIndex.from_tuples([tuple(["slc", "truth"] + list(c)) for c in mcdf.columns])
     df = multicol_merge(slcdf.reset_index(), 
                         mcdf.reset_index(),
                         left_on=[('entry', '', '', '', '', ''), 
@@ -28,10 +26,25 @@ def make_nueccdf_mc(f, include_weights=False,multisim_nuniv=100,slim=True):
                         right_on=[('entry', '', '', '', '', ''), 
                                 ('rec.mc.nu..index', '', '')], 
                         how="left")
-
     df = df.set_index(slcdf.index.names, verify_integrity=True)
     return df
 
+def make_nueccdf_data(f):
+    slcdf = make_nueccdf(f)
+    # drop truth cols for data
+    slcdf = slcdf.drop('tmatch', axis=1,level=1) # slc level
+    slcdf = slcdf.drop('truth',  axis=1,level=2) # pfp level
+    
+    ## keep the only relevant column (for now)
+    framedf = make_framedf(f)[['frameApplyAtCaf']]
+    
+    df = multicol_merge(slcdf.reset_index(), 
+                        framedf.reset_index(),
+                        left_on=[('entry', '', '', '', '', '')],
+                        right_on=[('entry', '', '', '', '', '')], 
+                        how="left")
+    df = df.set_index(slcdf.index.names, verify_integrity=True)
+    return df
 
 def make_nueccdf(f):
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
@@ -43,8 +56,9 @@ def make_nueccdf(f):
     assert DETECTOR == "SBND"
     
     pfpdf = make_pfpdf(f)
-    slcdf = make_slcdf(f)
-
+    slcdf = loadbranches(f["recTree"], slcbranches)
+    slcdf = slcdf.rec
+    
     pfpdf = pfpdf.drop('pfochar',axis=1,level=1)
     ## primary shw candidate is shw pfp with highest energy, valid energy, and score < 0.5
     shwdf = pfpdf[(pfpdf.pfp.trackScore < 0.5) & (pfpdf.pfp.shw.maxplane_energy > 0)].sort_values(pfpdf.pfp.index.names[:-1] + [('pfp','shw','maxplane_energy','','','')]).groupby(level=[0,1]).nth(-1)

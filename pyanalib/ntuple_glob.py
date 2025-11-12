@@ -15,6 +15,8 @@ import time
 import uuid
 import tempfile
 
+from makedf.makedf import make_histpotdf
+
 CPU_COUNT = multiprocessing.cpu_count()
 
 if CPU_COUNT == 0:
@@ -77,32 +79,47 @@ def _loaddf(applyfs, preprocess, g):
         # Open AND close strictly within the context manager
         with _open_with_retries(fname) as f:
 
-            if "recTree" not in f:
-                print("File (%s) missing recTree. Skipping..." % fname)
-                return None
-
             dfs = []
-            for applyf in applyfs:
-                df = applyf(f)  # must fully read from 'f' here
-                if df is None:
-                    dfs.append(None)
-                    continue
+            if "recTree" not in f:
+                print("File (%s) missing recTree. Try only histpotdf and skipping other dfs..." % fname)
+            else:
+                for applyf in applyfs:
+                    df = applyf(f)  # must fully read from 'f' here
+                    if df is None:
+                        dfs.append(None)
+                        continue
 
-                # --- CRITICAL: detach from file-backed/lazy data ---
-                # If it's a pandas obj, deep-copy; if not, try to materialize.
-                if isinstance(df, pd.DataFrame):
-                    df = df.copy(deep=True)
-                elif hasattr(df, "to_numpy"):  # Series / array-like
-                    df = pd.DataFrame(df.to_numpy()).copy(deep=True)
-                # ---------------------------------------------------
+                    # --- CRITICAL: detach from file-backed/lazy data ---
+                    # If it's a pandas obj, deep-copy; if not, try to materialize.
+                    if isinstance(df, pd.DataFrame):
+                        df = df.copy(deep=True)
+                    elif hasattr(df, "to_numpy"):  # Series / array-like
+                        df = pd.DataFrame(df.to_numpy()).copy(deep=True)
+                    # ---------------------------------------------------
 
-                # Tag with __ntuple and move it to front of MultiIndex
+                    # Tag with __ntuple and move it to front of MultiIndex
+                    df["__ntuple"] = index
+                    df.set_index("__ntuple", append=True, inplace=True)
+                    new_order = [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
+                    df = df.reorder_levels(new_order)
+
+                    dfs.append(df)
+
+            if "TotalPOT" in f:
+                df = make_histpotdf(f)
                 df["__ntuple"] = index
                 df.set_index("__ntuple", append=True, inplace=True)
                 new_order = [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
                 df = df.reorder_levels(new_order)
 
                 dfs.append(df)
+            else:
+                print("File (%s) missing TotalPOT histgoram. Cannot make histpotdf..." % fname)
+
+            if not dfs:
+                return None
+
+            return dfs
     except (OSError, ValueError) as e:
         print(f"Could not open file ({fname}). Skipping...")
         print(e)

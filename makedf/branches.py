@@ -84,6 +84,7 @@ trueparticlenames = [
     "end_process",
     "pdg",
     "startE",
+    "endE",
     "start.x", "start.y", "start.z",
     "end.x", "end.y", "end.z",
     "genp.x", "genp.y", "genp.z",
@@ -267,9 +268,15 @@ slcbranches = [
     "rec.slc.producer",
     "rec.slc.nuid.crlongtrkdiry",
     "rec.slc.nu_score",
+    "rec.slc.barycenterFM.chargeTotal",    
     "rec.slc.barycenterFM.flashTime",    
+    "rec.slc.barycenterFM.flashPEs",    
+    "rec.slc.barycenterFM.chi2",    
+    "rec.slc.barycenterFM.score",    
     "rec.slc.opt0.score",
-    "rec.slc.opt0.time"
+    "rec.slc.opt0.time",
+    "rec.slc.opt0.measPE",
+    "rec.slc.opt0.hypoPE",
 ]
 
 mcbranches = [
@@ -291,6 +298,7 @@ mcbranches = [
     "rec.mc.nu.genie_mode",
     "rec.mc.nu.parent_pdg",
     "rec.mc.nu.parent_dcy_E",
+    "rec.mc.nu.genie_evtrec_idx",
 ]
 
 mcprimbranches = [
