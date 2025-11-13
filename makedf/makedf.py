@@ -365,6 +365,18 @@ def make_mcprimdaughtersdf(f):
     mcprimdaughtersdf = loadbranches(f["recTree"], mcprimdaughtersbranches)
     return mcprimdaughtersdf
 
+def make_all_pandora_df(f):
+    pfpdf = make_pfpdf(f)
+    slcdf = make_slcdf(f)
+
+    slcdf = multicol_merge(slcdf, pfpdf, left_index=True, right_index=True, how="right", validate="one_to_many")
+
+    # distance from vertex to track/shower start
+    slcdf = multicol_add(slcdf, dmagdf(slcdf.slc.vertex, slcdf.pfp.trk.start).rename(("pfp", "trk", "dist_to_vertex")))
+    slcdf = multicol_add(slcdf, dmagdf(slcdf.slc.vertex, slcdf.pfp.shw.start).rename(("pfp", "shw", "dist_to_vertex")))
+
+    return pfpdf
+
 def make_pandora_df_calo_update(f, **trkArgs):
     pandoradf = make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=True, requireFiducial=False, updatecalo=True, **trkArgs)
     return pandoradf

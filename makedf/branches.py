@@ -268,15 +268,19 @@ slcbranches = [
     "rec.slc.producer",
     "rec.slc.nuid.crlongtrkdiry",
     "rec.slc.nu_score",
-    "rec.slc.barycenterFM.chargeTotal",    
-    "rec.slc.barycenterFM.flashTime",    
-    "rec.slc.barycenterFM.flashPEs",    
-    "rec.slc.barycenterFM.chi2",    
-    "rec.slc.barycenterFM.score",    
     "rec.slc.opt0.score",
     "rec.slc.opt0.time",
     "rec.slc.opt0.measPE",
     "rec.slc.opt0.hypoPE",
+]
+
+## making this branches separately to support sbnd flat.caf versions older than v10_10_*
+barycenterFMbranches = [
+    "rec.slc.barycenterFM.chargeTotal",
+    "rec.slc.barycenterFM.flashTime",
+    "rec.slc.barycenterFM.flashPEs",
+    "rec.slc.barycenterFM.chi2",
+    "rec.slc.barycenterFM.score",
 ]
 
 mcbranches = [
