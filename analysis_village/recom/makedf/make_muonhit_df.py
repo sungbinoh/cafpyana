@@ -226,7 +226,7 @@ def check_wireskip(df, plane=2):
 #### main function
 ###############################################
 
-def make_protonhit_df(f):
+def make_muonhit_df(f):
 
     hdrdf = make_hdrdf(f)
     run = hdrdf.run
@@ -243,78 +243,53 @@ def make_protonhit_df(f):
     trkhitdf = trkhitdf.join(subrun)
     trkhitdf = trkhitdf.join(evt)
     
-    #print(pandoradf)
-    #print(pandoradf.pfp.trk.columns)
-
-    # 1 prong 
-    longer_data, shorter_data = select_topology(pandoradf, nprong=1, max_len_cut=25, min_len_cut=25, contained=True)
-    proton_candidate = select_calorimetry(shorter_data, muscore_cut_val=20, pscore_cut_val=80)
-    proton_candidate = thetazx_cut(proton_candidate)
-
-    proton_candidate_true_pdg = proton_candidate.pfp.trk.truth.p.pdg
-    
-    proton_candidate_chi2_muon = proton_candidate.pfp.trk.chi2pid.I2.chi2_muon
-    proton_candidate_chi2_proton = proton_candidate.pfp.trk.chi2pid.I2.chi2_proton
-    proton_candidate_coszx = get_coszx(proton_candidate)
-    proton_candidate_coszy = get_coszy(proton_candidate)
-    
-    proton_hits = trkhitdf.reset_index(level=[3]).loc[proton_candidate.index]
-    proton_hits = proton_hits.reset_index().set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index", "rec.slc.reco.pfp.trk.calo.{}.points..index".format(2)])
-    proton_hits['chi2_muon'] = proton_candidate_chi2_muon
-    proton_hits['chi2_proton'] = proton_candidate_chi2_proton
-    proton_hits['trk_coszx'] = proton_candidate_coszx
-    proton_hits['trk_coszy'] = proton_candidate_coszy
-    proton_hits['true_pdg'] = proton_candidate_true_pdg
-    
-    if len(proton_hits) == 0:
-        return None ### FIXME
-
-    proton_hits_1 = check_flipped(proton_hits, plane=2)
-    proton_hits_1["selection"] = 1
-
     # 2 prong
     longer_data, shorter_data = select_topology(pandoradf, nprong=2, max_len_cut=25, min_len_cut=25, contained=True)
     proton_candidate = select_calorimetry(shorter_data, muscore_cut_val=20, pscore_cut_val=80)
     proton_candidate = thetazx_cut(proton_candidate)
 
-    proton_candidate_true_pdg = proton_candidate.pfp.trk.truth.p.pdg
+    muon_candidate = select_calorimetry(longer_data, muscore_cut_val=20, pscore_cut_val=80, pid=13)
+    muon_candidate = thetazx_cut(muon_candidate)
+    muscore_cut = (muon_candidate.pfp.trk.chi2pid.I2.chi2_muon < 6.)
+    pscore_cut = (muon_candidate.pfp.trk.chi2pid.I2.chi2_proton > 90) & (muon_candidate.pfp.trk.chi2pid.I2.chi2_proton < 150)
+    muon_candidate = muon_candidate[muscore_cut & pscore_cut]
     
-    proton_candidate_chi2_muon = proton_candidate.pfp.trk.chi2pid.I2.chi2_muon
-    proton_candidate_chi2_proton = proton_candidate.pfp.trk.chi2pid.I2.chi2_proton
-    proton_candidate_coszx = get_coszx(proton_candidate)
-    proton_candidate_coszy = get_coszy(proton_candidate)
+    muon_candidate_true_pdg = muon_candidate.pfp.trk.truth.p.pdg
     
-    proton_hits = trkhitdf.reset_index(level=[3]).loc[proton_candidate.index]
-    proton_hits = proton_hits.reset_index().set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index", "rec.slc.reco.pfp.trk.calo.{}.points..index".format(2)])
-    proton_hits['chi2_muon'] = proton_candidate_chi2_muon
-    proton_hits['chi2_proton'] = proton_candidate_chi2_proton
-    proton_hits['trk_coszx'] = proton_candidate_coszx
-    proton_hits['trk_coszy'] = proton_candidate_coszy
-    proton_hits['true_pdg'] = proton_candidate_true_pdg
+    muon_candidate_chi2_muon = muon_candidate.pfp.trk.chi2pid.I2.chi2_muon
+    muon_candidate_chi2_proton = muon_candidate.pfp.trk.chi2pid.I2.chi2_proton
+    muon_candidate_coszx = get_coszx(muon_candidate)
+    muon_candidate_coszy = get_coszy(muon_candidate)
+    
+    muon_hits = trkhitdf.reset_index(level=[3]).loc[muon_candidate.index]
+    muon_hits = muon_hits.reset_index().set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index", "rec.slc.reco.pfp.trk.calo.{}.points..index".format(2)])
+    muon_hits['chi2_muon'] = muon_candidate_chi2_muon
+    muon_hits['chi2_proton'] = muon_candidate_chi2_proton
+    muon_hits['trk_coszx'] = muon_candidate_coszx
+    muon_hits['trk_coszy'] = muon_candidate_coszy
+    muon_hits['true_pdg'] = muon_candidate_true_pdg
 
-    if len(proton_hits) == 0:
+    if len(muon_hits) == 0:
         return None ### FIXME
 
-    proton_hits_2 = check_flipped(proton_hits, plane=2)
-    proton_hits_2["selection"] = 2
-
-    proton_hits = pd.concat([proton_hits_1, proton_hits_2], ignore_index=False)
+    muon_hits = check_flipped(muon_hits, plane=2)
+    muon_hits["selection"] = 2
 
     # apply hit-level selections
-    proton_hits = proton_hits[proton_hits.flipped == False]
-    proton_hits = drop_endhits(proton_hits, ndrop=3, plane=2)
-    proton_hits = proton_hits[proton_hits.rr > 0.6]
+    muon_hits = muon_hits[muon_hits.flipped == False]
+    muon_hits = drop_endhits(muon_hits, ndrop=3, plane=2)
+    muon_hits = muon_hits[muon_hits.rr > 0.6]
 
-    proton_hits = check_badorder(proton_hits)
-    proton_hits = check_ntpcs(proton_hits)
-    proton_hits = check_wireskip(proton_hits)
+    muon_hits = check_badorder(muon_hits)
+    muon_hits = check_ntpcs(muon_hits)
+    muon_hits = check_wireskip(muon_hits)
 
-    proton_hits = proton_hits[(proton_hits.pitch < 1) & (proton_hits.badorder == False)]
+    muon_hits = muon_hits[(muon_hits.pitch < 1) & (muon_hits.badorder == False)]
 
-    #print(proton_hits)
+    #print(muon_hits)
 
     # output dfs
-    proton_hits_selected = proton_hits.loc[:, [
+    muon_hits_selected = muon_hits.loc[:, [
         ("selection"),
         ("run"),
         ("subrun"),
@@ -341,7 +316,7 @@ def make_protonhit_df(f):
         ("true_pdg"),
     ]].copy()
 
-    proton_hits_selected.columns = [
+    muon_hits_selected.columns = [
         "selection",
         "run",
         "subrun",
@@ -367,7 +342,7 @@ def make_protonhit_df(f):
         "trk_coszy",
         "true_pdg",
     ]
-    proton_hits_selected = proton_hits_selected.reset_index()
-    #print(proton_hits_selected)
+    muon_hits_selected = muon_hits_selected.reset_index()
+    #print(muon_hits_selected)
 
-    return proton_hits_selected
+    return muon_hits_selected
