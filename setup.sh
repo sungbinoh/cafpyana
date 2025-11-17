@@ -53,14 +53,14 @@ fi
 source ${VENV_DIR}/bin/activate
 
 # check requirements are installed
-if pip freeze -r ${VENV_DIR}/pip_requirements.txt 2>&1 | grep -q "not installed"; then
+if pip freeze -r ${ENV_DIR}/pip_requirements.txt 2>&1 | grep -q "not installed"; then
     echo "Updating virtual env installation"
 
     PIPLOG=${LOGDIR}/init_pip.log
     echo $(date) >> ${PIPLOG}
     pip install --upgrade pip | tee -a ${PIPLOG}
     pip install wheel setuptools | tee -a ${PIPLOG}
-    pip install -r pip_requirements.txt | tee -a ${PIPLOG}
+    pip install -r ${ENV_DIR}/pip_requirements.txt | tee -a ${PIPLOG}
 fi
 
 # Deactivate virtual environment
