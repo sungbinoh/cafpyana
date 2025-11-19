@@ -30,6 +30,12 @@ spack load xrootd@5.6.9%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
 # this sets Python to 3.10.16
 spack load root arch=linux-almalinux9-x86_64_v2
 
+# EAF has different library needs
+EAF=0
+if [[ $machine == *jupyter* ]]; then
+    EAF=1
+fi
+
 ######################################################
 #### setup virtual python env if it is not already set
 ######################################################
@@ -87,7 +93,7 @@ echo "If you want to activate this virtual evn again, do $ source '$VENV_NAME'/b
 ######################################################
 # need to install uuid in the EAF
 ######################################################
-if [[ $machine == *jupyter* ]]; then
+if [ $EAF -eq 1 ]; then
     export C_INCLUDE_PATH="${ENV_DIR}/local/include:$C_INCLUDE_PATH"
     export CPLUS_INCLUDE_PATH="${ENV_DIR}/local/include:$CPLUS_INCLUDE_PATH"
     export LD_LIBRARY_PATH="${ENV_DIR}/local/lib:$LD_LIBRARY_PATH"
@@ -127,8 +133,10 @@ python -c "import XRootD" > /dev/null 2>&1 || {
     tar -zxvf xrootd-5.6.9.tar.gz
     rm xrootd-5.6.9.tar.gz
     cd xrootd-5.6.9
-    # this could be needed depending on SSL version
-    # sed -i 's/SSL_CTX_flush_sessions/SSL_CTX_flush_sessions_ex/g' src/XrdTls/XrdTlsContext.cc
+    # this seems to be needed depending on SSL version -- GPVMs need it while EAF doesn't
+    if [ $EAF -eq 0 ]; then
+        sed -i 's/SSL_CTX_flush_sessions/SSL_CTX_flush_sessions_ex/g' src/XrdTls/XrdTlsContext.cc
+    fi
     python setup.py install 2>&1 | tee -a ${XROOTLOG}
     cd ${CAFPYANA_DIR}
     PATH=$OLDPATH
