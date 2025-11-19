@@ -27,6 +27,9 @@ fi
 spack load hdf5@1.12.2%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
 spack load xrootd@5.6.9%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
 
+# this sets Python to 3.10.16
+spack load root arch=linux-almalinux9-x86_64_v2
+
 ######################################################
 #### setup virtual python env if it is not already set
 ######################################################
@@ -36,8 +39,8 @@ LOGDIR=${ENV_DIR}/logs
 mkdir -p ${LOGDIR}
 
 # Define the Python version and virtual environment name
-PYTHON_VERSION=3.9.21
-VENV_NAME=venv_py39_cafpyana
+PYTHON_VERSION=3.10.16
+VENV_NAME=venv_py310_cafpyana
 VENV_DIR="${ENV_DIR}/${VENV_NAME}"
 
 # Check if virtual environment already exists
@@ -124,6 +127,8 @@ python -c "import XRootD" > /dev/null 2>&1 || {
     tar -zxvf xrootd-5.6.9.tar.gz
     rm xrootd-5.6.9.tar.gz
     cd xrootd-5.6.9
+    # this could be needed depending on SSL version
+    # sed -i 's/SSL_CTX_flush_sessions/SSL_CTX_flush_sessions_ex/g' src/XrdTls/XrdTlsContext.cc
     python setup.py install 2>&1 | tee -a ${XROOTLOG}
     cd ${CAFPYANA_DIR}
     PATH=$OLDPATH
