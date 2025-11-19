@@ -1,6 +1,7 @@
 #!/usr/bin/env python3 
 import os,sys,time
 import datetime
+import pathlib
 #from TimeTools import *
 import argparse
 import tables
@@ -52,7 +53,7 @@ def run_pool(output, inputs, nproc):
         PREPROCESS = []
 
     dfss = ntuples.dataframes(nproc=nproc, fs=DFS, preprocess=PREPROCESS)
-    output = output + ".df"
+    output = pathlib.Path(output).with_suffix('.df')
     k_idx = 0
     split_margin = args.SplitSize
     with pd.HDFStore(output) as hdf_pd:
