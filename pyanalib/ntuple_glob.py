@@ -144,7 +144,7 @@ class NTupleGlob(object):
             with open(g) as f:
                 self.glob = [line.rstrip("\n") for line in f]
         else:
-            self.glob = glob.glob(g)
+            self.glob = glob.glob(g, raise_error=True)
         self.branches = branches
 
     def dataframes(self, fs, maxfile=None, nproc=1, savemeta=False, preprocess=None):
