@@ -1,6 +1,7 @@
 from makedf.makedf import *
 from pyanalib.pandas_helpers import *
 from makedf.util import *
+from analysis_village.recom.makedf import collect_etau_db
 
 pd.options.mode.chained_assignment = None
 
@@ -286,7 +287,8 @@ def make_muonhit_df(f):
 
     muon_hits = muon_hits[(muon_hits.pitch < 1) & (muon_hits.badorder == False)]
 
-    #print(muon_hits)
+    etau_arr = collect_etau_db.get_etau(muon_hits)
+    muon_hits['etau'] = etau_arr
 
     # output dfs
     muon_hits_selected = muon_hits.loc[:, [
@@ -309,6 +311,7 @@ def make_muonhit_df(f):
         ("pitch"),
         ("phi"),
         ("efield"),
+        ("etau"),
         ("chi2_muon"),
         ("chi2_proton"),
         ("trk_coszx"),
@@ -336,6 +339,7 @@ def make_muonhit_df(f):
         "pitch",
         "phi",
         "efield",
+        "etau",
         "trk_chi2_mu",
         "trk_chi2_p",
         "trk_coszx",

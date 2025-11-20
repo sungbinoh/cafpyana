@@ -1,6 +1,7 @@
 from makedf.makedf import *
 from pyanalib.pandas_helpers import *
 from makedf.util import *
+from analysis_village.recom.makedf import collect_etau_db
 
 pd.options.mode.chained_assignment = None
 
@@ -310,7 +311,8 @@ def make_protonhit_df(f):
     proton_hits = check_wireskip(proton_hits)
 
     proton_hits = proton_hits[(proton_hits.pitch < 1) & (proton_hits.badorder == False)]
-
+    etau_arr = collect_etau_db.get_etau(proton_hits)
+    proton_hits['etau'] = etau_arr
     #print(proton_hits)
 
     # output dfs
@@ -334,6 +336,7 @@ def make_protonhit_df(f):
         ("pitch"),
         ("phi"),
         ("efield"),
+        ("etau"),
         ("chi2_muon"),
         ("chi2_proton"),
         ("trk_coszx"),
@@ -361,6 +364,7 @@ def make_protonhit_df(f):
         "pitch",
         "phi",
         "efield",
+        "etau",
         "trk_chi2_mu",
         "trk_chi2_p",
         "trk_coszx",
