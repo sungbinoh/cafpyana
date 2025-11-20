@@ -1,7 +1,9 @@
 from pyanalib.pandas_helpers import *
+import pyanalib.calo_helpers as caloh
 from .branches import *
 from .util import *
 from .calo import *
+from .chi2pid import SBND_CALO_PARAMS #Just need SBND
 from . import numisyst, g4syst, geniesyst, bnbsyst
 
 PDG = {
@@ -26,12 +28,14 @@ PDG = {
 ## == For additional column in mcdf with primary particle multiplicities
 ## ==== "<column name>": ["<particle name>", <KE cut in GeV>]
 ## ==== <particle name> is used to collect PID and mass from the "PDG" dictionary
-TRUE_KE_THRESHOLDS = {"nmu_27MeV": ["muon", 0.027],
+TRUE_KE_THRESHOLDS = {"nmu_25MeV": ["muon", 0.025],
                       "nmu_100MeV": ["muon", 0.1],
-                      "np_20MeV": ["proton", 0.02],
                       "np_50MeV": ["proton", 0.05],
-                      "npi_30MeV": ["pipm", 0.03],
-                      "nn_0MeV": ["neutron", 0.0]
+                      "nn_0MeV": ["neutron", 0.0],
+                      "ne_25MeV": ["electron", 0.025],
+                      "npi_25MeV": ["pipm", 0.025],
+                      "npi0_0MeV": ["pizero", 0.0],
+                      "nk_25MeV": ["kaon_p", 0.025],
                       }
 
 def make_hdrdf(f):
@@ -100,8 +104,8 @@ def make_opflashdf(f):
     opflashdf = loadbranches(f["recTree"], opflashbranches).rec.opflashes
     return opflashdf
 
-def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False, trackScoreCut=0.5):
-    trkdf = loadbranches(f["recTree"], trkbranches + shwbranches)
+def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False, trackScoreCut=0.5, updaterecomb=True):
+    trkdf = loadbranches(f["recTree"], trkbranches)
     if scoreCut:
         print('Score cut')
         trkdf = trkdf.rec.slc.reco[trkdf.rec.slc.reco.pfp.trackScore > trackScoreCut]
@@ -124,14 +128,71 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
         cumlen = mcsdf.seg_length.groupby(level=mcsgroup).cumsum()*14 # convert rad length to cm
         maxlen = (cumlen*(mcsdf.seg_scatter_angles >= 0)).groupby(level=mcsgroup).max()
         trkdf[("pfp", "trk", "mcsP", "len", "", "")] = maxlen
+    
+    if updaterecomb:
+        calo_params = SBND_CALO_PARAMS.copy()
+        calo_params_recomb = SBND_CALO_PARAMS.copy()
+        hdrdf = make_hdrdf(f)
+        ismc = hdrdf.ismc.iloc[0]
+        # Map uncertainty dict keys to actual SBND_CALO_PARAMS keys
+        unc_dict = {
+            "alpha_emb": 0.008,
+            "beta_90": 0.008,  # Fixed: was "beta_emb"
+            "R_emb": 0.02  # Fixed: was "R_90"
+        }
+        sign_tag = {-1: "m", 0: "0", 1: "p"}  # Define sign_tag mapping
+        recomb_keys = list(unc_dict.keys())
+        for recomb_key in recomb_keys:
+            for plane in range(2, 3): #only collection
+                hitdf = make_trkhitdf(f, plane)
+                trk_keys = trkdf.index.unique()
+                hit_keys3 = hitdf.index.droplevel(-1)  # -1 since hitdf has an additional index
+                mask_match = hit_keys3.isin(trk_keys)
+                hitdf = hitdf[mask_match]
+                this_etau = calo_params_recomb["etau"][1]
+                if ismc:
+                    this_etau = calo_params_recomb["etau"][0]
+
+                for sig in [-1, 0, 1]:
+                    # Select MC (idx=0) or data (idx=1) value, then add uncertainty
+                    idx = 0 if ismc else 1
+                    base_value = calo_params[recomb_key][idx]
+                    perturbed_value = base_value + sig * unc_dict[recomb_key]
+                    
+                    # Update the parameter list (keep both MC and data, but use perturbed value for current idx)
+                    calo_params_recomb[recomb_key] = calo_params[recomb_key].copy()
+                    calo_params_recomb[recomb_key][idx] = perturbed_value
+                    
+                    recomb_tag = "_{}{}{}".format(recomb_key, sign_tag[sig], np.abs(sig))
+
+                    # Pass scalar values to new_dedx (not lists)
+                    new_dedx = caloh.new_dedx(hitdf, calo_params_recomb["c_cal_frac"][plane], plane, 
+                                             calo_params_recomb["alpha_emb"][idx],
+                                             calo_params_recomb["beta_90"][idx],
+                                             calo_params_recomb["R_emb"][idx],
+                                             this_etau, ismc)
+                    hitdf[('dedx', '')] = new_dedx
+
+                    for par in ['muon', 'proton']:
+                        this_chi2_new = hitdf.groupby(level=['entry', 'rec.slc..index', 'rec.slc.reco.pfp..index']).apply(lambda group: caloh.calculate_chi2_for_entry(group, par))
+                        this_chi2_new = this_chi2_new.apply(pd.Series).rename(columns={0: "chi2", 1: "ndof"})
+                        this_chi2_col = ('pfp', 'trk', 'chi2pid', 'I' + str(plane), 'chi2_' + par + recomb_tag, '')
+                        this_ndof_col = ('pfp', 'trk', 'chi2pid', 'I' + str(plane), 'ndof_' + par + recomb_tag, '')
+                        try:
+                            trkdf[this_chi2_col] = this_chi2_new.chi2
+                            trkdf[this_ndof_col] = this_chi2_new.ndof
+                            trkdf[this_chi2_col] = trkdf[this_chi2_col].fillna(0.)
+                            trkdf[this_ndof_col] = trkdf[this_ndof_col].fillna(0)
+                        except:
+                            print("no selected tracks")
 
 
     trkdf[("pfp", "tindex", "", "", "", "")] = trkdf.index.get_level_values(2)
 
     return trkdf
 
-def make_trkhitdf(f):
-    df = loadbranches(f["recTree"], trkhitbranches).rec.slc.reco.pfp.trk.calo.I2.points
+def make_trkhitdf(f,plane):
+    df = loadbranches(f["recTree"], trkhitbranches)[("rec","slc","reco","pfp","trk","calo",f"I{plane}","points")]
 
     # Firsthit and Lasthit info
     ihit = df.index.get_level_values(-1)
@@ -175,6 +236,7 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches, include_mu=Fa
     mcdf = multicol_add(mcdf, (np.abs(mcprimdf.pdg)==2112).groupby(level=[0,1]).sum().rename("nn"))
     mcdf = multicol_add(mcdf, (np.abs(mcprimdf.pdg)==2212).groupby(level=[0,1]).sum().rename("np"))
     mcdf = multicol_add(mcdf, (np.abs(mcprimdf.pdg)==13).groupby(level=[0,1]).sum().rename("nmu"))
+    mcdf = multicol_add(mcdf, (np.abs(mcprimdf.pdg)==11).groupby(level=[0,1]).sum().rename("ne"))
     mcdf = multicol_add(mcdf, (np.abs(mcprimdf.pdg)==211).groupby(level=[0,1]).sum().rename("npi"))
     mcdf = multicol_add(mcdf, (np.abs(mcprimdf.pdg)==111).groupby(level=[0,1]).sum().rename("npi0"))
     mcdf = multicol_add(mcdf, (np.abs(mcprimdf.pdg)==22).groupby(level=[0,1]).sum().rename("ng"))

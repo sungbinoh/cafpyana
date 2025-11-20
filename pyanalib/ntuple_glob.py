@@ -11,6 +11,9 @@ import os
 import dill
 import sys
 from functools import partial
+import time
+import uuid
+import tempfile
 
 CPU_COUNT = multiprocessing.cpu_count()
 
@@ -37,9 +40,21 @@ class NTupleProc(object):
         self.f = data["f"]
         self.name = data["name"]
 
+def _open_with_retries(path, attempts=10, sleep=2.0, timeout=300):
+    last_exc = None
+    for k in range(attempts):
+        try:
+            return uproot.open(path, timeout=timeout)
+        except Exception as e:
+            last_exc = e
+            if k + 1 < attempts:
+                print(f"Attempt {k+1}/{attempts} failed for {path}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+                time.sleep(sleep * (k + 1))
+            else:
+                print(f"All {attempts} attempts failed for {path}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    raise last_exc
 
-
-def _loaddf(applyfs, g):
+def _loaddf(applyfs, preprocess, g):
     # fname, index, applyfs = inp
     index, fname = g
     # Convert pnfs to xroot URL's
@@ -48,45 +63,77 @@ def _loaddf(applyfs, g):
     # fix xroot URL's
     elif fname.startswith("xroot"):
         fname = fname[1:]
-
     madef = False
 
-    # TODO: make available?
-    # 
-    # Flatten non-flat cafs
-    # if "flat" not in fname.split("/")[-1].split("."):
-    #     flatcaf = "/tmp/" + fname.split("/")[-1].split(".")[0] + ".flat.root"
-    #     subprocess.run(["flatten_caf", fname, flatcaf],  stdout=subprocess.DEVNULL)
-    #     fname = flatcaf
-    #     madef = True
-   
-    try:
-        f = uproot.open(fname, timeout=120)
-    except (OSError, ValueError) as e:
-        print("Could not open file (%s) due to exception. Skipping..." % fname) 
-        print(e)
-        return None
-    with f:
-        try:
-            dfs = [applyf(f) for applyf in applyfs]
-        except Exception as e:
-            if True:
-                raise
-            print("Error processing file (%s). Skipping..." % fname)
-            print(e)
-            return None
+    # run any preprocess-ing commands
+    tempfiles = []
+    if preprocess is not None:
+        for i, p in enumerate(preprocess):
+            temp_directory = tempfile.gettempdir()
+            temp_file_name = os.path.join(temp_directory, "temp%i_%s.flat.caf.root" % (i, str(uuid.uuid4()))) 
+            p.run(fname, temp_file_name)
+            tempfiles.append(temp_file_name)
+            fname = temp_file_name
 
-        # Set an index on the NTuple number to make sure we keep track of what is where
-        for i in range(len(dfs)):
-            if dfs[i] is not None:
-                dfs[i]["__ntuple"] = index
-                dfs[i].set_index("__ntuple", append=True, inplace=True)
-                dfs[i] = dfs[i].reorder_levels([dfs[i].index.nlevels-1] + list(range(0, dfs[i].index.nlevels-1)))
+    # Retry the entire file operation (open, read, close)
+    attempts = 1
+    sleep = 1.0
+    timeout = 10
+    dfs = None
+    
+    for k in range(attempts):
+        try:
+            # Open AND close strictly within the context manager
+            with _open_with_retries(fname, attempts=1, sleep=0, timeout=timeout) as f:
+
+                if "recTree" not in f:
+                    print("File (%s) missing recTree. Skipping..." % fname)
+                    return None
+
+                dfs = []
+                for applyf in applyfs:
+                    df = applyf(f)  # must fully read from 'f' here
+                    if df is None:
+                        dfs.append(None)
+                        continue
+
+                    # --- CRITICAL: detach from file-backed/lazy data ---
+                    # If it's a pandas obj, deep-copy; if not, try to materialize.
+                    if isinstance(df, pd.DataFrame):
+                        df = df.copy(deep=True)
+                    elif hasattr(df, "to_numpy"):  # Series / array-like
+                        df = pd.DataFrame(df.to_numpy()).copy(deep=True)
+                    # ---------------------------------------------------
+
+                    # Tag with __ntuple and move it to front of MultiIndex
+                    df["__ntuple"] = index
+                    df.set_index("__ntuple", append=True, inplace=True)
+                    new_order = [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
+                    df = df.reorder_levels(new_order)
+
+                    dfs.append(df)
+            
+            # Success - break out of retry loop
+            break
+            
+        except Exception as e:
+            if k + 1 < attempts:
+                print(f"Attempt {k+1}/{attempts} failed for {fname}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+                print(f"Retrying in {sleep * (k + 1):.1f} seconds...", file=sys.stderr, flush=True)
+                time.sleep(sleep * (k + 1))
+                print(f"Starting attempt {k+2}/{attempts}...", file=sys.stderr, flush=True)
+                continue  # Explicitly continue to next iteration
             else:
-                dfs[i] = []
+                print(f"All {attempts} attempts failed for {fname}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+                print(f"Could not open file ({fname}). Skipping...", file=sys.stderr, flush=True)
+                dfs = None
+
 
     if madef:
         os.remove(fname)
+
+    for f in tempfiles:
+        os.remove(f)
 
     return dfs
 
@@ -100,10 +147,17 @@ class NTupleGlob(object):
             with open(g) as f:
                 self.glob = [line.rstrip("\n") for line in f]
         else:
-            self.glob = glob.glob(g)
+            # Convert /pnfs to xroot URL before globbing
+            if g.startswith("/pnfs"):
+                g_xroot = g.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
+                self.glob = glob.glob(g_xroot)
+            else:
+                self.glob = glob.glob(g)
+            if len(self.glob) == 0:
+                print(f"Warning: No files matched pattern: {g}")
         self.branches = branches
 
-    def dataframes(self, fs, maxfile=None, nproc=1, savemeta=False):
+    def dataframes(self, fs, maxfile=None, nproc=1, savemeta=False, preprocess=None):
         if not isinstance(fs, list):
             fs = [fs]
 
@@ -112,15 +166,16 @@ class NTupleGlob(object):
             thisglob = thisglob[:maxfile]
 
         if nproc == "auto":
-            CPU_COUNT_use = int(CPU_COUNT * 0.8)
+            CPU_COUNT_use = int(CPU_COUNT * 0.6)
             nproc = min(CPU_COUNT_use, len(thisglob))
+            nproc = 1 if nproc < 1 else nproc
             print("CPU_COUNT : " + str(CPU_COUNT) + ", len(thisglob): " + str(len(thisglob)) + ", nproc: " + str(nproc))
 
         ret = []
 
         try:
             with Pool(processes=nproc) as pool:
-                for i, dfs in enumerate(tqdm(pool.imap_unordered(partial(_loaddf, fs), enumerate(thisglob)), total=len(thisglob), unit="file", delay=5, smoothing=0.2)):
+                for i, dfs in enumerate(tqdm(pool.imap_unordered(partial(_loaddf, fs, preprocess), enumerate(thisglob)), total=len(thisglob), unit="file", delay=5, smoothing=0.2)):
                     if dfs is not None:
                         ret.append(dfs)
         # Ctrl-C handling

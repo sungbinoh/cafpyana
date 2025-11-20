@@ -1,0 +1,359 @@
+Running Pool mode
+CPU_COUNT : 126, len(thisglob): 20, nproc: 5
+Attempt 1/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input004-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 2.0 seconds...
+Starting attempt 2/10...
+Attempt 1/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input001-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 2.0 seconds...
+Starting attempt 2/10...
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+Attempt 2/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input004-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 4.0 seconds...
+Starting attempt 3/10...
+  5%|█████████                                                                                                                                                                           | 1/20 [11:51<3:45:15, 711.34s/file]/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+Attempt 3/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input004-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 6.0 seconds...
+Starting attempt 4/10...
+ 10%|██████████████████                                                                                                                                                                  | 2/20 [14:12<1:58:25, 394.78s/file] 15%|███████████████████████████                                                                                                                                                         | 3/20 [15:40<1:16:09, 268.80s/file]Attempt 4/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input004-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 8.0 seconds...
+Starting attempt 5/10...
+Attempt 5/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input004-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 10.0 seconds...
+Starting attempt 6/10...
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+ 20%|████████████████████████████████████                                                                                                                                                | 4/20 [27:03<1:49:09, 409.31s/file]Attempt 2/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input001-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 4.0 seconds...
+Starting attempt 3/10...
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+ 25%|█████████████████████████████████████████████                                                                                                                                       | 5/20 [28:57<1:20:21, 321.41s/file] 30%|██████████████████████████████████████████████████████                                                                                                                              | 6/20 [30:36<1:00:56, 261.18s/file]Attempt 1/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input009-reweighted.flat.caf.root: OSError: File did not close properly: [ERROR] Operation expired
+Retrying in 2.0 seconds...
+Starting attempt 2/10...
+Attempt 6/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input004-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 12.0 seconds...
+Starting attempt 7/10...
+Attempt 1/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input010-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 2.0 seconds...
+Starting attempt 2/10...
+Attempt 2/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input009-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 4.0 seconds...
+Starting attempt 3/10...
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+Attempt 3/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input009-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 6.0 seconds...
+Starting attempt 4/10...
+ 35%|██████████████████████████████████████████████████████████████▉                                                                                                                     | 7/20 [40:54<1:16:09, 351.46s/file]Attempt 4/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input009-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 8.0 seconds...
+Starting attempt 5/10...
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+ 40%|████████████████████████████████████████████████████████████████████████                                                                                                            | 8/20 [47:00<1:10:58, 354.90s/file]Attempt 5/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input009-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 10.0 seconds...
+Starting attempt 6/10...
+Attempt 6/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input009-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 12.0 seconds...
+Starting attempt 7/10...
+Attempt 7/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input009-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 14.0 seconds...
+Starting attempt 8/10...
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+Attempt 8/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input009-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 16.0 seconds...
+ 45%|█████████████████████████████████████████████████████████████████████████████████                                                                                                   | 9/20 [58:58<1:20:26, 438.76s/file]Starting attempt 9/10...
+ 50%|████████████████████████████████████████████████████████████████████████████████████████▌                                                                                        | 10/20 [1:01:06<1:01:31, 369.19s/file]/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+Attempt 1/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input011-reweighted.flat.caf.root: OSError: File did not close properly: [ERROR] Operation expired
+Retrying in 2.0 seconds...
+Starting attempt 2/10...
+Attempt 9/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input009-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 18.0 seconds...
+Starting attempt 10/10...
+ 55%|██████████████████████████████████████████████████████████████████████████████████████████████████▍                                                                                | 11/20 [1:03:47<48:32, 323.59s/file]Attempt 2/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input011-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 4.0 seconds...
+Starting attempt 3/10...
+Attempt 1/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 2.0 seconds...
+Starting attempt 2/10...
+All 1 attempts failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: Failed to close file: [ERROR] Socket timeout
+Attempt 2/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: Failed to close file: [ERROR] Socket timeout
+Retrying in 4.0 seconds...
+Starting attempt 3/10...
+All 10 attempts failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input009-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Could not open file (root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input009-reweighted.flat.caf.root). Skipping...
+ 60%|███████████████████████████████████████████████████████████████████████████████████████████████████████████▍                                                                       | 12/20 [1:09:13<43:13, 324.14s/file]Attempt 3/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input011-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 6.0 seconds...
+Starting attempt 4/10...
+./analysis_village/numuincl/runit.sh: line 1: 55351 Killed                  python run_df_maker.py -c /exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/config.py -o /exp/sbnd/data/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/both/mc_med_syst2 -i /pnfs/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input0[0-1][0-9]*reweighted*.flat*.root
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+Attempt 3/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 6.0 seconds...
+Starting attempt 4/10...
+Process ForkPoolWorker-5:
+Traceback (most recent call last):
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 205, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 400, in _send_bytes
+    self._send(pre_header)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 373, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 205, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 416, in _send_bytes
+    self._send(header + buf)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 373, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+Attempt 4/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input011-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 8.0 seconds...
+Starting attempt 5/10...
+Process ForkPoolWorker-3:
+Traceback (most recent call last):
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 205, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 400, in _send_bytes
+    self._send(pre_header)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 373, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 205, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 416, in _send_bytes
+    self._send(header + buf)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 373, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+Attempt 4/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: Bytes failed to read from open file: [ERROR] Operation expired
+Retrying in 8.0 seconds...
+Starting attempt 5/10...
+Attempt 5/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 10.0 seconds...
+Starting attempt 6/10...
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+Attempt 5/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input011-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 10.0 seconds...
+Starting attempt 6/10...
+Process ForkPoolWorker-4:
+Traceback (most recent call last):
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 205, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 400, in _send_bytes
+    self._send(pre_header)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 373, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 205, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 416, in _send_bytes
+    self._send(header + buf)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 373, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+Attempt 6/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 12.0 seconds...
+Starting attempt 7/10...
+All 1 attempts failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: Failed to close file: [ERROR] Socket timeout
+Attempt 7/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: Failed to close file: [ERROR] Socket timeout
+Retrying in 14.0 seconds...
+Starting attempt 8/10...
+Attempt 6/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input011-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 12.0 seconds...
+Starting attempt 7/10...
+Attempt 8/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 16.0 seconds...
+Starting attempt 9/10...
+Attempt 9/10 failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: File did not vector_read properly: [ERROR] Operation expired
+Retrying in 18.0 seconds...
+Starting attempt 10/10...
+All 1 attempts failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: Failed to close file: [ERROR] Operation expired
+All 10 attempts failed for root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root: OSError: Failed to close file: [ERROR] Operation expired
+Could not open file (root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input015-reweighted.flat.caf.root). Skipping...
+Process ForkPoolWorker-2:
+Traceback (most recent call last):
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 205, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 416, in _send_bytes
+    self._send(header + buf)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 373, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 205, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 416, in _send_bytes
+    self._send(header + buf)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 373, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+/exp/sbnd/app/users/brindenc/develop/cafpyana/envs/venv_py39_cafpyana/lib/python3.9/site-packages/pandas/core/internals/blocks.py:1429: RuntimeWarning: invalid value encountered in cast
+  values[indexer] = casted
+Process ForkPoolWorker-1:
+Traceback (most recent call last):
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 205, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 400, in _send_bytes
+    self._send(pre_header)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 373, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 205, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 416, in _send_bytes
+    self._send(header + buf)
+  File "/cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/opt/spack/linux-almalinux9-x86_64_v3/gcc-11.4.1/python-3.9.15-jxdij2q7ulmvm4wt4awnvxgr5mhnd2ni/lib/python3.9/multiprocessing/connection.py", line 373, in _send
+    n = write(self._handle, buf)
+BrokenPipeError: [Errno 32] Broken pipe

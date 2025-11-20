@@ -11,9 +11,15 @@ from makedf.makedf import *
 from makedf.constants import *
 
 INCLUDE_WEIGHTS = True
+SLIM = False
+UPDATE_RECOMB = True
+PRELIM_CUTS = True
+FULL_CUTS = True
+if FULL_CUTS: PRELIM_CUTS = True
+TRK_CUTS = True
 
-def make_spine_evtdf_wgt(f,include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, wgt_types=["bnb","genie"],prelim_cuts=False,
-                        slim=False):
+def make_spine_evtdf_wgt(f,include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, wgt_types=["bnb","genie"],prelim_cuts=PRELIM_CUTS,
+                        slim=SLIM):
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if (1 == det.unique()):
@@ -100,15 +106,19 @@ def make_spine_evtdf_wgt(f,include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000,
     return interdf
 
 
-def make_pandora_evtdf_wgt(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=False, 
-                       trkScoreCut=False, trkDistCut=-1., cutClearCosmic=True, **trkArgs):
+def make_pandora_evtdf_wgt(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=SLIM, 
+                       trkScoreCut=False, trkDistCut=-1., cutClearCosmic=True, prelim_cuts=PRELIM_CUTS, full_cuts=FULL_CUTS, updaterecomb=UPDATE_RECOMB, **trkArgs):
     df = make_pandora_evtdf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
-                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, **trkArgs)
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, prelim_cuts=prelim_cuts, full_cuts=full_cuts, updaterecomb=updaterecomb, **trkArgs)
     return df
 
+def make_custom_trkdf(f, trkScoreCut=TRK_CUTS, trackScoreCut=0.5, updaterecomb=UPDATE_RECOMB, **trkArgs):
+    trkdf = make_trkdf(f, trkScoreCut, trackScoreCut=trackScoreCut, updaterecomb=updaterecomb, **trkArgs)
+    return trkdf
 
-def make_pandora_evtdf(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=False, 
-                       trkScoreCut=False, trkDistCut=-1., cutClearCosmic=True, prelim_cuts=False, **trkArgs):
+def make_pandora_evtdf(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=SLIM, 
+                       trkScoreCut=False, trkDistCut=-1., cutClearCosmic=True, prelim_cuts=PRELIM_CUTS, full_cuts=FULL_CUTS, updaterecomb=UPDATE_RECOMB,**trkArgs):
+    if full_cuts: prelim_cuts = True #also apply prelim cuts
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if (1 == det.unique()):
@@ -120,7 +130,7 @@ def make_pandora_evtdf(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, 
     
     mcdf = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim)
     mcdf.columns = pd.MultiIndex.from_tuples([tuple(["truth"] + list(c)) for c in mcdf.columns])
-    trkdf = make_trkdf(f, trkScoreCut, trackScoreCut=0.6, **trkArgs)
+    trkdf = make_trkdf(f, trkScoreCut, trackScoreCut=0.6, updaterecomb=updaterecomb, **trkArgs)
     slcdf = make_slcdf(f)
     hdr = make_hdrdf(f)
     hdr = hdr.loc[:,["run","subrun","evt"]]
@@ -136,8 +146,6 @@ def make_pandora_evtdf(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, 
     trkdf = multicol_add(trkdf, dmagdf(slcdf.slc.vertex, trkdf.pfp.trk.start).rename(("pfp", "dist_to_vertex")))
     # if trkDistCut > 0:
     #     trkdf = trkdf[trkdf.pfp.dist_to_vertex < trkDistCut]
-    # if cutClearCosmic:
-    #     slcdf = slcdf[slcdf.slc.is_clear_cosmic==0]
 
     # ---- calculate additional info ----
     
@@ -169,19 +177,29 @@ def make_pandora_evtdf(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, 
     trkdf[("pfp", "trk", "costheta", "", "", "")] = trkdf.pfp.trk.dir.z
 
     # Identify if track is a candidate muon
-    trkdf[("pfp", "trk", "is_muon", "", "", "")] = (trkdf.pfp.trk.chi2pid.I2.chi2_muon < 18) & (trkdf.pfp.trk.chi2pid.I2.chi2_proton > 87) & (trkdf.pfp.trk.len > 32)
-    trkdf.loc[:,("pfp", "trk", "is_muon", "", "", "")] = trkdf.loc[:,("pfp", "trk", "is_muon", "", "", "")].fillna(False) #fillna with False
+    if updaterecomb:
+        # Find candidate muon for each recomb uncertainty
+        # The last two elements exist, but are equivalent to the current last one
+        key_suffixes = ["_alpha_embm1", "_beta_90m1", "_R_embm1","_alpha_embp1", "_beta_90p1", "_R_embp1","_alpha_emb00"]#, "_beta_9000", "_R_emb00"]
+        mudf_list = []
+    else:
+        key_suffixes = [""]
+    assert len(set(key_suffixes)) == len(key_suffixes), f"key_suffixes must be unique, got {key_suffixes}"
+    for key_suffix in key_suffixes:
+        trkdf[("pfp", "trk", f"is_muon{key_suffix}", "", "", "")] = (trkdf[("pfp", "trk", "chi2pid", "I2", f"chi2_muon{key_suffix}","")] < 18) & (trkdf[("pfp", "trk", "chi2pid", "I2", f"chi2_proton{key_suffix}","")] > 87) & (trkdf.pfp.trk.len > 32)
+        trkdf.loc[:,("pfp", "trk", f"is_muon{key_suffix}", "", "", "")] = trkdf.loc[:,("pfp", "trk", f"is_muon{key_suffix}", "", "", "")].fillna(False) #fillna with False
 
-    # ----- loose PID for candidates ----
-    trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = np.nan
-    trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.pfp.trk.chi2pid.I2.chi2_muon/trkdf.pfp.trk.chi2pid.I2.chi2_proton
+        # ----- loose PID for candidates ----
+        trkdf[("pfp", "trk", "chi2pid", "I2", f"mu_over_p{key_suffix}", "")] = np.nan
+        trkdf[("pfp", "trk", "chi2pid", "I2", f"mu_over_p{key_suffix}", "")] = trkdf[("pfp", "trk", "chi2pid", "I2", f"chi2_muon{key_suffix}","")]/trkdf[("pfp", "trk", "chi2pid", "I2", f"chi2_proton{key_suffix}","")]
 
-    # mu candidate is track pfp with smallest chi2_mu/chi2_p
-    mudf = trkdf[(trkdf.pfp.trackScore > 0.6) & (trkdf.pfp.trk.is_muon) & ~(trkdf.pfp.trk.is_muon.isna())].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")]).groupby(level=[0,1]).head(1)
-    mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
-    slcdf = multicol_merge(slcdf, mudf.droplevel(-1), left_index=True, right_index=True, how="left", validate="one_to_one")
+        # mu candidate is track pfp with smallest chi2_mu/chi2_p
+        mudf = trkdf[(trkdf.pfp.trackScore > 0.6) & (trkdf[("pfp", "trk", f"is_muon{key_suffix}", "", "", "")] ) & ~(trkdf[("pfp", "trk", f"is_muon{key_suffix}", "", "", "")] .isna())].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid", "I2", f"mu_over_p{key_suffix}", "")]).groupby(level=[0,1]).head(1)
+        mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu" + key_suffix] + list(c)) for c in mudf.columns])
+        mudf_list.append(mudf)
+
+    slcdf = multicol_merge(slcdf, pd.concat(mudf_list, axis=1).droplevel(-1), left_index=True, right_index=True, how="left", validate="one_to_one")
     slcdf = multicol_merge(slcdf, hdr, left_index=True, right_index=True, how="left", validate="one_to_one")
-    idx_mu = mudf.index
 
     # truth
     trkdf.loc[:, ("pfp","trk","truth","p","totp","")] = np.sqrt(trkdf.pfp.trk.truth.p.genp.x**2 + trkdf.pfp.trk.truth.p.genp.y**2 + trkdf.pfp.trk.truth.p.genp.z**2)
@@ -190,16 +208,34 @@ def make_pandora_evtdf(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, 
     trkdf.loc[:, ("pfp","trk","truth","p","dir","z")] = trkdf.pfp.trk.truth.p.genp.z/trkdf.pfp.trk.truth.p.totp
 
     # ----- apply cuts for lightweight df -----
-    # if prelim_cuts:
-    #     # vertex in FV
-    #     slcdf = slcdf[InFV(slcdf.slc.vertex, 50, det=DETECTOR)]
+    if prelim_cuts:
+        # vertex in FV
+        slcdf = slcdf[InFV(slcdf.slc.vertex, 50, det=DETECTOR)]
 
-    #     # neutrino cuts
-    #     slcdf = slcdf[slcdf.slc.nu_score > 0.5]
+        # neutrino cuts
+        slcdf = slcdf[slcdf.slc.nu_score > 0.5]
+        slcdf = slcdf[slcdf.slc.is_clear_cosmic==0]
 
-    #     # require the muon
-    #     mask = (~np.isnan(slcdf.mu.pfp.trk.P.p_muon))
-    #     slcdf = slcdf[mask]
+        if full_cuts:
+
+            # require the muon
+            mask = slcdf[(f'mu{key_suffix}', 'pfp', 'trk', f'is_muon{key_suffix}', '', '', '')].astype(bool)
+            slcdf = slcdf[mask]
+
+            # low z cut
+            mask = (slcdf[(f'mu{key_suffix}', 'pfp', 'trk', 'end', 'z', '', '')].astype(float) > 6)
+            slcdf = slcdf[mask]
+
+            # require opt0 score
+            mask = (slcdf.slc.opt0.score > 320)
+            slcdf = slcdf[mask]
+
+            # Find slice with highest opt0 score
+            slcdf = (
+                slcdf.sort_values([("slc", "opt0", "score")], ascending=False)
+                    .groupby(level=slcdf.index.names[:-1])
+                    .first()
+)
 
     # ---- truth match ----
     bad_tmatch = np.invert(slcdf.slc.tmatch.eff > 0.5) & (slcdf.slc.tmatch.idx >= 0)
