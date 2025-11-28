@@ -40,6 +40,13 @@ def make_envdf(f):
     env = getenv.get_env(f)
     return env
 
+def make_histpotdf(f):
+    # get the value from the TotalPOT histogram
+    pot = f['TotalPOT'].values()
+    histpot = pd.DataFrame(data={'TotalPOT':pot})
+    histpot.index.name = 'entry'
+    return histpot
+
 def make_hdrdf(f):
     hdr = loadbranches(f["recTree"], hdrbranches).rec.hdr
     return hdr
@@ -97,6 +104,42 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nun
 
     return mcdf
 
+def make_geniedf(f):
+    if "GenieEvtRecTree" not in f:
+        return pd.DataFrame([])
+
+    # shape = n of particles in genie 
+    genie_particle_branches = [
+        "GenieEvtRec.StdHepPdg",
+        "GenieEvtRec.StdHepStatus",
+        "GenieEvtRec.StdHepFm",
+    ]
+    # shape = 1 (per event)
+    genie_event_branches = [
+        "GENIEEntry",
+        "SourceFileHash",
+        "GenieEvtRec.EvtNum",
+        "GenieEvtRec.StdHepN",
+    ]
+    # Branches all have different shapes, need to manipulate before merging 
+    p_df = loadbranches(f["GenieEvtRecTree"],genie_particle_branches)
+    # shape = 4-vector per particle 
+    m_df = loadbranches(f["GenieEvtRecTree"],["GenieEvtRec.StdHepP4",])
+    m_df = m_df.unstack().rename(columns={0: 'px', 1 :'py', 2 :'pz', 3:'E'}, level=2)
+    p_df = multicol_merge(p_df,m_df,left_index=True,right_index=True)
+
+    e_df = loadbranches(f["GenieEvtRecTree"],genie_event_branches)
+    p_df = multicol_merge(e_df,p_df,left_index=True,right_index=True) 
+    
+    # shape = 4-vector per event
+    v_df = loadbranches(f["GenieEvtRecTree"], ["GenieEvtRec.EvtVtx"])
+    v_df = v_df.unstack().rename(columns={0: 'x', 1 :'y', 2 :'z', 3:'E'}, level=2)
+
+    df = multicol_merge(v_df,p_df,left_index=True,right_index=True)
+    df = df.reset_index().set_index('entry')
+    df = df.rename(columns={'subentry': 'pindex'},level=0)
+    return df
+
 def make_mchdf(f, include_weights=False):
     mcdf = loadbranches(f["recTree"], mchbranches).rec.mc.prtl
     if include_weights:
@@ -149,7 +192,7 @@ def make_pfpdf(f, update_shw=True):
     
     if update_shw:
         ## necessary since "bestplane" stored in the cafs currently is from the dEdx alg
-        ## bestplane for dEdx alg is not the same as bestplane for shower energy
+        ## bestplane for dEdx alg is not necessarily the same as bestplane for shower energy
 
         # set shower energy as the one with the plane that has the most number of hits (maxplane)
         pfpdf['pfp','shw','maxplane','','',''] = pfpdf.loc(axis=1)['pfp','shw','plane',:,"nHits"].idxmax(axis=1).apply(lambda x: x[3])
@@ -321,6 +364,18 @@ def make_mcprimvisEdf(f):
 def make_mcprimdaughtersdf(f):
     mcprimdaughtersdf = loadbranches(f["recTree"], mcprimdaughtersbranches)
     return mcprimdaughtersdf
+
+def make_all_pandora_df(f):
+    pfpdf = make_pfpdf(f)
+    slcdf = make_slcdf(f)
+
+    slcdf = multicol_merge(slcdf, pfpdf, left_index=True, right_index=True, how="right", validate="one_to_many")
+
+    # distance from vertex to track/shower start
+    slcdf = multicol_add(slcdf, dmagdf(slcdf.slc.vertex, slcdf.pfp.trk.start).rename(("pfp", "trk", "dist_to_vertex")))
+    slcdf = multicol_add(slcdf, dmagdf(slcdf.slc.vertex, slcdf.pfp.shw.start).rename(("pfp", "shw", "dist_to_vertex")))
+
+    return pfpdf
 
 def make_pandora_df_calo_update(f, **trkArgs):
     pandoradf = make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=True, requireFiducial=False, updatecalo=True, **trkArgs)
