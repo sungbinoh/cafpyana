@@ -21,16 +21,28 @@ ICARUS_CALO_PARAMS = {
 
 #### Default
 #### == For each element, the first entry is for MC and the second entry is for the data
+#SBND_CALO_PARAMS = {
+#    "alpha_emb": [0.904, 0.904],
+#    "beta_90": [0.204, 0.204],
+#    "R_emb": [1.25, 1.25],
+#    "gains": [
+#        [0.0203521, 0.0202351, 0.0200727], ## MC
+#        [0.0223037, 0.0219534, 0.0215156]], ## Data
+#    "c_cal_frac": [1., 1., 1.],
+#    "etau": [100., 35.], ## first value for MC and second value for data
+#}
+
 SBND_CALO_PARAMS = {
-    "alpha_emb": [0.904, 0.904],
-    "beta_90": [0.204, 0.204],
-    "R_emb": [1.25, 1.25],
+    "alpha_emb": [0.94974351, 0.96447196],
+    "beta_90": [0.16711609, 0.15187464],
+    "R_emb": [1.2078499, 1.53803222],
     "gains": [
-        [0.0203521, 0.0202351, 0.0200727], ## MC
-        [0.0223037, 0.0219534, 0.0215156]], ## Data
+        [0.0203521, 0.0202351, 0.01809954], ## MC
+        [0.0223037, 0.0219534, 0.01839863]], ## Data
     "c_cal_frac": [1., 1., 1.],
     "etau": [100., 35.], ## first value for MC and second value for data
 }
+
 
 
 def chi2(hitdf, exprr, expdedx, experr, dedxname="dedx"):

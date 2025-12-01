@@ -274,13 +274,14 @@ slcbranches = [
     "rec.slc.opt0.hypoPE",
 ]
 
-## making this branches separately to support sbnd flat.caf versions older than v10_10_*
+## making this branches separately to support sbnd flat.caf versions older than v10_10_* (for 2025 Fall) or v10_06_00_09 (for 2025 Spring)
 barycenterFMbranches = [
     "rec.slc.barycenterFM.chargeTotal",
     "rec.slc.barycenterFM.flashTime",
     "rec.slc.barycenterFM.flashPEs",
     "rec.slc.barycenterFM.chi2",
     "rec.slc.barycenterFM.score",
+    "rec.slc.barycenterFM.deltaZ",
 ]
 
 mcbranches = [
