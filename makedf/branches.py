@@ -187,7 +187,8 @@ shwbranches = [
     shwbranch + 'conversion_gap', 
     shwbranch + "density",
     shwbranch + "open_angle",
-    shwbranch + 'bestplane',
+    #shwbranch + 'bestplane', ## FIXME, it will only work for SBND Fall Valid II and after that
+    shwbranch + 'bestplane_for_energy', shwbranch + 'bestplane_for_dedx',
     shwbranch + 'bestplane_dEdx', shwbranch + 'bestplane_energy',
     shwbranch + 'plane.0.dEdx',   shwbranch + 'plane.1.dEdx', shwbranch + 'plane.2.dEdx',
     shwbranch + 'plane.0.energy', shwbranch + 'plane.1.energy', shwbranch + 'plane.2.energy',
