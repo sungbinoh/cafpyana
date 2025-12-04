@@ -71,8 +71,8 @@ def run_pool(output, inputs, nproc):
                 size_bytes = df.memory_usage(deep=True).sum() if df is not None else 0
                 size_gb = size_bytes / (1024**3)
                 if len(dfs) == 1: ## no recTree but with TotalPOT histogram
-                    size_counters[0] += size_gb
-                    df_buffers[0].append(df)
+                    size_counters["histpotdf"] += size_gb
+                    df_buffers["histpotdf"].append(df)
                 else:
                     size_counters[k] += size_gb
                     if df is not None:

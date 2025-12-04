@@ -150,7 +150,7 @@ def make_numucc_1munp0pi_pandora_df(f):
     barycenterFM_df = loadbranches(f["recTree"], barycenterFMbranches).rec
     pandora_df = multicol_merge(barycenterFM_df, pandora_df, left_index=True, right_index=True, how="right", validate="one_to_many")
     
-    print(pandora_df.columns)
+    #print(pandora_df.columns)
     #print(pandora_df.slc.barycenterFM)
     #print(barycenterFM_df)
     #print(barycenterFM_df.slc.barycenterFM.chi2.value_counts())

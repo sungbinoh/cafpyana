@@ -287,8 +287,11 @@ def make_muonhit_df(f):
 
     muon_hits = muon_hits[(muon_hits.pitch < 1) & (muon_hits.badorder == False)]
 
-    etau_arr = collect_etau_db.get_etau(muon_hits)
-    muon_hits['etau'] = etau_arr
+    if not ismc:
+        etau_arr = collect_etau_db.get_etau(muon_hits)
+        muon_hits['etau'] = etau_arr
+    else:
+        muon_hits['etau'] = etau_mc
 
     # output dfs
     muon_hits_selected = muon_hits.loc[:, [

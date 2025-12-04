@@ -9,6 +9,8 @@ pd.options.mode.chained_assignment = None
 #### slice and pfp level selections
 ###############################################
 
+etau_mc = 35.
+
 def InFV_nohiyz(data):
     xmin = 10.
     xmax = 190.
@@ -234,6 +236,9 @@ def make_protonhit_df(f):
     subrun = hdrdf.subrun
     evt = hdrdf.evt
 
+    mchdrdf = make_mchdrdf(f)
+    ismc = hdrdf.ismc.iloc[0]
+
     pandoradf = make_pandora_df(f)
     pandoradf = pandoradf[InFV_nohiyz(pandoradf.slc.vertex)]
     pandoradf = pandoradf[(pandoradf.pfp.trk.len > 4.) & (pandoradf.pfp.dist_to_vertex < 6.)]
@@ -243,7 +248,6 @@ def make_protonhit_df(f):
     trkhitdf = trkhitdf.join(trktruehitdf)
     trkhitdf = trkhitdf.join(subrun)
     trkhitdf = trkhitdf.join(evt)
-    
     #print(pandoradf)
     #print(pandoradf.pfp.trk.columns)
 
@@ -273,6 +277,8 @@ def make_protonhit_df(f):
     proton_hits_1 = check_flipped(proton_hits, plane=2)
     proton_hits_1["selection"] = 1
 
+    #print("1 prong done")
+
     # 2 prong
     longer_data, shorter_data = select_topology(pandoradf, nprong=2, max_len_cut=25, min_len_cut=25, contained=True)
     proton_candidate = select_calorimetry(shorter_data, muscore_cut_val=20, pscore_cut_val=80)
@@ -299,21 +305,30 @@ def make_protonhit_df(f):
     proton_hits_2 = check_flipped(proton_hits, plane=2)
     proton_hits_2["selection"] = 2
 
+    #print("1 prong done")
     proton_hits = pd.concat([proton_hits_1, proton_hits_2], ignore_index=False)
 
+    #print("1,2 prong merging done")
     # apply hit-level selections
     proton_hits = proton_hits[proton_hits.flipped == False]
     proton_hits = drop_endhits(proton_hits, ndrop=3, plane=2)
     proton_hits = proton_hits[proton_hits.rr > 0.6]
-
+    #print("rr cut")
     proton_hits = check_badorder(proton_hits)
     proton_hits = check_ntpcs(proton_hits)
     proton_hits = check_wireskip(proton_hits)
-
+    #print("checks")
     proton_hits = proton_hits[(proton_hits.pitch < 1) & (proton_hits.badorder == False)]
-    etau_arr = collect_etau_db.get_etau(proton_hits)
-    proton_hits['etau'] = etau_arr
-    #print(proton_hits)
+    #print("pitch")
+
+    if not ismc:
+        etau_arr = collect_etau_db.get_etau(proton_hits)
+        #print("etau")
+        proton_hits['etau'] = etau_arr
+    else:
+        proton_hits['etau'] = etau_mc
+
+        #print(proton_hits)
 
     # output dfs
     proton_hits_selected = proton_hits.loc[:, [
