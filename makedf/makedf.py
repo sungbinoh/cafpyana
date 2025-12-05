@@ -47,6 +47,13 @@ def make_histpotdf(f):
     histpot.index.name = 'entry'
     return histpot
 
+def make_histgenevtdf(f):
+    # get the value from the TotalPOT histogram
+    genevt = f['TotalGenEvents'].values()
+    histgenevt = pd.DataFrame(data={'TotalGenEvents':genevt})
+    histgenevt.index.name = 'entry'
+    return histgenevt
+
 def make_hdrdf(f):
     hdr = loadbranches(f["recTree"], hdrbranches).rec.hdr
     return hdr

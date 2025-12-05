@@ -15,7 +15,7 @@ import time
 import uuid
 import tempfile
 
-from makedf.makedf import make_histpotdf
+from makedf.makedf import make_histpotdf, make_histgenevtdf
 
 CPU_COUNT = multiprocessing.cpu_count()
 
@@ -118,6 +118,17 @@ def _loaddf(applyfs, preprocess, g):
                 dfs.append(df)
             else:
                 print("File (%s) missing TotalPOT histgoram. Cannot make histpotdf..." % fname)
+
+            if "TotalGenEvents" in f:
+                df = make_histgenevtdf(f)
+                df["__ntuple"] = index
+                df.set_index("__ntuple", append=True, inplace=True)
+                new_order = [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
+                df = df.reorder_levels(new_order)
+
+                dfs.append(df)
+            else:
+                print("File (%s) missing TotalGenEvents histgoram. Cannot make histgenevtdf..." % fname)
 
             if not dfs:
                 return None
