@@ -147,3 +147,5 @@ python -c "import XRootD" > /dev/null 2>&1 || {
 export PYTHONPATH=$PYTHONPATH:${CAFPYANA_DIR}
 export LD_LIBRARY_PATH=${VENV_DIR}/lib/python3.9/site-packages/xrootd-5.6.9-py3.9-linux-x86_64.egg/pyxrootd:$LD_LIBRARY_PATH
 export CAFPYANA_WD=${CAFPYANA_DIR}
+
+htgettoken -a htvaultprod.fnal.gov -i sbnd
