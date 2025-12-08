@@ -153,7 +153,7 @@ def get_pid_result(row):
     chi2_proton = row[('pfp', 'trk', 'chi2pid', 'I2', 'chi2_proton', '')]
     len = row[('pfp', 'trk', 'len', '', '', '')]
 
-    if chi2_muon < 25. and chi2_proton > 100.:
+    if chi2_muon < 25. and chi2_proton > 90.:
         return 13  # muon
     elif chi2_proton < 90.:
         return 2212  # proton
