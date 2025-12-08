@@ -103,7 +103,15 @@ trueparticlebranches = [
     "rec.true_particles.plane.1.2.visE",
 ]
 
-crtspbranches = [
+crtvetobranches = [      
+    "rec.sbnd_crt_veto.V0",
+    "rec.sbnd_crt_veto.V1",
+    "rec.sbnd_crt_veto.V2",
+    "rec.sbnd_crt_veto.V3",
+    "rec.sbnd_crt_veto.V4"            
+]
+
+crtspbranches = [      
     "rec.crt_spacepoints.pe",
     "rec.crt_spacepoints.position.x",
     "rec.crt_spacepoints.position.y",

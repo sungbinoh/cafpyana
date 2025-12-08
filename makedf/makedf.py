@@ -151,6 +151,10 @@ def make_crtspdf(f):
     crtspdf = loadbranches(f["recTree"], crtspbranches).rec
     return crtspdf
 
+def make_crtvetodf(f):
+    crtvetodf = loadbranches(f["recTree"], crtvetobranches).rec
+    return crtvetodf
+
 def make_crthitdf(f):
     crthitdf = loadbranches(f["recTree"], crthitbranches).rec.crt_hits
     return crthitdf
