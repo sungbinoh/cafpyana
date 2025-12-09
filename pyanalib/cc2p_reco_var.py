@@ -44,8 +44,82 @@ def Signal(df): # definition
     is_fv = InFV(df.position)
     is_numu = (df.pdg == 14)
     is_cc = (df.iscc == 1)
-    is_2p0pi = (df.nmu == 1) & (df.npi == 0) & (df.np == 2) & (df.npi0 == 0)
+    is_2p0pi = (df.nmu_27MeV == 1) & (df.npi == 0) & (df.np_50MeV == 2) & (df.npi0 == 0)
     return is_fv & is_numu & is_cc & is_2p0pi
+
+def cc2pNpi(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_2pNpi = (df.nmu_27MeV == 1) & ( df.npi + df.npi0 > 0 ) & (df.np_50MeV == 2) 
+    return is_fv & is_numu & is_cc & is_2pNpi
+
+def cc1p0pi(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_1p0pi = (df.nmu_27MeV == 1) & (df.npi == 0) & (df.np_50MeV == 1) & (df.npi0 == 0)
+    return is_fv & is_numu & is_cc & is_1p0pi
+
+def cc0p0pi(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_0p0pi = (df.nmu_27MeV == 1) & (df.npi == 0) & (df.np_50MeV == 0) & (df.npi0 == 0)
+    return is_fv & is_numu & is_cc & is_0p0pi
+
+def cc0pNpi(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_0pNpi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 > 0) & (df.np_50MeV == 0)
+    return is_fv & is_numu & is_cc & is_0pNpi
+
+def cc1pMpi(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_1pMpi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 > 1) & (df.np_50MeV == 1)
+    return is_fv & is_numu & is_cc & is_1pMpi
+
+def cc1p1pi(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_1p1pi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 == 1) & (df.np_50MeV == 1)
+    return is_fv & is_numu & is_cc & is_1p1pi
+
+def out_range(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_out_range = (df.nmu_27MeV == 0) & (df.nmu == 1) & (df.np_50MeV == 0) & (df.np == 1)
+    return is_fv & is_numu & is_cc & is_out_range
+
+def bkg_other(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_1p0pi = (df.nmu_27MeV == 1) & (df.npi == 0) & (df.np_50MeV == 1) & (df.npi0 == 0)
+    is_2p0pi = (df.nmu_27MeV == 1) & (df.npi == 0) & (df.np_50MeV == 2) & (df.npi0 == 0)    
+    is_1p1pi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 == 1) & (df.np_50MeV == 1)    
+    is_2pNpi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 > 0) & (df.np_50MeV == 2)   
+    is_1pMpi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 > 1) & (df.np_50MeV == 1)
+    #is_out_range = (df.nmu_27MeV == 0) & (df.nmu == 1) & (df.np_50MeV == 0) & (df.np == 1)    
+
+    mask = is_fv & is_numu & is_cc & ~is_1p0pi & ~is_2p0pi & ~is_2pNpi & ~is_1p1pi & ~is_1pMpi
+    # if mask.any():
+    #     print(df.loc[mask, ['nmu_27MeV', 'np_50MeV', 'npi', 'npi0']])        
+        
+    return mask
 
 ## -- reco level flags
 def pass_slc_with_n_pfps(df, n = 3):
@@ -79,7 +153,7 @@ def get_pid_result(row):
     chi2_proton = row[('pfp', 'trk', 'chi2pid', 'I2', 'chi2_proton', '')]
     len = row[('pfp', 'trk', 'len', '', '', '')]
 
-    if chi2_muon < 25. and chi2_proton > 100.:
+    if chi2_muon < 25. and chi2_proton > 90.:
         return 13  # muon
     elif chi2_proton < 90.:
         return 2212  # proton

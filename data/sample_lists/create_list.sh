@@ -8,7 +8,7 @@ setup sbndcode v10_10_03_01 -q e26:prof
 htgettoken -a htvaultprod.fnal.gov -i sbnd
 
 # example usage
-# ./create_list.sh mc_MCP2025B_5e18_02_prodgenie_corsika_proton_rockbox_sbnd_CV_caf_flat_caf_sbnd sbnd/prod_2025B sbnd
+# ./create_list.sh mc_MCP2025B_5e18_02_prodgenie_corsika_proton_rockbox_sbnd_CV_caf_flat_caf_sbnd sbnd/prod_2025B/FallValidationII sbnd
 
 # SAMDEFs for 2025B production
 # MC: mc_MCP2025B_5e18_02_prodgenie_corsika_proton_rockbox_sbnd_CV_caf_flat_caf_sbnd
