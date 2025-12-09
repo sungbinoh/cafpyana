@@ -9,6 +9,8 @@ pd.options.mode.chained_assignment = None
 #### slice and pfp level selections
 ###############################################
 
+etau_mc = 35.
+
 def InFV_nohiyz(data):
     xmin = 10.
     xmax = 190.
@@ -233,6 +235,9 @@ def make_muonhit_df(f):
     run = hdrdf.run
     subrun = hdrdf.subrun
     evt = hdrdf.evt
+
+    mchdrdf = make_mchdrdf(f)
+    ismc = hdrdf.ismc.iloc[0]
 
     pandoradf = make_pandora_df(f)
     pandoradf = pandoradf[InFV_nohiyz(pandoradf.slc.vertex)]
