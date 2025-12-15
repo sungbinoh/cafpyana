@@ -133,10 +133,9 @@ python -c "import XRootD" > /dev/null 2>&1 || {
     tar -zxvf xrootd-5.6.9.tar.gz
     rm xrootd-5.6.9.tar.gz
     cd xrootd-5.6.9
-    # this seems to be needed depending on SSL version -- GPVMs need it while EAF doesn't
-    if [ $EAF -eq 0 ]; then
-        sed -i 's/SSL_CTX_flush_sessions/SSL_CTX_flush_sessions_ex/g' src/XrdTls/XrdTlsContext.cc
-    fi
+    # this seems to be needed depending on SSL version -- GPVMs and Fermilab EAF need it
+    sed -i 's/SSL_CTX_flush_sessions/SSL_CTX_flush_sessions_ex/g' src/XrdTls/XrdTlsContext.cc
+
     python setup.py install 2>&1 | tee -a ${XROOTLOG}
     cd ${CAFPYANA_DIR}
     PATH=$OLDPATH
