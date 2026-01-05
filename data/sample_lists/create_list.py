@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-import re
 import sys
 import argparse
-import pathlib
 
 import samweb_client
 
