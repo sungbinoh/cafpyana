@@ -23,6 +23,14 @@ def definition_exists(defname: str):
 
 def p2x(pnfs_path: str, check=False):
     """Convert a pnfs path to xrootd url."""
+    if check:
+        # do a check, but this is slow
+        p = pathlib.Path(pnfs_path)
+        if not p.is_file():
+            raise RuntimeError(f'File {pnfs_path} not found when converting to XROOT URL')
+        if not XROOT_RE.match(pnfs_path):
+            raise RuntimeError(f'File {pnfs_path} does not look like a /pnfs path')
+
     return XROOT_RE.sub(rf'{XROOT_URL}\1', pnfs_path)
 
 
