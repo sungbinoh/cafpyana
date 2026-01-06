@@ -9,7 +9,11 @@ import argparse
 import samweb_client
 
 
-SWCLIENT = samweb_client.SAMWebClient()
+try:
+    SWCLIENT = samweb_client.SAMWebClient()
+except samweb_client.client.ExperimentNotDefined:
+    print('Must set environment variable EXPERIMENT to run, e.g., "export EXPERIMENT=sbnd"', file=sys.stderr)
+    sys.exit(1)
 
 
 def definition_exists(defname: str):
