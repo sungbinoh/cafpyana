@@ -19,6 +19,16 @@ def dotdf(df1, df2):
 def unitdf(df):
     return df.divide(magdf(df), axis=0)
 
+def InAV(df,det="SBND"):
+    if det == "SBND":
+        xmin = -195
+        ymin = -195
+        zmin = 5
+        xmax = 195
+        ymax = 195
+        zmax = 495
+    return (df.x > xmin) & (df.x < xmax) & (df.y > ymin) & (df.y < ymax) & (df.z > zmin) & (df.z < zmax)
+
 def InFV(df, inzback, inx=10, iny=10, inzfront=10, det="ICARUS"):
     if det == "ICARUS":
         xmin_C0 = -358.49
@@ -55,7 +65,16 @@ def InFV(df, inzback, inx=10, iny=10, inzfront=10, det="ICARUS"):
         ymax =  190
         zmax =  450.
         return (df.x > xmin) & (df.x < xmax) & (df.y > ymin) & (df.y < ymax) & (df.z > zmin) & (df.z < zmax)
-    
+
+    elif det == "SBND_nohighyz":
+        xmax = 190.
+        zmin = 10.
+        zmax = 450.
+        ymax_highz = 100.
+        pass_xz = (np.abs(df.x) < xmax) & (df.z > zmin) & (df.z < zmax)
+        pass_y = ((df.z < 250) & (np.abs(df.y) < 190.)) | ((df.z > 250) & (df.y > -190.) & (df.y < ymax_highz))
+        return pass_xz & pass_y
+
     else:
         raise NameError("DETECTOR not valid, should be SBND or ICARUS")
 

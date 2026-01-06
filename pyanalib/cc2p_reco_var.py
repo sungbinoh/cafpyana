@@ -44,8 +44,82 @@ def Signal(df): # definition
     is_fv = InFV(df.position)
     is_numu = (df.pdg == 14)
     is_cc = (df.iscc == 1)
-    is_2p0pi = (df.nmu_27MeV == 1) & (df.npi_30MeV == 0) & (df.np_50MeV == 2) & (df.npi0 == 0)
+    is_2p0pi = (df.nmu_27MeV == 1) & (df.npi == 0) & (df.np_50MeV == 2) & (df.npi0 == 0)
     return is_fv & is_numu & is_cc & is_2p0pi
+
+def cc2pNpi(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_2pNpi = (df.nmu_27MeV == 1) & ( df.npi + df.npi0 > 0 ) & (df.np_50MeV == 2) 
+    return is_fv & is_numu & is_cc & is_2pNpi
+
+def cc1p0pi(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_1p0pi = (df.nmu_27MeV == 1) & (df.npi == 0) & (df.np_50MeV == 1) & (df.npi0 == 0)
+    return is_fv & is_numu & is_cc & is_1p0pi
+
+def cc0p0pi(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_0p0pi = (df.nmu_27MeV == 1) & (df.npi == 0) & (df.np_50MeV == 0) & (df.npi0 == 0)
+    return is_fv & is_numu & is_cc & is_0p0pi
+
+def cc0pNpi(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_0pNpi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 > 0) & (df.np_50MeV == 0)
+    return is_fv & is_numu & is_cc & is_0pNpi
+
+def cc1pMpi(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_1pMpi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 > 1) & (df.np_50MeV == 1)
+    return is_fv & is_numu & is_cc & is_1pMpi
+
+def cc1p1pi(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_1p1pi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 == 1) & (df.np_50MeV == 1)
+    return is_fv & is_numu & is_cc & is_1p1pi
+
+def out_range(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_out_range = (df.nmu_27MeV == 0) & (df.nmu == 1) & (df.np_50MeV == 0) & (df.np == 1)
+    return is_fv & is_numu & is_cc & is_out_range
+
+def bkg_other(df): # definition
+    
+    is_fv = InFV(df.position)
+    is_numu = (df.pdg == 14)
+    is_cc = (df.iscc == 1)
+    is_1p0pi = (df.nmu_27MeV == 1) & (df.npi == 0) & (df.np_50MeV == 1) & (df.npi0 == 0)
+    is_2p0pi = (df.nmu_27MeV == 1) & (df.npi == 0) & (df.np_50MeV == 2) & (df.npi0 == 0)    
+    is_1p1pi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 == 1) & (df.np_50MeV == 1)    
+    is_2pNpi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 > 0) & (df.np_50MeV == 2)   
+    is_1pMpi = (df.nmu_27MeV == 1) & (df.npi + df.npi0 > 1) & (df.np_50MeV == 1)
+    #is_out_range = (df.nmu_27MeV == 0) & (df.nmu == 1) & (df.np_50MeV == 0) & (df.np == 1)    
+
+    mask = is_fv & is_numu & is_cc & ~is_1p0pi & ~is_2p0pi & ~is_2pNpi & ~is_1p1pi & ~is_1pMpi
+    # if mask.any():
+    #     print(df.loc[mask, ['nmu_27MeV', 'np_50MeV', 'npi', 'npi0']])        
+        
+    return mask
 
 ## -- reco level flags
 def pass_slc_with_n_pfps(df, n = 3):
@@ -74,12 +148,12 @@ def Avg(df, pid, drop_0=True):  # exclude value if 0
     return average
 
 def get_pid_result(row):
-    
-    chi2_muon = row[('pfp', 'trk', 'chi2pid', 'I2', 'chi2_muon', '')]
+
+    chi2_muon = row[('pfp', 'trk', 'chi2pid', 'I2', 'chi2_muon', '')]    
     chi2_proton = row[('pfp', 'trk', 'chi2pid', 'I2', 'chi2_proton', '')]
     len = row[('pfp', 'trk', 'len', '', '', '')]
 
-    if chi2_muon < 25. and chi2_proton > 100.:
+    if chi2_muon < 25. and chi2_proton > 90.:
         return 13  # muon
     elif chi2_proton < 90.:
         return 2212  # proton
@@ -127,9 +201,13 @@ def get_n_recopid_per_slc(df):
 
     this_df.set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index"], inplace=True)
 
-    df[('muon_counter', '', '', '', '', '')] = this_df.n_mu
-    df[('proton_counter', '', '', '', '', '')] = this_df.n_proton
-    df[('pion_counter', '', '', '', '', '')] = this_df.n_pion    
+    df.loc[:, ('muon_counter', '', '', '', '', '')] = this_df['n_mu']
+    df.loc[:, ('proton_counter', '', '', '', '', '')] = this_df['n_proton']
+    df.loc[:, ('pion_counter', '', '', '', '', '')] = this_df['n_pion']
+
+    #df[('muon_counter', '', '', '', '', '')] = this_df.n_mu
+    #df[('proton_counter', '', '', '', '', '')] = this_df.n_proton
+    #df[('pion_counter', '', '', '', '', '')] = this_df.n_pion    
 
     return df
 
@@ -223,6 +301,9 @@ def reco_imbalance(muon_dir_x, muon_dir_y, muon_dir_z, range_P_muon,
     alpha_3d_denom = q * pn
     alpha_3d = np.arccos(alpha_3d_num / alpha_3d_denom) * 180./np.pi
         
+    # invariant mass
+    invm = np.sqrt(np.power((e_lead_p + e_rec_p), 2) - np.power(proton_p, 2));        
+        
     return pd.Series({
                     'deltapt': deltapt,
                     'deltaalphat': deltaalphat,
@@ -232,7 +313,8 @@ def reco_imbalance(muon_dir_x, muon_dir_y, muon_dir_z, range_P_muon,
                     'e_cal': e_cal,
                     'pn':pn,
                     'phi_3d': phi_3d,
-                    'alpha_3d': alpha_3d         
+                    'alpha_3d': alpha_3d,
+                    'invm': invm       
                     })
 
 def measure_reco_imbalance(group):

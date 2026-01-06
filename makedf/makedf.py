@@ -2,7 +2,7 @@ from pyanalib.pandas_helpers import *
 from .branches import *
 from .util import *
 from .calo import *
-from . import numisyst, g4syst, geniesyst, bnbsyst
+from . import numisyst, g4syst, geniesyst, bnbsyst, getenv
 from makedf import chi2pid
 
 pd.set_option('future.no_silent_downcasting', True)
@@ -36,6 +36,17 @@ TRUE_KE_THRESHOLDS = {"nmu_27MeV": ["muon", 0.027],
                       "nn_0MeV": ["neutron", 0.0]
                       }
 
+def make_envdf(f):
+    env = getenv.get_env(f)
+    return env
+
+def make_histpotdf(f):
+    # get the value from the TotalPOT histogram
+    pot = f['TotalPOT'].values()
+    histpot = pd.DataFrame(data={'TotalPOT':pot})
+    histpot.index.name = 'entry'
+    return histpot
+
 def make_hdrdf(f):
     hdr = loadbranches(f["recTree"], hdrbranches).rec.hdr
     return hdr
@@ -51,6 +62,10 @@ def make_potdf_bnb(f):
 def make_potdf_numi(f):
     pot = loadbranches(f["recTree"], numipotbranches).rec.hdr.numiinfo
     return pot
+
+def make_framedf(f):
+    frame = loadbranches(f["recTree"],sbndframebranches).rec.sbnd_frames
+    return frame
 
 def make_triggerdf(f):
     return  loadbranches(f["recTree"], trigger_info_branches).rec.hdr.triggerinfo
@@ -89,6 +104,42 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nun
 
     return mcdf
 
+def make_geniedf(f):
+    if "GenieEvtRecTree" not in f:
+        return pd.DataFrame([])
+
+    # shape = n of particles in genie 
+    genie_particle_branches = [
+        "GenieEvtRec.StdHepPdg",
+        "GenieEvtRec.StdHepStatus",
+        "GenieEvtRec.StdHepFm",
+    ]
+    # shape = 1 (per event)
+    genie_event_branches = [
+        "GENIEEntry",
+        "SourceFileHash",
+        "GenieEvtRec.EvtNum",
+        "GenieEvtRec.StdHepN",
+    ]
+    # Branches all have different shapes, need to manipulate before merging 
+    p_df = loadbranches(f["GenieEvtRecTree"],genie_particle_branches)
+    # shape = 4-vector per particle 
+    m_df = loadbranches(f["GenieEvtRecTree"],["GenieEvtRec.StdHepP4",])
+    m_df = m_df.unstack().rename(columns={0: 'px', 1 :'py', 2 :'pz', 3:'E'}, level=2)
+    p_df = multicol_merge(p_df,m_df,left_index=True,right_index=True)
+
+    e_df = loadbranches(f["GenieEvtRecTree"],genie_event_branches)
+    p_df = multicol_merge(e_df,p_df,left_index=True,right_index=True) 
+    
+    # shape = 4-vector per event
+    v_df = loadbranches(f["GenieEvtRecTree"], ["GenieEvtRec.EvtVtx"])
+    v_df = v_df.unstack().rename(columns={0: 'x', 1 :'y', 2 :'z', 3:'E'}, level=2)
+
+    df = multicol_merge(v_df,p_df,left_index=True,right_index=True)
+    df = df.reset_index().set_index('entry')
+    df = df.rename(columns={'subentry': 'pindex'},level=0)
+    return df
+
 def make_mchdf(f, include_weights=False):
     mcdf = loadbranches(f["recTree"], mchbranches).rec.mc.prtl
     if include_weights:
@@ -100,6 +151,10 @@ def make_crtspdf(f):
     crtspdf = loadbranches(f["recTree"], crtspbranches).rec
     return crtspdf
 
+def make_crtvetodf(f):
+    crtvetodf = loadbranches(f["recTree"], crtvetobranches).rec
+    return crtvetodf
+
 def make_crthitdf(f):
     crthitdf = loadbranches(f["recTree"], crthitbranches).rec.crt_hits
     return crthitdf
@@ -109,7 +164,7 @@ def make_opflashdf(f):
     return opflashdf
 
 def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False):
-    trkdf = loadbranches(f["recTree"], trkbranches + shwbranches)
+    trkdf = loadbranches(f["recTree"], trkbranches)
     if scoreCut:
         trkdf = trkdf.rec.slc.reco[trkdf.rec.slc.reco.pfp.trackScore > 0.5]
     else:
@@ -134,6 +189,23 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
     trkdf[("pfp", "tindex", "", "", "", "")] = trkdf.index.get_level_values(2)
 
     return trkdf
+
+def make_pfpdf(f, update_shw=True):
+    pfpdf = loadbranches(f["recTree"], trkbranches + shwbranches)
+    pfpdf = pfpdf.rec.slc.reco
+    
+    if update_shw:
+        ## necessary since "bestplane" stored in the cafs currently is from the dEdx alg
+        ## bestplane for dEdx alg is not necessarily the same as bestplane for shower energy
+
+        # set shower energy as the one with the plane that has the most number of hits (maxplane)
+        pfpdf['pfp','shw','maxplane','','',''] = pfpdf.loc(axis=1)['pfp','shw','plane',:,"nHits"].idxmax(axis=1).apply(lambda x: x[3])
+        pfpdf['pfp','shw','maxplane_energy','','',''] = np.nan
+        conditions = [pfpdf['pfp','shw','maxplane','','','']=="I2",pfpdf['pfp','shw','maxplane','','','']=="I1",pfpdf['pfp','shw','maxplane','','','']=="I0"]
+        choices = [pfpdf['pfp','shw','plane','I2','energy',''],pfpdf['pfp','shw','plane','I1','energy',''],pfpdf['pfp','shw','plane','I0','energy','']]
+        pfpdf['pfp','shw','maxplane_energy','','',''] = np.select(conditions,choices,default=np.nan)
+    pfpdf[("pfp", "tindex", "", "", "", "")] = pfpdf.index.get_level_values(2)
+    return pfpdf
 
 def make_trkhitdf_plane0(f):
     return make_trkhitdf(f, 0)
@@ -192,6 +264,22 @@ def make_trkhitdf(f, plane=2):
 
     return df
 
+def make_trktruehitdf_plane0(f):
+    return make_trktruehitdf(f, 0)
+
+def make_trktruehitdf_plane1(f):
+    return make_trktruehitdf(f, 1)
+
+def make_trktruehitdf_plane2(f):
+    return make_trktruehitdf(f, 2)
+
+def make_trktruehitdf(f, plane=2):
+    branches = [trktruehitbranches_P0, trktruehitbranches_P1, trktruehitbranches][plane]
+    df = loadbranches(f["recTree"], branches).rec.slc.reco.pfp.trk.calo
+    df = df["I" + str(plane)].points.truth
+
+    return df
+
 def make_slcdf(f):
     slcdf = loadbranches(f["recTree"], slcbranches)
     slcdf = slcdf.rec
@@ -236,7 +324,7 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
         this_KE = mcprimdf[np.abs(mcprimdf.pdg)==PDG[particle][0]].genE - PDG[particle][2]
         mcdf = multicol_add(mcdf, ((np.abs(mcprimdf.pdg)==PDG[particle][0]) & (this_KE > threshold)).groupby(level=[0,1]).sum().rename(identifier))
  
-    # lepton info
+    # muon info
     mudf = mcprimdf[np.abs(mcprimdf.pdg)==13].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
     mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
 
@@ -246,9 +334,14 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     pdf = mcprimdf[mcprimdf.pdg==2212].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
     pdf.columns = pd.MultiIndex.from_tuples([tuple(["p"] + list(c)) for c in pdf.columns])
 
+    # electron info
+    edf = mcprimdf[np.abs(mcprimdf.pdg)==11].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
+    edf.columns = pd.MultiIndex.from_tuples([tuple(["e"] + list(c)) for c in edf.columns])
+
     mcdf = multicol_merge(mcdf, mudf, left_index=True, right_index=True, how="left", validate="one_to_one")
     mcdf = multicol_merge(mcdf, cpidf, left_index=True, right_index=True, how="left", validate="one_to_one")
     mcdf = multicol_merge(mcdf, pdf, left_index=True, right_index=True, how="left", validate="one_to_one")
+    mcdf = multicol_merge(mcdf, edf, left_index=True, right_index=True, how="left", validate="one_to_one")
 
     # primary track variables
     mcdf.loc[:, ('mu','totp','')] = np.sqrt(mcdf.mu.genp.x**2 + mcdf.mu.genp.y**2 + mcdf.mu.genp.z**2)
@@ -268,11 +361,31 @@ def make_mcprimdf(f):
     mcprimdf = loadbranches(f["recTree"], mcprimbranches)
     return mcprimdf
 
+def make_mcprimvisEdf(f):
+    mcprimvisEdf = loadbranches(f["recTree"], mcprimvisEbranches)
+    return mcprimvisEdf
+
+def make_mcprimdaughtersdf(f):
+    mcprimdaughtersdf = loadbranches(f["recTree"], mcprimdaughtersbranches)
+    return mcprimdaughtersdf
+
+def make_all_pandora_df(f):
+    pfpdf = make_pfpdf(f)
+    slcdf = make_slcdf(f)
+
+    slcdf = multicol_merge(slcdf, pfpdf, left_index=True, right_index=True, how="right", validate="one_to_many")
+
+    # distance from vertex to track/shower start
+    slcdf = multicol_add(slcdf, dmagdf(slcdf.slc.vertex, slcdf.pfp.trk.start).rename(("pfp", "trk", "dist_to_vertex")))
+    slcdf = multicol_add(slcdf, dmagdf(slcdf.slc.vertex, slcdf.pfp.shw.start).rename(("pfp", "shw", "dist_to_vertex")))
+
+    return pfpdf
+
 def make_pandora_df_calo_update(f, **trkArgs):
-    pandoradf = make_pandora_df(f, trkScoreCut=False, trkDistCut=10., cutClearCosmic=True, requireFiducial=False, updatecalo=True, **trkArgs)
+    pandoradf = make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=True, requireFiducial=False, updatecalo=True, **trkArgs)
     return pandoradf
 
-def make_pandora_df(f, trkScoreCut=False, trkDistCut=10., cutClearCosmic=False, requireFiducial=False, updatecalo=False, **trkArgs):
+def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, requireFiducial=False, updatecalo=False, **trkArgs):
     # load
     trkdf = make_trkdf(f, trkScoreCut, **trkArgs)
     if updatecalo:
@@ -289,6 +402,8 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=10., cutClearCosmic=False, 
         chi2_pids = []
         for plane in range(0, 3):
             trkhitdf = make_trkhitdf(f, plane)
+            if det == "SBND": ## FIXME
+                trkhitdf = trkhitdf[InFV(df = trkhitdf, inzback = 0., det = "SBND_nohighyz")]
             #dqdx_redo = chi2pid.dqdx(trkhitdf, gain=det, calibrate=det, isMC=ismc)
             dedx_redo = chi2pid.dedx(trkhitdf, gain=det, calibrate=det, plane=plane, isMC=ismc)
             dedx_bias = (dedx_redo - trkhitdf.dedx) / trkhitdf.dedx

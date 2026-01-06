@@ -21,7 +21,7 @@ def make_cc2p_ttree_mc(dfname):
     matchdf = ph.multicol_merge(matchdf.reset_index(), mcnuwgtdf.reset_index(),
                                left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
                                right_on=[("__ntuple", ""), ("entry", ""), ("rec.mc.nu..index", "")],
-                               how="left") ## -- save all sllices
+                               how="left") ## -- save all slices
 
     wgt_columns = [c for c in list(set(mcnuwgtdf.columns.get_level_values(0))) if c.startswith("GENIEReWeight")]
     

@@ -4,11 +4,11 @@
 # in an sl7 container
 # source /exp/$(id -ng)/data/users/vito/podman/start_SL7dev_jsl.sh
 source /cvmfs/sbnd.opensciencegrid.org/products/sbnd/setup_sbnd.sh
-setup sbndcode v10_06_00_02 -q e26:prof
+setup sbndcode v10_10_03_01 -q e26:prof
 htgettoken -a htvaultprod.fnal.gov -i sbnd
 
 # example usage
-# ./create_list.sh mc_MCP2025B_5e18_02_prodgenie_corsika_proton_rockbox_sbnd_CV_caf_flat_caf_sbnd sbnd/prod_2025B sbnd
+# ./create_list.sh mc_MCP2025B_5e18_02_prodgenie_corsika_proton_rockbox_sbnd_CV_caf_flat_caf_sbnd sbnd/prod_2025B/FallValidationII sbnd
 
 # SAMDEFs for 2025B production
 # MC: mc_MCP2025B_5e18_02_prodgenie_corsika_proton_rockbox_sbnd_CV_caf_flat_caf_sbnd
