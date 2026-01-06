@@ -6,14 +6,14 @@ if [[ $machine == *sbnd* || $machine == *jupyter* ]]; then
   source /cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/setup-env.sh
   export CAFPYANA_GRID_OUT_DIR="/pnfs/sbnd/scratch/users/$USER/cafpyana_out"
   mkdir -p $CAFPYANA_GRID_OUT_DIR
-  htgettoken -a htvaultprod.fnal.gov -i sbnd
+  htgettoken -a htvaultprod.fnal.gov -i sbnd --vaulttokenttl=7d
 fi
 if [[ $machine == *icarus* ]]; then
   echo "working on a icarus machine"
   source /cvmfs/larsoft.opensciencegrid.org/spack-v0.22.0-fermi/setup-env.sh
   export CAFPYANA_GRID_OUT_DIR="/pnfs/icarus/scratch/users/$USER/cafpyana_out"
   mkdir -p $CAFPYANA_GRID_OUT_DIR
-  htgettoken -a htvaultprod.fnal.gov -i icarus
+  htgettoken -a htvaultprod.fnal.gov -i icarus --vaulttokenttl=7d
 fi
 spack load hdf5@1.14.3%gcc@12.2.0 arch=linux-almalinux9-x86_64_v3
 spack load xrootd@5.6.9%gcc@12.2.0

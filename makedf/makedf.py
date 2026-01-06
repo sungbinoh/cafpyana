@@ -83,7 +83,7 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=250, wgt_types=["bnb","
                     bnbwgtdf = bnbsyst.bnbsyst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
                     df_list.append(bnbwgtdf)
                 if "genie" in wgt_types:
-                    geniewgtdf = geniesyst.geniesyst_sbnd(f, mcdf.ind)
+                    geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, slim=slim)
                     df_list.append(geniewgtdf)
                 wgtdf = pd.concat(df_list, axis=1)
             mcdf = multicol_concat(mcdf, wgtdf)
@@ -104,10 +104,23 @@ def make_opflashdf(f):
     opflashdf = loadbranches(f["recTree"], opflashbranches).rec.opflashes
     return opflashdf
 
-def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False, trackScoreCut=0.5, updaterecomb=True):
+def make_histpotdf(f):
+    # get the value from the TotalPOT histogram
+    pot = f['TotalPOT'].values()
+    histpot = pd.DataFrame(data={'TotalPOT':pot})
+    histpot.index.name = 'entry'
+    return histpot
+
+def make_histgenevtdf(f):
+    # get the value from the TotalPOT histogram
+    genevt = f['TotalGenEvents'].values()
+    histgenevt = pd.DataFrame(data={'TotalGenEvents':genevt})
+    histgenevt.index.name = 'entry'
+    return histgenevt
+
+def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False, trackScoreCut=0.5, updaterecomb=False):
     trkdf = loadbranches(f["recTree"], trkbranches)
     if scoreCut:
-        print('Score cut')
         trkdf = trkdf.rec.slc.reco[trkdf.rec.slc.reco.pfp.trackScore > trackScoreCut]
     else:
         trkdf = trkdf.rec.slc.reco

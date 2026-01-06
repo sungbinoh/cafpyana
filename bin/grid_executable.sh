@@ -55,6 +55,8 @@ echo "@@ source ${filesFromSender}/run_"${nProcess}".sh "
 ls -alh
 pwd
 
+htgettoken -a htvaultprod.fnal.gov -i sbnd
+
 cp ${filesFromSender}/run_${nProcess}.sh ./
 source run_${nProcess}.sh  &> log_${nProcess}.log
 ls -alh

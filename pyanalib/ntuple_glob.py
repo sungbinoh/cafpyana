@@ -14,6 +14,8 @@ from functools import partial
 import time
 import uuid
 import tempfile
+import traceback
+from makedf.makedf import make_histpotdf, make_histgenevtdf
 
 CPU_COUNT = multiprocessing.cpu_count()
 
@@ -112,6 +114,28 @@ def _loaddf(applyfs, preprocess, g):
                     df = df.reorder_levels(new_order)
 
                     dfs.append(df)
+                
+                if "TotalPOT" in f:
+                    df = make_histpotdf(f)
+                    df["__ntuple"] = index
+                    df.set_index("__ntuple", append=True, inplace=True)
+                    new_order = [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
+                    df = df.reorder_levels(new_order)
+
+                    dfs.append(df)
+                else:
+                    print("File (%s) missing TotalPOT histgoram. Cannot make histpotdf..." % fname)
+
+                if "TotalGenEvents" in f:
+                    df = make_histgenevtdf(f)
+                    df["__ntuple"] = index
+                    df.set_index("__ntuple", append=True, inplace=True)
+                    new_order = [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
+                    df = df.reorder_levels(new_order)
+
+                    dfs.append(df)
+                else:
+                    print("File (%s) missing TotalGenEvents histgoram. Cannot make histgenevtdf..." % fname)
             
             # Success - break out of retry loop
             break
@@ -126,6 +150,7 @@ def _loaddf(applyfs, preprocess, g):
             else:
                 print(f"All {attempts} attempts failed for {fname}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
                 print(f"Could not open file ({fname}). Skipping...", file=sys.stderr, flush=True)
+                traceback.print_exc(file=sys.stderr)
                 dfs = None
 
 
@@ -166,7 +191,7 @@ class NTupleGlob(object):
             thisglob = thisglob[:maxfile]
 
         if nproc == "auto":
-            CPU_COUNT_use = int(CPU_COUNT * 0.6)
+            CPU_COUNT_use = int(CPU_COUNT * 0.8)
             nproc = min(CPU_COUNT_use, len(thisglob))
             nproc = 1 if nproc < 1 else nproc
             print("CPU_COUNT : " + str(CPU_COUNT) + ", len(thisglob): " + str(len(thisglob)) + ", nproc: " + str(nproc))

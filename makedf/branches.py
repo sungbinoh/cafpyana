@@ -184,19 +184,19 @@ for n in trueparticlenames: trkbranches.append(trkbranch + "truth.p." + n)
 slcbranches = [
     "rec.slc.is_clear_cosmic",
     "rec.slc.vertex.x", "rec.slc.vertex.y", "rec.slc.vertex.z",
-    "rec.slc.self",
+    #"rec.slc.self",
     "rec.slc.tmatch.eff",
     "rec.slc.tmatch.pur",
     "rec.slc.tmatch.index",
-    "rec.slc.producer",
-    "rec.slc.nuid.crlongtrkdiry",
+    #"rec.slc.producer",
+    #"rec.slc.nuid.crlongtrkdiry",
     "rec.slc.nu_score",
-    "rec.slc.barycenterFM.flashTime",    
+    "rec.slc.barycenterFM.flashTime",  
+    "rec.slc.barycenterFM.score",  
     "rec.slc.opt0.score",
     "rec.slc.opt0.time",
     "rec.slc.reco.npfp",
     "rec.slc.reco.nstub",
-
 ]
 
 mcbranches = [

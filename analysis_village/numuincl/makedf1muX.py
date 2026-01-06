@@ -10,16 +10,54 @@ import numpy as np
 from makedf.makedf import *
 from makedf.constants import *
 
-INCLUDE_WEIGHTS = True
-SLIM = False
-UPDATE_RECOMB = True
-PRELIM_CUTS = True
-FULL_CUTS = True
-if FULL_CUTS: PRELIM_CUTS = True
-TRK_CUTS = True
+#My imports 
+import sys
+sys.path.append('analysis_village/numuincl') #relative path to my stuff
+from sbnd.cafclasses.slice import CAFSlice
+from sbnd.cafclasses.nu import NU
 
-def make_spine_evtdf_wgt(f,include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, wgt_types=["bnb","genie"],prelim_cuts=PRELIM_CUTS,
-                        slim=SLIM):
+DEFAULT_INCLUDE_WEIGHTS = False
+DEFAULT_SLIM = False
+DEFAULT_UPDATE_RECOMB = False
+DEFAULT_FULL_CUTS = False
+DEFAULT_PRELIM_CUTS = False
+DEFAULT_TRK_CUTS = True
+DEFAULT_VERBOSE = False
+
+def _resolve_flag(value, fallback):
+    return fallback if value is None else value
+
+def _set_update_recomb(value):
+    global UPDATE_RECOMB, MU_KEY_SUFFIXES
+    UPDATE_RECOMB = bool(value)
+    if UPDATE_RECOMB:
+        MU_KEY_SUFFIXES = ["_alpha_embm1", "_beta_90m1", "_R_embm1","_alpha_embp1", "_beta_90p1", "_R_embp1","_alpha_emb00"]
+    else:
+        MU_KEY_SUFFIXES = [""]
+
+def set_update_recomb(value):
+    _set_update_recomb(_resolve_flag(value, DEFAULT_UPDATE_RECOMB))
+
+def apply_setting_dependencies():
+    global PRELIM_CUTS
+    if FULL_CUTS and not PRELIM_CUTS:
+        PRELIM_CUTS = True
+
+INCLUDE_WEIGHTS = DEFAULT_INCLUDE_WEIGHTS
+SLIM = DEFAULT_SLIM
+FULL_CUTS = DEFAULT_FULL_CUTS
+PRELIM_CUTS = DEFAULT_PRELIM_CUTS
+TRK_CUTS = DEFAULT_TRK_CUTS
+VERBOSE = DEFAULT_VERBOSE
+_set_update_recomb(DEFAULT_UPDATE_RECOMB)
+apply_setting_dependencies()
+
+def make_spine_evtdf_wgt(f,include_weights=None, wgt_types=["bnb","genie"],prelim_cuts=None,
+                        slim=None):
+    include_weights = _resolve_flag(include_weights, INCLUDE_WEIGHTS)
+    prelim_cuts = _resolve_flag(prelim_cuts, PRELIM_CUTS)
+    slim = _resolve_flag(slim, SLIM)
+    multisim_nuniv = 100 if slim else 1000
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if (1 == det.unique()):
@@ -34,9 +72,8 @@ def make_spine_evtdf_wgt(f,include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000,
     hdrdf = hdrdf.loc[:,["run","subrun","evt"]]
     
     # load slices and particles
-    interdf = make_spineinterdf(f,include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim)
+    interdf = make_spineinterdf(f,include_weights=include_weights,  wgt_types=wgt_types, slim=slim, multisim_nuniv=multisim_nuniv)
     partdf = make_spinepartdf(f)
-    #mcdf = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim)
 
     # load the muon candidate
     mudf = partdf[partdf.is_primary & (partdf.pid == 2)].sort_values(partdf.index.names[:2] + [("ke", "", "")]).groupby(level=[0,1]).last()
@@ -105,20 +142,20 @@ def make_spine_evtdf_wgt(f,include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000,
     
     return interdf
 
-
-def make_pandora_evtdf_wgt(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=SLIM, 
-                       trkScoreCut=False, trkDistCut=-1., cutClearCosmic=True, prelim_cuts=PRELIM_CUTS, full_cuts=FULL_CUTS, updaterecomb=UPDATE_RECOMB, **trkArgs):
-    df = make_pandora_evtdf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
-                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, prelim_cuts=prelim_cuts, full_cuts=full_cuts, updaterecomb=updaterecomb, **trkArgs)
-    return df
-
-def make_custom_trkdf(f, trkScoreCut=TRK_CUTS, trackScoreCut=0.5, updaterecomb=UPDATE_RECOMB, **trkArgs):
-    trkdf = make_trkdf(f, trkScoreCut, trackScoreCut=trackScoreCut, updaterecomb=updaterecomb, **trkArgs)
+def make_custom_trkdf(f, trkScoreCut=None, updaterecomb=None, **trkArgs):
+    trkScoreCut = _resolve_flag(trkScoreCut, TRK_CUTS)
+    updaterecomb = _resolve_flag(updaterecomb, UPDATE_RECOMB)
+    trkdf = make_trkdf(f, scoreCut=trkScoreCut, updaterecomb=updaterecomb, **trkArgs)
     return trkdf
 
-def make_pandora_evtdf(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=SLIM, 
-                       trkScoreCut=False, trkDistCut=-1., cutClearCosmic=True, prelim_cuts=PRELIM_CUTS, full_cuts=FULL_CUTS, updaterecomb=UPDATE_RECOMB,**trkArgs):
-    if full_cuts: prelim_cuts = True #also apply prelim cuts
+def make_pandora_evtdf(f, include_weights=None, wgt_types=["bnb","genie"], slim=None,
+                       trkScoreCut=None, trkDistCut=-1., cutClearCosmic=True, updaterecomb=None,
+                       return_mcdf=False, **trkArgs):
+    include_weights = _resolve_flag(include_weights, INCLUDE_WEIGHTS)
+    slim = _resolve_flag(slim, SLIM)
+    multisim_nuniv = 100 if slim else 1000
+    updaterecomb = _resolve_flag(updaterecomb, UPDATE_RECOMB)
+    trkScoreCut = _resolve_flag(trkScoreCut, TRK_CUTS)
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if (1 == det.unique()):
@@ -128,9 +165,10 @@ def make_pandora_evtdf(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, 
 
     assert DETECTOR == "SBND"
     
-    mcdf = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim)
+    mcdf = make_mcnudf(f, include_weights=include_weights,  wgt_types=wgt_types, slim=slim, multisim_nuniv=multisim_nuniv)
+    if return_mcdf: ret_mcdf = mcdf.copy() #Make a copy to return
     mcdf.columns = pd.MultiIndex.from_tuples([tuple(["truth"] + list(c)) for c in mcdf.columns])
-    trkdf = make_trkdf(f, trkScoreCut, trackScoreCut=0.6, updaterecomb=updaterecomb, **trkArgs)
+    trkdf = make_custom_trkdf(f, trkScoreCut=trkScoreCut, updaterecomb=updaterecomb, **trkArgs)
     slcdf = make_slcdf(f)
     hdr = make_hdrdf(f)
     hdr = hdr.loc[:,["run","subrun","evt"]]
@@ -176,16 +214,9 @@ def make_pandora_evtdf(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, 
     # costheta
     trkdf[("pfp", "trk", "costheta", "", "", "")] = trkdf.pfp.trk.dir.z
 
-    # Identify if track is a candidate muon
-    if updaterecomb:
-        # Find candidate muon for each recomb uncertainty
-        # The last two elements exist, but are equivalent to the current last one
-        key_suffixes = ["_alpha_embm1", "_beta_90m1", "_R_embm1","_alpha_embp1", "_beta_90p1", "_R_embp1","_alpha_emb00"]#, "_beta_9000", "_R_emb00"]
-        mudf_list = []
-    else:
-        key_suffixes = [""]
-    assert len(set(key_suffixes)) == len(key_suffixes), f"key_suffixes must be unique, got {key_suffixes}"
-    for key_suffix in key_suffixes:
+
+    mudf_list = []
+    for key_suffix in MU_KEY_SUFFIXES:
         trkdf[("pfp", "trk", f"is_muon{key_suffix}", "", "", "")] = (trkdf[("pfp", "trk", "chi2pid", "I2", f"chi2_muon{key_suffix}","")] < 18) & (trkdf[("pfp", "trk", "chi2pid", "I2", f"chi2_proton{key_suffix}","")] > 87) & (trkdf.pfp.trk.len > 32)
         trkdf.loc[:,("pfp", "trk", f"is_muon{key_suffix}", "", "", "")] = trkdf.loc[:,("pfp", "trk", f"is_muon{key_suffix}", "", "", "")].fillna(False) #fillna with False
 
@@ -208,34 +239,34 @@ def make_pandora_evtdf(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, 
     trkdf.loc[:, ("pfp","trk","truth","p","dir","z")] = trkdf.pfp.trk.truth.p.genp.z/trkdf.pfp.trk.truth.p.totp
 
     # ----- apply cuts for lightweight df -----
-    if prelim_cuts:
-        # vertex in FV
-        slcdf = slcdf[InFV(slcdf.slc.vertex, 50, det=DETECTOR)]
+#     if prelim_cuts:
+#         # vertex in FV
+#         slcdf = slcdf[InFV(slcdf.slc.vertex, 50, det=DETECTOR)]
 
-        # neutrino cuts
-        slcdf = slcdf[slcdf.slc.nu_score > 0.5]
-        slcdf = slcdf[slcdf.slc.is_clear_cosmic==0]
+#         # neutrino cuts
+#         slcdf = slcdf[slcdf.slc.nu_score > 0.5]
+#         slcdf = slcdf[slcdf.slc.is_clear_cosmic==0]
 
-        if full_cuts:
+#         if full_cuts:
 
-            # require the muon
-            mask = slcdf[(f'mu{key_suffix}', 'pfp', 'trk', f'is_muon{key_suffix}', '', '', '')].astype(bool)
-            slcdf = slcdf[mask]
+#             # require the muon
+#             mask = slcdf[(f'mu{key_suffix}', 'pfp', 'trk', f'is_muon{key_suffix}', '', '', '')].astype(bool)
+#             slcdf = slcdf[mask]
 
-            # low z cut
-            mask = (slcdf[(f'mu{key_suffix}', 'pfp', 'trk', 'end', 'z', '', '')].astype(float) > 6)
-            slcdf = slcdf[mask]
+#             # low z cut
+#             mask = (slcdf[(f'mu{key_suffix}', 'pfp', 'trk', 'end', 'z', '', '')].astype(float) > 6)
+#             slcdf = slcdf[mask]
 
-            # require opt0 score
-            mask = (slcdf.slc.opt0.score > 320)
-            slcdf = slcdf[mask]
+#             # require opt0 score
+#             mask = (slcdf.slc.opt0.score > 320)
+#             slcdf = slcdf[mask]
 
-            # Find slice with highest opt0 score
-            slcdf = (
-                slcdf.sort_values([("slc", "opt0", "score")], ascending=False)
-                    .groupby(level=slcdf.index.names[:-1])
-                    .first()
-)
+#             # Find slice with highest opt0 score
+#             slcdf = (
+#                 slcdf.sort_values([("slc", "opt0", "score")], ascending=False)
+#                     .groupby(level=slcdf.index.names[:-1])
+#                     .first()
+# )
 
     # ---- truth match ----
     bad_tmatch = np.invert(slcdf.slc.tmatch.eff > 0.5) & (slcdf.slc.tmatch.idx >= 0)
@@ -254,6 +285,173 @@ def make_pandora_evtdf(f, include_weights=INCLUDE_WEIGHTS, multisim_nuniv=1000, 
 
     df = df.set_index(slcdf.index.names, verify_integrity=True)
     
-    return df
+    if return_mcdf:
+        return df, ret_mcdf
+    else:
+        return df
 
+def _process_mcnu(mcdf, slc, ismc):
+    """
+    Helper function to process mcnu dataframe with the same steps used in make_pandora_evtdf_processed.
+    Returns the processed mcnu NU object, or None if not MC or empty.
+    """
+    if ismc and len(mcdf.index.values) != 0:
+        print(f'Adding event type to mcnu')
+        mcnu = NU(mcdf)
+        mcnu.scale_to_pot(nom_pot=1., sample_pot=1.)
 
+        #Process mcnu
+        mcnu.add_fv()
+        mcnu.add_av()
+        
+        mcnu = slc.set_mcnu_containment(mcnu, suffix=MU_KEY_SUFFIXES[-1])
+        mcnu.cut_muon(cut=False, min_ke=0.1)
+        mcnu.cut_fv(cut=False)
+        mcnu.cut_cosmic(cut=False)
+        mcnu.cut_cont(cut=False)
+        mcnu.add_event_type('pandora', suffix=MU_KEY_SUFFIXES[-1])
+        
+        return mcnu
+    return None
+
+def make_pandora_evtdf_processed(f, include_weights=None, wgt_types=["bnb","genie"], slim=None, 
+                       trkScoreCut=None, updaterecomb=None, **trkArgs):
+    """
+    Utilize my CAF class to add the necessary columns to the dataframe
+    """
+    include_weights = _resolve_flag(include_weights, INCLUDE_WEIGHTS)
+    slim = _resolve_flag(slim, SLIM)
+    updaterecomb = _resolve_flag(updaterecomb, UPDATE_RECOMB)
+    trkScoreCut = _resolve_flag(trkScoreCut, TRK_CUTS)
+    df, mcdf = make_pandora_evtdf(f, include_weights=include_weights,  wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, updaterecomb=updaterecomb, return_mcdf=True, **trkArgs)
+    hdr = make_hdrdf(f)
+    ismc = hdr.ismc.astype(bool).unique()
+    if len(ismc) > 1:
+        raise ValueError(f'Multiple ismc values: {ismc}')
+    else:
+        ismc = ismc[0]
+    slc = CAFSlice(df) 
+    #Scale to dummy pot
+    slc.scale_to_pot(nom_pot=1.,sample_pot=1.)
+    if VERBOSE:
+        #print(slc.data.keys())
+        #print(slc.data.index)
+        qqq = 1
+    
+    # Process mcnu using the helper function
+    mcnu = _process_mcnu(mcdf, slc, ismc)
+
+    slc.clean(dummy_vals=[-9999,-999,999,9999,-5])
+
+    slc.add_has_muon(suffix=MU_KEY_SUFFIXES[-1])
+    slc.add_in_av()
+    slc.add_in_fv()
+    slc.add_event_type(suffix=MU_KEY_SUFFIXES[-1])
+
+    slc.add_track_flipping(suffix=MU_KEY_SUFFIXES[-1])
+
+    #Opt0 cuts
+    #slc.cut_flashmatch(cut=False)
+    #slc.cut_cosmic(cut=False,fmatch_score=320,nu_score=0.5,use_opt0=True,use_isclearcosmic=False)
+    #Barycenter FM cuts
+    slc.cut_cosmic(cut=False,fmatch_score=0.06,use_opt0='barycenterFM',nu_score=0.5,use_isclearcosmic=False)
+    slc.cut_flashmatch(cut=False,method='barycenterFM',use_isclearcosmic=True)
+    slc.cut_fv(cut=False)
+    slc.cut_muon(cut=False,min_ke=0.1,suffix=MU_KEY_SUFFIXES[-1])
+    slc.cut_lowz(cut=False,z_max=6,include_start=True,suffix=MU_KEY_SUFFIXES[-1])
+    slc.cut_is_cont(cut=False,suffix=MU_KEY_SUFFIXES[-1]) #Don't apply containment cut
+
+    if VERBOSE:
+        from naming import PAND_CUTS_CONT, PAND_CUTS
+        if mcnu is not None:
+            pur,eff,f1,_,_,_ = slc.get_pur_eff_f1(mcnu,PAND_CUTS_CONT,categories=[0,1])
+            print('Pandora cuts:')
+            print(PAND_CUTS_CONT)
+            print('Pandora pur, eff, f1:')
+            print(pur,eff,f1)
+    
+    return slc.data
+
+def make_mcnu_processed(f, include_weights=None, wgt_types=["bnb","genie"], slim=None, 
+                       trkScoreCut=None, updaterecomb=None, **trkArgs):
+    """
+    Process and return the mcnu dataframe with the same processing as make_pandora_evtdf_processed.
+    This allows storing mcnu separately while maintaining one df per function.
+    Note: This will rebuild the slice df for containment matching, but avoids duplicating the mcnu processing logic.
+    """
+    include_weights = _resolve_flag(include_weights, INCLUDE_WEIGHTS)
+    slim = _resolve_flag(slim, SLIM)
+    updaterecomb = _resolve_flag(updaterecomb, UPDATE_RECOMB)
+    trkScoreCut = _resolve_flag(trkScoreCut, TRK_CUTS)
+    
+    # Get the mcdf
+    _, mcdf = make_pandora_evtdf(f, include_weights=include_weights, wgt_types=wgt_types, slim=slim, 
+                                 trkScoreCut=trkScoreCut, updaterecomb=updaterecomb, return_mcdf=True, **trkArgs)
+    
+    hdr = make_hdrdf(f)
+    ismc = hdr.ismc.astype(bool).unique()
+    if len(ismc) > 1:
+        raise ValueError(f'Multiple ismc values: {ismc}')
+    else:
+        ismc = ismc[0]
+    
+    # Need to rebuild the slice df for containment matching
+    df = make_pandora_evtdf(f, include_weights=include_weights, wgt_types=wgt_types, slim=slim, 
+                               trkScoreCut=trkScoreCut, updaterecomb=updaterecomb, return_mcdf=False, **trkArgs)
+    slc = CAFSlice(df)
+    slc.scale_to_pot(nom_pot=1., sample_pot=1.)
+    
+    # Process mcnu using the same helper function
+    mcnu = _process_mcnu(mcdf, slc, ismc)
+    
+    if mcnu is not None:
+        return mcnu.data
+    else:
+        # Return empty dataframe with same structure if not MC or no data
+        return pd.DataFrame()
+    
+def make_pandora_evtdf_processed_signal_cut(f, include_weights=None, wgt_types=["bnb","genie"], slim=None, 
+    trkScoreCut=None, updaterecomb=None, **trkArgs):
+    """
+    Utilize my CAF class to add the necessary columns to the dataframe
+    """
+    include_weights = _resolve_flag(include_weights, INCLUDE_WEIGHTS)
+    slim = _resolve_flag(slim, SLIM)
+    multisim_nuniv = 100 if slim else 1000
+    updaterecomb = _resolve_flag(updaterecomb, UPDATE_RECOMB)
+    df = make_pandora_evtdf_processed(f, include_weights=include_weights,  wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, updaterecomb=updaterecomb, **trkArgs)
+
+    if VERBOSE:
+        print(f'include weights: {include_weights}')
+        print(f'slim: {slim}')
+        print(f'updaterecomb: {updaterecomb}')
+    slc = CAFSlice(df)
+    is_signal = np.isin(slc.data.truth.event_type,[0,1])
+    slc.data = slc.data[is_signal]
+
+    #Apply the cut all for both the reco and truth dataframes (only cut if requested)
+    slc.cut_all(cut=True,mode='truth',categories=[0,1])
+
+    return slc.data #return just the df
+
+def make_pandora_evtdf_processed_selected_cut(f, include_weights=None, wgt_types=["bnb","genie"], slim=None, 
+    trkScoreCut=None, updaterecomb=None, **trkArgs):
+    """
+    Utilize my CAF class to add the necessary columns to the dataframe
+    """
+    include_weights = _resolve_flag(include_weights, INCLUDE_WEIGHTS)
+    slim = _resolve_flag(slim, SLIM)
+    multisim_nuniv = 100 if slim else 1000
+    updaterecomb = _resolve_flag(updaterecomb, UPDATE_RECOMB)
+    df = make_pandora_evtdf_processed(f, include_weights=include_weights,  wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, updaterecomb=updaterecomb, **trkArgs)
+
+    if VERBOSE:
+        print(f'include weights: {include_weights}')
+        print(f'slim: {slim}')
+        print(f'updaterecomb: {updaterecomb}')
+    slc = CAFSlice(df)
+    slc.cut_all(cut=True,mode='reco',categories=[0,1])
+    return slc.data #return just the df

@@ -1,2 +1,7 @@
-#python run_df_maker.py -c /exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/config_nospine.py -o /exp/sbnd/data/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/both/mc_med_syst2 -i /pnfs/sbnd/persistent/users/mueller/MCP2025B/simulation/mc1e20/input0[0-1][0-9]*reweighted*.flat*.root
-python run_df_maker.py -c /exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/config_nospine.py -o /exp/sbnd/data/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/both/mc_smallpand_syst2 -i /pnfs/sbn/data_add/sbn_nd/poms_production/mc/MCP2025B_1e20_05/v10_06_00_05/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/15/f*/*.flat.caf* -ngrid 10
+#python /exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/runit.py -y /exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/yamls/mcbnb.yaml
+#source /exp/sbnd/app/users/brindenc/develop/cafpyana/setup.sh
+#python /exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/runit.py -y /exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/yamls/data.yaml
+#source /exp/sbnd/app/users/brindenc/develop/cafpyana/setup.sh
+#python /exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/runit.py -y /exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/yamls/mclowe.yaml
+source /exp/sbnd/app/users/brindenc/develop/cafpyana/setup.sh
+python /exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/runit.py -y /exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/yamls/mcoffbeam.yaml
