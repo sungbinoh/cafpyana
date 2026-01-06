@@ -84,13 +84,13 @@ def multicol_merge(lhs, rhs, **panda_kwargs):
 
     return lhs.merge(rhs, **panda_kwargs)
 
-def detect_vectors(tree, branch):
+def _detect_vectors(branch, tree_keys):
     ret = []
     hierarchy = branch.split(".")
     for i in range(len(hierarchy)):
         subbranch = ".".join(hierarchy[:i+1])
         lenbranch = subbranch + "..length"
-        if lenbranch in tree.keys():
+        if lenbranch in tree_keys:
             ret.append(subbranch)
     return ret
 
@@ -99,8 +99,9 @@ def idarray(ids, lens):
 
 def loadbranches(tree, branches, **uprargs):
     vectors = []
+    keys = list(tree.keys())
     for i,branch in enumerate(branches):
-        this_vectors = detect_vectors(tree, branch)
+        this_vectors = _detect_vectors(branch, keys)
         if i == 0:
             vectors = this_vectors
         elif len(this_vectors) == 0: # This case is ok since it will automatically broadcast
