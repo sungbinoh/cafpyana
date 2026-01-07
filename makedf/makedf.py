@@ -439,7 +439,7 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
     #print(slcdf.pfp.trk.chi2pid.head(50))
     return slcdf
 
-def make_spine_df(f, trkDistCut=-1, requireFiducial=True, **trkArgs):
+def make_spine_df(f, trkDistCut=-1, requireFiducial=True, DETECTOR="ICARUS", **trkArgs):
     # load
     partdf = make_spinepartdf(f, **trkArgs)
     partdf.columns = pd.MultiIndex.from_tuples([tuple(["particle"] + list(c)) for c in partdf.columns])
@@ -453,7 +453,7 @@ def make_spine_df(f, trkDistCut=-1, requireFiducial=True, **trkArgs):
         eslcdf = eslcdf[eslcdf.dist_to_vertex < trkDistCut]
     # require fiducial verex
     if requireFiducial:
-        eslcdf = eslcdf[InFV(eslcdf.vertex, 50)]
+        eslcdf = eslcdf[InFV(eslcdf.vertex, 50, det=DETECTOR)]
 
     return eslcdf
 
@@ -577,7 +577,7 @@ def make_spineslcdf(f):
     eslc_matchdf = eslc_matchdf.rec.dlp
 
     # Then use bestmatch.match to get the nu ids in etintdf
-    eslc_matchdf_wids = pd.merge(eslc_matchdf, etintdf, left_on=["entry", "match"], right_on=["entry", "id"], how="left")
+    eslc_matchdf_wids = pd.merge(eslc_matchdf, etintdf, left_on=["entry", "match_ids"], right_on=["entry", "id"], how="left")
     eslc_matchdf_wids.index = eslc_matchdf.index
 
     # Now use nu_ids to get the true interaction information
@@ -585,8 +585,8 @@ def make_spineslcdf(f):
     eslc_matchdf_trueints.index = eslc_matchdf_wids.index
 
     # delete unnecesary matching branches
-    del eslc_matchdf_trueints[("match", "")]
-    del eslc_matchdf_trueints[("nu_id", "")]
+    del eslc_matchdf_trueints[("match_ids", "")]
+    # del eslc_matchdf_trueints[("nu_id", "")]
     del eslc_matchdf_trueints[("id", "")]
 
     # first match is best match
@@ -611,7 +611,7 @@ def make_spineslcdf(f):
 
     return eslcdf_withmc
 
-def make_spinepartdf(f):
+def make_spinepartdf(f, requirePrimary=False):
     epartdf = loadbranches(f["recTree"], eparticlebranches)
     epartdf = epartdf.rec.dlp.particles
 
@@ -637,7 +637,7 @@ def make_spinepartdf(f):
     bestmatch.columns = [s for s in bestmatch.columns]
 
     # Then use betmatch.match to get the G4 track IDs in etpartdf
-    bestmatch_wids = pd.merge(bestmatch, etpartdf, left_on=["entry", "match"], right_on=["entry", "id"], how="left")
+    bestmatch_wids = pd.merge(bestmatch, etpartdf, left_on=["entry", "match_ids"], right_on=["entry", "id"], how="left")
     bestmatch_wids.index = bestmatch.index
 
     # Now use the G4 track IDs to get the true particle information
@@ -645,7 +645,7 @@ def make_spinepartdf(f):
     bestmatch_trueparticles.index = bestmatch_wids.index
 
     # delete unnecesary matching branches
-    del bestmatch_trueparticles[("match", "")]
+    del bestmatch_trueparticles[("match_ids", "")]
     del bestmatch_trueparticles[("track_id", "")]
     del bestmatch_trueparticles[("id", "")]
 
@@ -667,5 +667,9 @@ def make_spinepartdf(f):
         return tuple([c[0]] + [mappos(c[1])] + list(c[2:]))
 
     epartdf.columns = pd.MultiIndex.from_tuples([fixpos(c) for c in epartdf.columns])
+
+    # require primary?
+    if requirePrimary:
+        epartdf = epartdf[epartdf.is_primary == 1]
 
     return epartdf

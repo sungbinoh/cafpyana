@@ -386,21 +386,21 @@ stubhitbranches = [
 eslc = "rec.dlp."
 
 eslcbranches = [
-    eslc + "is_neutrino",
-    eslc + "nu_id",
+    eslc + "is_time_contained",
+    eslc + "id",
     eslc + "num_particles",
-    eslc + "num_primaries",
+    eslc + "num_primary_particles",
     eslc + "vertex.0",
     eslc + "vertex.1",
     eslc + "vertex.2",
 ]
 
 eslcmatchedbranches = [
-    eslc + "match",
+    eslc + "match_ids",
 ]
 
 eslcmatchovrlpbranches = [
-    eslc + "match_overlap",
+    eslc + "match_overlaps",
 ]
 
 etruthint = "rec.dlp_true."
@@ -412,16 +412,24 @@ etruthintbranches = [
 epart = "rec.dlp.particles."
 
 eparticlebranches = [
+    epart + "cathode_offset",
     epart + "end_point.0",
     epart + "end_point.1",
     epart + "end_point.2",
     epart + "is_contained",
+    epart + "is_time_contained",
     epart + "is_primary",
-    epart + "is_principal_match",
     epart + "is_valid",
     epart + "length",
     epart + "csda_ke",
+    epart + "csda_ke_per_pid.0",
+    epart + "csda_ke_per_pid.1",
+    epart + "csda_ke_per_pid.2",
+    epart + "csda_ke_per_pid.3",
+    epart + "csda_ke_per_pid.4",
+    epart + "csda_ke_per_pid.5",
     epart + "ke",
+    epart + "p",
     epart + "momentum.0",
     epart + "momentum.1",
     epart + "momentum.2",
@@ -431,20 +439,22 @@ eparticlebranches = [
     epart + "pid_scores.2",
     epart + "pid_scores.3",
     epart + "pid_scores.4",
+    epart + "pid_scores.5",
     epart + "start_point.0",
     epart + "start_point.1",
     epart + "start_point.2",
     epart + "start_dir.0",
     epart + "start_dir.1",
     epart + "start_dir.2",
+    epart + "start_dedx",
 ]
 
 eparticlematchedbranches = [
-    epart + "match",
+    epart + "match_ids",
 ]
 
 eparticlematchovrlpbranches = [
-    epart + "match_overlap",
+    epart + "match_overlaps",
 ]
 
 etruthpart = "rec.dlp_true.particles."
