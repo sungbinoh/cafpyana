@@ -78,7 +78,6 @@ def _loaddf(applyfs, preprocess, g):
     try:
         # Open AND close strictly within the context manager
         with _open_with_retries(fname) as f:
-
             dfs = []
             if "recTree" not in f:
                 print("File (%s) missing recTree. Try only histpotdf and skipping other dfs..." % fname)
@@ -116,21 +115,17 @@ def _loaddf(applyfs, preprocess, g):
             else:
                 print("File (%s) missing TotalPOT histgoram. Cannot make histpotdf..." % fname)
 
-            if not dfs:
-                return None
-
-            return dfs
     except (OSError, ValueError) as e:
         print(f"Could not open file ({fname}). Skipping...")
         print(e)
         dfs = None
 
 
-    if madef:
-        os.remove(fname)
-
     for f in tempfiles:
         os.remove(f)
+            
+    if not dfs:
+        return None
 
     return dfs
 
