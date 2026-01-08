@@ -435,26 +435,26 @@ intermatchovrlpbranches = [
     inter + "match_overlaps",
 ]
 
-truthinter = "rec.dlp_true."
+etruthint = "rec.dlp_true."
 
-truthinterbranches = [
-    truthinter + "id",
-    truthinter + "nu_id",
-    truthinter + "current_type",
-    truthinter + "energy_init",
-    truthinter + "energy_transfer",
-    truthinter + "num_particles",
-    truthinter + "num_primary_particles",
-    truthinter + "inelasticity",
-    truthinter + "interaction_mode",
-    truthinter + "interaction_type",
-    truthinter + "is_cathode_crosser",
-    truthinter + "is_time_contained",
-    truthinter + "is_contained",
-    truthinter + "is_fiducial",
-    truthinter + "lepton_p",
-    truthinter + "lepton_pdg_code",
-    truthinter + "mct_index",
+etruthintbranches = [
+    etruthint + "id",
+    etruthint + "nu_id",
+    etruthint + "current_type",
+    etruthint + "energy_init",
+    etruthint + "energy_transfer",
+    etruthint + "num_particles",
+    etruthint + "num_primary_particles",
+    etruthint + "inelasticity",
+    etruthint + "interaction_mode",
+    etruthint + "interaction_type",
+    etruthint + "is_cathode_crosser",
+    etruthint + "is_time_contained",
+    etruthint + "is_contained",
+    etruthint + "is_fiducial",
+    etruthint + "lepton_p",
+    etruthint + "lepton_pdg_code",
+    etruthint + "mct_index",
 ]
 
 epart = "rec.dlp.particles."
