@@ -42,25 +42,31 @@ ICARUSFVCuts = {
     }
 }
 
+def vtxfv_cut(df, det):
+    return _fv_cut(df, det, inzback=50)
+
 def slcfv_cut(df, det):
     vtx = pd.DataFrame({'x': df.slc_vtx_x,
                            'y': df.slc_vtx_y,
                            'z': df.slc_vtx_z})
-    return fv_cut(vtx, det)
+    return vtxfv_cut(vtx, det)
+
+def trkfv_cut(df, det):
+    return _fv_cut(df, det, inzback=10)
 
 def mufv_cut(df, det):
     vtx = pd.DataFrame({'x': df.mu_end_x,
                            'y': df.mu_end_y,
                            'z': df.mu_end_z})
-    return fv_cut(vtx, det, inzback=10)
+    return trkfv_cut(vtx, det)
 
 def pfv_cut(df, det):
     vtx = pd.DataFrame({'x': df.p_end_x,
                            'y': df.p_end_y,
                            'z': df.p_end_z})
-    return fv_cut(vtx, det, inzback=10)
+    return trkfv_cut(vtx, det)
 
-def fv_cut(df, det, inx=10, iny=10, inzfront=10, inzback=50):
+def _fv_cut(df, det, inx=10, iny=10, inzfront=10, inzback=50):
     if det == "ICARUS":
         return (((df.x < (ICARUSFVCuts['C0']['x']['max'] - inx)) & (df.x > (ICARUSFVCuts['C0']['x']['min'] + inx))) |\
                 ((df.x < (ICARUSFVCuts['C1']['x']['max'] - inx)) & (df.x > (ICARUSFVCuts['C1']['x']['min'] + inx)))) &\

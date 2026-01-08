@@ -72,7 +72,7 @@ def make_pandora_no_cuts_df(f):
     trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.chi2u / trkdf.chi2p
 
     # track containment
-    trkdf[("pfp", "trk", "is_contained", "", "", "")] = fv_cut(trkdf.pfp.trk.start, DETECTOR) & fv_cut(trkdf.pfp.trk.end, DETECTOR)
+    trkdf[("pfp", "trk", "is_contained", "", "", "")] = trkfv_cut(trkdf.pfp.trk.start, DETECTOR) & trkfv_cut(trkdf.pfp.trk.end, DETECTOR)
 
     # reco momentum -- range-only
     trkdf[("pfp", "trk", "P", "p_muon", "", "")] = trkdf[("pfp", "trk", "rangeP", "p_muon", "", "")]
@@ -225,6 +225,8 @@ def make_pandora_no_cuts_df(f):
         'del_p': del_p,
         'del_Tp': del_Tp,
         'del_phi': del_phi,
+        # 'tmatch_eff': slcdf.slc.tmatch.eff, 
+        # 'tmatch_pur': slcdf.slc.tmatch.pur, 
         'tmatch_idx': tmatch_idx_series,
         'has_stub': slc_has_stub_series
     })
@@ -338,7 +340,7 @@ def make_gump_nudf(f, is_slc=False):
     else:
         print("Detector unclear, check rec.hdr.det!")
 
-    is_fv = fv_cut(nudf.position, DETECTOR)
+    is_fv = vtxfv_cut(nudf.position, DETECTOR)
     is_cc = nudf.iscc
     is_nc = (nudf.iscc == 0)
     genie_mode = nudf.genie_mode
@@ -351,7 +353,8 @@ def make_gump_nudf(f, is_slc=False):
     is_1p0pi = (nudf.nmu_27MeV == 1) & (nudf.np_50MeV == 1) & (nudf.npi_30MeV == 0) & (nudf.npi0 == 0) 
     is_numu = (nudf.pdg == 14)
     is_other_numucc = (is_numu & is_cc & (is_1p0pi == 0) & is_fv)
-    is_sig = is_fv & is_1p0pi & is_numu & is_cc
+    is_contained = trkfv_cut(nudf.mu.start, DETECTOR) & trkfv_cut(nudf.p.start, DETECTOR)
+    is_sig = is_fv & is_1p0pi & is_numu & is_cc & is_contained
 
     nudf['nuint_categ'] = genie_mode 
 
@@ -361,13 +364,14 @@ def make_gump_nudf(f, is_slc=False):
     true_tki = transverse_kinematics(muon_p_series, nudf.mu.genp, proton_p_series, nudf.mu.genp)
     true_del_p = true_tki['del_p']
 
-    true_nu_E = neutrino_energy(muon_p_series, nudf.mu.genp, proton_p_series, nudf.mu.genp)
+    true_nu_E = nudf.E
 
     this_nudf = pd.DataFrame({
-        'true_nu_E': true_nu_E,
-        'true_del_p': true_del_p,
+        'nu_E': true_nu_E,
+        'del_p': true_del_p,
         'genie_mode': genie_mode, 
         'is_sig': is_sig, 
+        'is_contained': is_contained,
         'is_nc': is_nc, 
         'is_other_numucc': is_other_numucc, 
         'is_fv': is_fv, 
