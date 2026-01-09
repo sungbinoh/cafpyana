@@ -403,28 +403,103 @@ eslcmatchovrlpbranches = [
     eslc + "match_overlap",
 ]
 
+inter = "rec.dlp."
+
+interbranches = [
+    inter + "id",
+    inter + "is_cathode_crosser",
+    inter + "is_time_contained",
+    inter + "is_contained",
+    inter + "is_fiducial",
+    inter + "is_flash_matched",
+    inter + "is_truth",
+    inter + "num_particles",
+    inter + "num_primary_particles",
+    inter + "vertex.0",
+    inter + "vertex.1",
+    inter + "vertex.2",
+    inter + "flash_hypo_pe",
+    inter + "flash_total_pe",
+]
+
+flashinterbranches = [
+    inter + "flash_scores",
+    inter + "flash_times",
+]
+
+intermatchedbranches = [
+    inter + "match_ids",
+]
+
+intermatchovrlpbranches = [
+    inter + "match_overlaps",
+]
+
 etruthint = "rec.dlp_true."
 
 etruthintbranches = [
-    etruthint + "id"
+    etruthint + "id",
+    etruthint + "nu_id",
+    etruthint + "current_type",
+    etruthint + "energy_init",
+    etruthint + "energy_transfer",
+    etruthint + "num_particles",
+    etruthint + "num_primary_particles",
+    etruthint + "inelasticity",
+    etruthint + "interaction_mode",
+    etruthint + "interaction_type",
+    etruthint + "is_cathode_crosser",
+    etruthint + "is_time_contained",
+    etruthint + "is_contained",
+    etruthint + "is_fiducial",
+    etruthint + "lepton_p",
+    etruthint + "lepton_pdg_code",
+    etruthint + "mct_index",
 ]
 
 epart = "rec.dlp.particles."
 
 eparticlebranches = [
+    epart + "calo_ke",
+    epart + "cathode_offset",
+    # epart + "chi2_per_pid.0",
+    # epart + "chi2_per_pid.1",
+    # epart + "chi2_per_pid.2",
+    # epart + "chi2_per_pid.3",
+    # epart + "chi2_per_pid.4",
+    # epart + "chi2_per_pid.5",
+    # epart + "chi2_pid",
     epart + "end_point.0",
     epart + "end_point.1",
     epart + "end_point.2",
+    epart + "end_dir.0",
+    epart + "end_dir.1",
+    epart + "end_dir.2",
+    epart + "interaction_id",
+    epart + "id",
     epart + "is_contained",
     epart + "is_primary",
-    epart + "is_principal_match",
     epart + "is_valid",
     epart + "length",
     epart + "csda_ke",
+    epart + "csda_ke_per_pid.0",
+    epart + "csda_ke_per_pid.1",
+    epart + "csda_ke_per_pid.2",
+    epart + "csda_ke_per_pid.3",
+    epart + "csda_ke_per_pid.4",
+    epart + "csda_ke_per_pid.5",
     epart + "ke",
+    epart + "p",
     epart + "momentum.0",
     epart + "momentum.1",
     epart + "momentum.2",
+    epart + "mcs_ke",
+    epart + "mcs_ke_per_pid.0",
+    epart + "mcs_ke_per_pid.1",
+    epart + "mcs_ke_per_pid.2",
+    epart + "mcs_ke_per_pid.3",
+    epart + "mcs_ke_per_pid.4",
+    epart + "mcs_ke_per_pid.5",
     epart + "pid",
     epart + "pid_scores.0",
     epart + "pid_scores.1",
@@ -437,28 +512,15 @@ eparticlebranches = [
     epart + "start_dir.0",
     epart + "start_dir.1",
     epart + "start_dir.2",
-]
-
-eparticlematchedbranches = [
-    epart + "match",
-]
-
-eparticlematchovrlpbranches = [
-    epart + "match_overlap",
+    epart + "start_dedx"
 ]
 
 etruthpart = "rec.dlp_true.particles."
+etrueparticlebranches = [k.replace(epart, etruthpart) for k in eparticlebranches if "pid_scores" not in k and "start_dedx" not in k]
 
-etrueparticlebranches = [
-    etruthpart + "track_id",
-    etruthpart + "id",
-]
-
-etruthint = "rec.dlp_true."
-
-etruthintbranches = [
-    etruthint + "id",
-    etruthint + "nu_id"
+eparticlematchedbranches = [
+    epart + "match_ids",
+    epart + "match_overlaps",
 ]
 
 
