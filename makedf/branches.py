@@ -527,10 +527,3 @@ eparticlematchovrlpbranches = [
 
 etruthpart = "rec.dlp_true.particles."
 etrueparticlebranches = [k.replace(epart, etruthpart) for k in eparticlebranches if "pid_scores" not in k and "start_dedx" not in k]
-
-eparticlematchedbranches = [
-    epart + "match_ids",
-    epart + "match_overlaps",
-]
-
-
