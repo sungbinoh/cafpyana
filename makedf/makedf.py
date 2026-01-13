@@ -47,6 +47,13 @@ def make_histpotdf(f):
     histpot.index.name = 'entry'
     return histpot
 
+def make_histgenevtdf(f):
+    # get the value from the TotalPOT histogram
+    genevt = f['TotalGenEvents'].values()
+    histgenevt = pd.DataFrame(data={'TotalGenEvents':genevt})
+    histgenevt.index.name = 'entry'
+    return histgenevt
+
 def make_hdrdf(f):
     hdr = loadbranches(f["recTree"], hdrbranches).rec.hdr
     return hdr
@@ -379,7 +386,11 @@ def make_all_pandora_df(f):
     slcdf = multicol_add(slcdf, dmagdf(slcdf.slc.vertex, slcdf.pfp.trk.start).rename(("pfp", "trk", "dist_to_vertex")))
     slcdf = multicol_add(slcdf, dmagdf(slcdf.slc.vertex, slcdf.pfp.shw.start).rename(("pfp", "shw", "dist_to_vertex")))
 
-    return pfpdf
+    # add bcfm branches
+    barycenterFM_df = loadbranches(f["recTree"], barycenterFMbranches).rec
+    slcdf = multicol_merge(barycenterFM_df, slcdf, left_index=True, right_index=True, how="right", validate="one_to_many")
+
+    return slcdf
 
 def make_pandora_df_calo_update(f, **trkArgs):
     pandoradf = make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=True, requireFiducial=False, updatecalo=True, **trkArgs)
