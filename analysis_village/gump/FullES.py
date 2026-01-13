@@ -7,14 +7,15 @@ workspace_root = os.getcwd()
 sys.path.insert(0, workspace_root + "/../../")
 
 # import this repo's classes
+from pyanalib.split_df_helpers import *
 import pyanalib.pandas_helpers as ph
 from makedf.util import *
 
 import kinematics
 
-def load_data(file, nfiles=1):
+def load_data(file):
     """Load event, header, and mcnu data from HDF file."""
-
+    nfiles = get_n_split(file)
     for s in range(nfiles):
         print("df index:"+str(s))
         df_evt = pd.read_hdf(file, "evt_"+str(s))
@@ -44,7 +45,6 @@ def load_data(file, nfiles=1):
             res_df_evt = pd.concat([res_df_evt, df_evt])
             res_df_hdr = pd.concat([res_df_hdr, df_hdr])
             res_df_stub = pd.concat([res_df_stub, df_stub])
-
         del df_evt
         del df_hdr
         del df_stub
@@ -54,6 +54,10 @@ def load_data(file, nfiles=1):
 def scale_pot(df, df_hdr, desired_pot):
     """Scale DataFrame by desired POT."""
     pot = sum(df_hdr.pot.tolist())
+    if pot == 0:
+        print("Warning, no POT found, using scale of 1.")
+        df['glob_scale'] = 1
+        return 1, 1
     print(f"POT: {pot}\nScaling to: {desired_pot}")
     scale = desired_pot / pot
     df['glob_scale'] = scale
@@ -62,7 +66,7 @@ def scale_pot(df, df_hdr, desired_pot):
 def apply_cuts(df_nd, df_nd_stub, df_fd, df_fd_stub, nd_POT, fd_POT, dffile_nd, dffile_fd):
     comp_sbnd = []
     comp_icarus = []
-    cut_labels = ["Initial Sample", "FV Cut", "NuScore Cut", "Two Prong", "PID", "Stub"]
+    cut_labels = ["Initial Sample", "FV Cut", "NuScore Cut", "Two Prong", "PID", "CRT Veto"]
     mode_labels = ['QE', 'MEC', 'RES', 'SIS/DIS', 'COH', "other"]
     det_labels = ("SBND", "ICARUS")
     
@@ -131,35 +135,9 @@ def apply_cuts(df_nd, df_nd_stub, df_fd, df_fd_stub, nd_POT, fd_POT, dffile_nd, 
     comp_sbnd.append(sbnd_comp)
     comp_icarus.append(icarus_comp)
 
-    # Stub cut
-    df_nd_stub = df_nd_stub.reset_index('rec.slc.reco.stub..index', drop=True)
-    sel = df_nd.set_index(['__ntuple', 'entry', 'rec.slc..index'], drop=True).index
-    sel = sel.intersection(df_nd_stub.index)
-    df_nd_stub = df_nd_stub.loc[sel]
-
-    df_nd_fp = df_nd[df_nd.is_sig != True]
-    fp_sel = df_nd_fp.set_index(['__ntuple', 'entry', 'rec.slc..index'], drop=True).index
-    fp_sel = fp_sel.intersection(df_nd_stub.index)
-    df_nd_fp_stub = df_nd_stub.loc[fp_sel]
-
-    df_fd_stub = df_fd_stub.reset_index('rec.slc.reco.stub..index', drop=True)
-    sel = df_fd.set_index(['__ntuple', 'entry', 'rec.slc..index'], drop=True).index
-    sel = sel.intersection(df_fd_stub.index)
-    df_fd_stub = df_fd_stub.loc[sel]
-
-    df_fd_fp = df_fd[df_fd.is_sig != True]
-    fp_sel = df_fd_fp.set_index(['__ntuple', 'entry', 'rec.slc..index'], drop=True).index
-    fp_sel = fp_sel.intersection(df_fd_stub.index)
-    df_fd_fp_stub = df_fd_stub.loc[fp_sel]
-
-    plot_stub_2d(df_nd_stub['length'], df_nd_stub['dqdx'], "SBND.png", "SBND Stub Cut")
-    plot_stub_2d(df_nd_fp_stub['length'], df_nd_fp_stub['dqdx'], "FPSBND.png", "False Positive SBND Stub Cut")
-    plot_stub_2d(df_fd_stub['length'], df_fd_stub['dqdx'], "ICARUS.png", "ICARUS Stub Cut")
-    plot_stub_2d(df_fd_fp_stub['length'], df_fd_fp_stub['dqdx'], "FPICARUS.png", "False Positive ICARUS Stub Cut")
-
-    df_nd = df_nd[stub_cut(df_nd)]
-    df_fd = df_fd[stub_cut(df_fd)]
-    sbnd_comp, icarus_comp = make_all_plots(df_nd, df_fd, "Stub Cut", mode_labels, top_labels, det_labels)
+    ### crthitveto cut
+    df_fd = df_fd[crthitveto_cut(df_fd)]
+    sbnd_comp, icarus_comp = make_all_plots(df_nd, df_fd, "CRT Veto", mode_labels, top_labels, det_labels)
     comp_sbnd.append(sbnd_comp)
     comp_icarus.append(icarus_comp)
 
@@ -171,8 +149,9 @@ def apply_cuts(df_nd, df_nd_stub, df_fd, df_fd_stub, nd_POT, fd_POT, dffile_nd, 
 
 def main():
     """Main analysis pipeline."""
-    dffile_nd = "/exp/sbnd/app/users/nrowe/cafpyana/sbnd_no_cuts.df"
-    dffile_fd = "/exp/sbnd/app/users/nrowe/cafpyana/icarus_no_cuts.df"
+    dffile_nd = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_10.df"
+    dffile_fd = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-3-fix-zexp-again-again/ICARUS_SpringMC_Dev_wgt.df"
+
     df_nd, df_nd_hdr, df_nd_stub = load_data(dffile_nd)
     df_fd, df_fd_hdr, df_fd_stub = load_data(dffile_fd)
 

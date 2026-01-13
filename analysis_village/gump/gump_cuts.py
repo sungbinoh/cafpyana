@@ -89,6 +89,9 @@ def _fv_cut(df, det, inx=10, iny=10, inzfront=10, inzback=50):
 def cosmic_cut(df):
     return (df.nu_score > 0.4)
 
+def del_p_cut(df):
+    return (df.del_p <= 0.6)
+
 def twoprong_cut(df):
     return (np.isnan(df.other_shw_length) & np.isnan(df.other_trk_length))
 
@@ -142,7 +145,6 @@ top_labels = ["Signal",
               "Other"]
 
 def breakdown_top(var, df):
-    print(df.is_cosmic)
     ret = [var[df.is_sig == True],
            var[df.is_other_numucc == True],
            var[df.is_nc == True],
