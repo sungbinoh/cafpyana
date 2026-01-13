@@ -2,70 +2,15 @@ import pandas as pd
 import os
 import sys
 from cycler import cycler
-from plot_tools import *
+
+#from analysis_village.gump.plot_tools import *
 # Add the head direcoty to sys.path
 workspace_root = os.getcwd()
 sys.path.insert(0, workspace_root + "/../../")
 import pyanalib.pandas_helpers as ph
 from pyanalib.split_df_helpers import *
 from makedf.util import *
-
-def all_cuts(recodf, DETECTOR):
-    ## Apply cuts
-    slc_vtx = pd.DataFrame({'x':recodf.slc_vtx_x,
-                            'y':recodf.slc_vtx_y,
-                            'z':recodf.slc_vtx_z})
-
-    recodf = recodf[fv_cut(slc_vtx, DETECTOR)]
-
-    ### NuScore cut
-    recodf = recodf[cosmic_cut(recodf)]
-
-    ### Two prong cut
-    recodf = recodf[twoprong_cut(recodf)]
-
-    ### containment cut
-    recodf = recodf[mufv_cut(recodf, DETECTOR)]
-    recodf = recodf[pfv_cut(recodf, DETECTOR)]
-
-    ### PID cut
-    recodf = recodf[pid_cut(recodf.mu_chi2_of_mu_cand, recodf.mu_chi2_of_prot_cand,
-                            recodf.prot_chi2_of_mu_cand, recodf.prot_chi2_of_prot_cand,
-                            recodf.mu_len)]
-
-    ### crthitveto cut
-    if DETECTOR == "ICARUS":
-        recodf = recodf[crthitveto_cut(recodf)]
-
-    return recodf
-
-# def plot_sce(files):
-#     
-#     b_p = np.array([0.0, 0.2, 0.4, 0.6])
-# 
-#     fig, axes = plt.subplots(nrows=1, ncols=3)
-# 
-#     for f, a in zip(files, axes):
-#         prefix = "/exp/sbnd/data/users/nrowe/GUMP/det_syst/"
-# 
-#         nsplits = get_n_split(prefix+f)
-# 
-#         for i in range(nsplits):
-#             recodf = pd.read_hdf(prefix+f, key='evt_'+str(i))
-# 
-#             ## Figure out which detector this is
-#             DETECTOR = recodf.detector.iloc[0]
-# 
-#             recodf = all_cuts(recodf, DETECTOR)
-# 
-#             if i == 0: filedf = recodf.copy()
-#             else: filedf = pd.concat([filedf, recodf])
-#             del recodf
-# 
-#         a.hist2d(filedf.nu_E_calo, filedf.del_p, bins=[b_E, b_p])
-# 
-#     fig.savefig('2dSCE.png')
-#     fig.clf()
+from analysis_village.gump.gump_cuts import *
 
 class FileHistogramFunction:
     def __init__(self, filename):
@@ -105,6 +50,7 @@ def save_histogram(filename, hist_values, x_edges, y_edges):
     header +="\n"
     for y in y_edges:
         header += f"{y},"
+
     # Save the 2D grid
     np.savetxt(filename, hist_values, header=header, delimiter=",")
 
@@ -148,15 +94,6 @@ def apply_sce_map(df, min_map_file, pls_map_file):
             }
 
     new_df = pd.DataFrame(data)
-
-    w = np.ones_like(df.nu_E_calo)
-    w[df.del_p > 0.6] = 0.0
-
-    plt.hist(df.nu_E_calo, bins = min_func.x_edges, weights=w, label='cv', histtype='step')
-    plt.hist(df.nu_E_calo, bins = min_func.x_edges, weights=new_df['CAFPYANA_SBN_v1_multisigma_SCE']['ms1'], label='ms1-rwgt', histtype='step')
-    plt.hist(df.nu_E_calo, bins = min_func.x_edges, weights=new_df['CAFPYANA_SBN_v1_multisigma_SCE']['ps1'], label='ps1-rwgt', histtype='step')
-    plt.legend()
-    plt.savefig('sce_debug.png')
     return new_df
 
 def main():
@@ -166,6 +103,7 @@ def main():
 
     prefix = "/exp/sbnd/data/users/nrowe/GUMP/det_syst/"
 
+    # just a random dataframe to test map with
     cv_f = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_1.df"
     nsplits = get_n_split(cv_f)
     temp_list = []

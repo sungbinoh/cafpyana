@@ -7,6 +7,7 @@ import awkward as ak
 import numpy as np
 
 from analysis_village.gump.gump_cuts import *
+from analysis_village.gump.SCE_map import *
 
 def make_gump_ttree_mc(dfname, split):
     recodf_key = 'evt_' + str(split)
@@ -22,11 +23,7 @@ def make_gump_ttree_mc(dfname, split):
     DETECTOR = recodf.detector.iloc[0]
 
     ## Apply cuts
-    slc_vtx = pd.DataFrame({'x':recodf.slc_vtx_x, 
-                            'y':recodf.slc_vtx_y,
-                            'z':recodf.slc_vtx_z})
-
-    recodf = recodf[fv_cut(slc_vtx, DETECTOR)]
+    recodf = recodf[slcfv_cut(recodf, DETECTOR)]
 
     ### NuScore cut
     recodf = recodf[cosmic_cut(recodf)]
@@ -61,6 +58,8 @@ def make_gump_ttree_mc(dfname, split):
     for col in wgt_columns:
             recodf_wgt_out[col] = np.array([matchdf[col][u].values for u in matchdf[col].columns]).T.tolist()
 
+    sce_df = apply_sce_map(recodf, 'analysis_village/gump/min_SCE.txt', 'analysis_village/gump/pls_SCE.txt')
+    recodf_wgt_out['CAFPYANA_SBN_v1_multisigma_SCE'] = np.array([sce_df['CAFPYANA_SBN_v1_multisigma_SCE'][u].values for u in sce_df['CAFPYANA_SBN_v1_multisigma_SCE'].columns]).T.tolist()
 
     ## just get NC from here
     mcnudf = pd.read_hdf(dfname, key=mcnudf_key)
@@ -96,11 +95,7 @@ def make_gump_ttree_data(dfname, split):
     DETECTOR = recodf.detector.iloc[0]
 
     ## Apply cuts
-    slc_vtx = pd.DataFrame({'x':recodf.slc_vtx_x, 
-                            'y':recodf.slc_vtx_y,
-                            'z':recodf.slc_vtx_z})
-
-    recodf = recodf[fv_cut(slc_vtx, DETECTOR)]
+    recodf = recodf[slcfv_cut(recodf, DETECTOR)]
 
     ### NuScore cut
     recodf = recodf[cosmic_cut(recodf)]

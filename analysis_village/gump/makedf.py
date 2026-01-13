@@ -515,7 +515,8 @@ def make_gump_nudf(f, is_slc=False):
     nudf = make_mcdf(f, slc_mcbranches, slc_mcprimbranches) if is_slc else make_mcdf(f)
     nudf["ind"] = nudf.index.get_level_values(1)
 
-    # wgtdf = pd.concat([bnbsyst.bnbsyst(f, nudf.ind), geniesyst.geniesyst_sbnd(f, nudf.ind)], axis=1)
+    wgtdf = pd.concat([bnbsyst.bnbsyst(f, nudf.ind), geniesyst.geniesyst(f, nudf.ind)], axis=1)
+
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
 
     if det.empty:
@@ -575,5 +576,6 @@ def make_gump_nudf(f, is_slc=False):
     })
 
     this_nudf.columns = pd.MultiIndex.from_tuples([(col, '') for col in this_nudf.columns])
+    this_nudf = multicol_concat(this_nudf, wgtdf)
 
     return this_nudf

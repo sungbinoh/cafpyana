@@ -153,3 +153,29 @@ def breakdown_top(var, df):
            var[(df.is_sig != True) & (df.is_other_numucc != True) & (df.is_nc != True) & (df.is_fv != False) & (df.is_cosmic != True)]
            ]
     return ret
+
+def all_cuts(recodf, DETECTOR):
+    ## fv cut
+    recodf = recodf[slcfv_cut(recodf, DETECTOR)]
+
+    ### NuScore cut
+    recodf = recodf[cosmic_cut(recodf)]
+
+    ### Two prong cut
+    recodf = recodf[twoprong_cut(recodf)]
+
+    ### containment cut
+    recodf = recodf[mufv_cut(recodf, DETECTOR)]
+    recodf = recodf[pfv_cut(recodf, DETECTOR)]
+
+    ### PID cut
+    recodf = recodf[pid_cut(recodf.mu_chi2_of_mu_cand, recodf.mu_chi2_of_prot_cand,
+                            recodf.prot_chi2_of_mu_cand, recodf.prot_chi2_of_prot_cand,
+                            recodf.mu_len)]
+
+    ### crthitveto cut
+    if DETECTOR == "ICARUS":
+        recodf = recodf[crthitveto_cut(recodf)]
+
+    return recodf
+
