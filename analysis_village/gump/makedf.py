@@ -9,6 +9,130 @@ from makedf import chi2pid
 from analysis_village.gump.kinematics import *
 from analysis_village.gump.gump_cuts import *
 
+
+def make_spine_no_cuts_df(f):
+    det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
+    if det.empty:
+        return pd.DataFrame()
+
+    if (1 == det.unique()):
+        DETECTOR = "SBND"
+    elif (2 == det.unique()):
+        DETECTOR = "ICARUS"
+    else:
+        print("Detector unclear, check rec.hdr.det!")
+
+    partdf = make_spinepartdf(f, requirePrimary=True)
+    df = make_spineslcdf(f)
+
+    mudf = partdf[partdf.pid == 2].sort_values(partdf.index.names[:2] + [("length", "", "")]).groupby(level=[0,1]).last()    
+    mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
+
+    pdf = partdf[partdf.pid == 4].sort_values(partdf.index.names[:2] + [("length", "", "")]).groupby(level=[0,1]).last()    
+    pdf.columns = pd.MultiIndex.from_tuples([tuple(["p"] + list(c)) for c in pdf.columns])
+
+    df = multicol_merge(df, mudf, left_index=True, right_index=True, how="left", validate="one_to_one")
+    df = multicol_merge(df, pdf, left_index=True, right_index=True, how="left", validate="one_to_one")
+
+    # in case we want to cut out other objects -- save the highest energy of each other particle
+    lead_gamma_energy = partdf.ke[(partdf.pid == 0)].groupby(level=[0,1]).max().rename("lead_gamma_energy")
+    df = multicol_add(df, lead_gamma_energy)
+
+    lead_elec_energy = partdf.ke[(partdf.pid == 1)].groupby(level=[0,1]).max().rename("lead_elec_energy")
+    df = multicol_add(df, lead_elec_energy)
+
+    lead_pion_length = partdf.length[(partdf.pid == 3)].groupby(level=[0,1]).max().rename("lead_pion_length")
+    df = multicol_add(df, lead_pion_length)
+
+    subl_muon_length = partdf[(partdf.pid == 2)].sort_values(partdf.index.names[:2] + [("length", "", "")]).length.groupby(level=[0,1]).nth(-2).rename("subl_muon_length").droplevel(2, axis=0)
+    df = multicol_add(df, subl_muon_length)
+
+    subl_proton_length = partdf[(partdf.pid == 4)].sort_values(partdf.index.names[:2] + [("length", "", "")]).length.groupby(level=[0,1]).nth(-2).rename("subl_proton_length").droplevel(2, axis=0)
+    df = multicol_add(df, subl_proton_length)
+
+    # Apply pre-selection: Require fiducial vertex, at least one muon, at least one proton
+
+    # require both muon and proton to be present
+    df = df[~np.isnan(df.mu.pid) & ~np.isnan(df.p.pid)]
+
+    # require fiducial verex
+    df = df[vtxfv_cut(df.vertex, DETECTOR)]
+
+    # lookup stuff
+    true_pdg = df.truth.pdg
+    is_contained = (df.mu.is_contained == 1) & (df.mu.is_time_contained == 1) & (df.p.is_contained == 1) & (df.p.is_time_contained == 1)
+    is_time_contained = (df.mu.is_time_contained == 1) & (df.p.is_time_contained == 1)
+    tmatch_idx = df.nu_id 
+
+    # calculate transverse kinematics
+    p_mu = df.mu.p / 1e3
+    dir_mu = df.mu.start_dir
+    p_p = df.p.p / 1e3
+    dir_p = df.p.start_dir
+    tki = transverse_kinematics(p_mu, dir_mu, p_p, dir_p)
+    nu_E_calo = neutrino_energy(p_mu, dir_mu, p_p, dir_p)
+    del_p = tki['del_p']
+	
+    del_Tp = tki['del_Tp']
+    del_phi = tki['del_phi']
+    del_alpha = tki['del_alpha']
+    mu_E = tki['mu_E']
+    p_E = tki['p_E']
+
+    # Build returned dataframe with same format to pandora, as much as possible
+    slcdf = pd.DataFrame({
+        'other_shw_length': df[["lead_gamma_energy", "lead_elec_energy"]].max(axis=1),
+        'other_trk_length': df[["lead_pion_length", "subl_muon_length", "subl_proton_length"]].max(axis=1),
+        'slc_vtx_x': df.vertex.x,
+        'slc_vtx_y': df.vertex.y,
+        'slc_vtx_z': df.vertex.z,
+        'is_clear_cosmic': False,
+        'nu_score': -1,
+        'true_pdg': true_pdg,
+        'is_cosmic': (true_pdg == -1),
+        'is_time_contained': is_time_contained,
+        'is_contained': is_contained,
+        'crlongtrkdiry': -1,
+        'mu_chi2_of_mu_cand': df.mu.pid_scores.I2,
+        'mu_chi2_of_prot_cand': df.p.pid_scores.I2,
+        'prot_chi2_of_mu_cand': df.mu.pid_scores.I4,
+        'prot_chi2_of_prot_cand': df.p.pid_scores.I4,
+        'p_len': df.p.length,
+        'mu_len': df.mu.length,
+        'nu_E_calo': nu_E_calo,
+        'mu_E': mu_E,
+        'mu_T': mu_E - MUON_MASS,
+        'p_E': p_E,
+        'p_T': p_E - PROTON_MASS,
+        'mu_end_x': df.mu.end_point.x,
+        'mu_end_y': df.mu.end_point.y,
+        'mu_end_z': df.mu.end_point.z,
+        'p_end_x': df.p.end_point.x,
+        'p_end_y': df.p.end_point.y,
+        'p_end_z': df.p.end_point.z,
+        'mu_dir_x': dir_mu.x,
+        'mu_dir_y': dir_mu.y,
+        'mu_dir_z': dir_mu.z,
+        'p_dir_x': dir_p.x,
+        'p_dir_y': dir_p.y,
+        'p_dir_z': dir_p.z,
+        'mu_true_p': magdf(df.mu.truth.genp),
+        'mu_true_pdg': df.mu.truth.pdg,
+        'p_true_p': magdf(df.p.truth.genp),
+        'p_true_pdg': df.p.truth.pdg,
+        'del_p': del_p,
+        'del_Tp': del_Tp,
+        'del_phi': del_phi,
+        'tmatch_idx': tmatch_idx,
+        'has_stub': False
+    })
+
+    # include some meta-data
+    slcdf['detector'] = DETECTOR
+
+    return slcdf
+    
+
 # to do: make_pandora_with_cuts using correct formatting 
 # and can be turned into ttree for PROfit
 
