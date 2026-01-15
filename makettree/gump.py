@@ -58,7 +58,7 @@ def make_gump_ttree_mc(dfname, split):
     for col in wgt_columns:
             recodf_wgt_out[col] = np.array([matchdf[col][u].values for u in matchdf[col].columns]).T.tolist()
 
-    sce_df = apply_sce_map(recodf, 'analysis_village/gump/min_SCE.txt', 'analysis_village/gump/pls_SCE.txt')
+    sce_df = apply_map(recodf, 'analysis_village/gump/min_SCE.txt', 'analysis_village/gump/pls_SCE.txt', 'CAFPYANA_SBN_v1_multisigma_SCE')
     recodf_wgt_out['CAFPYANA_SBN_v1_multisigma_SCE'] = np.array([sce_df['CAFPYANA_SBN_v1_multisigma_SCE'][u].values for u in sce_df['CAFPYANA_SBN_v1_multisigma_SCE'].columns]).T.tolist()
 
     ## just get NC from here

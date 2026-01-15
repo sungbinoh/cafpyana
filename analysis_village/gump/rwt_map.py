@@ -54,7 +54,7 @@ def save_histogram(filename, hist_values, x_edges, y_edges):
     # Save the 2D grid
     np.savetxt(filename, hist_values, header=header, delimiter=",")
 
-def make_sce_hists(files):
+def make_hists(files, outputs):
     b_E = np.array([0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.25, 1.5, 2.0, 3.0])
     b_p = np.array([0.0, 0.2, 0.4, 0.6])
     
@@ -82,15 +82,15 @@ def make_sce_hists(files):
     hist2ds = np.array(hist2ds)
     hist2ds_rat = [hist2ds[0]/hist2ds[1], hist2ds[2]/hist2ds[1]]
 
-    save_histogram('min_SCE.txt', hist2ds_rat[0], b_E, b_p)
-    save_histogram('pls_SCE.txt', hist2ds_rat[1], b_E, b_p)
+    save_histogram(outputs[0], hist2ds_rat[0], b_E, b_p)
+    save_histogram(outputs[1], hist2ds_rat[1], b_E, b_p)
 
-def apply_sce_map(df, min_map_file, pls_map_file):
+def apply_map(df, min_map_file, pls_map_file, col_name):
     min_func = FileHistogramFunction(min_map_file)
     pls_func = FileHistogramFunction(pls_map_file)
     data = {
-            ('CAFPYANA_SBN_v1_multisigma_SCE', 'ps1') : [pls_func(E, del_p) for E, del_p in zip(df.nu_E_calo, df.del_p)],
-            ('CAFPYANA_SBN_v1_multisigma_SCE', 'ms1') : [min_func(E, del_p) for E, del_p in zip(df.nu_E_calo, df.del_p)]
+            (col_name, 'ps1') : [pls_func(E, del_p) for E, del_p in zip(df.nu_E_calo, df.del_p)],
+            (col_name, 'ms1') : [min_func(E, del_p) for E, del_p in zip(df.nu_E_calo, df.del_p)]
             }
 
     new_df = pd.DataFrame(data)
@@ -99,7 +99,7 @@ def apply_sce_map(df, min_map_file, pls_map_file):
 def main():
     """Main analysis pipeline."""
 
-    make_sce_hists(["SCE_0.df", "SCE_1.df", "SCE_2.df"])
+    make_hists(["SCE_0.df", "SCE_1.df", "SCE_2.df"], ["min_SCE.txt", "pls_SCE.txt"])
 
     prefix = "/exp/sbnd/data/users/nrowe/GUMP/det_syst/"
 
@@ -114,7 +114,7 @@ def main():
         temp_list.append(recodf)
 
     recodf = pd.concat(temp_list)
-    apply_sce_map(recodf, 'min_SCE.txt', 'pls_SCE.txt')
+    apply_map(recodf, 'min_SCE.txt', 'pls_SCE.txt', 'CAFPYANA_SBN_v1_multisigma_SCE')
 
 if __name__ == "__main__":
     main()
