@@ -91,6 +91,7 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
         etau = etaudf.merge(IC_etau_cal_df, on=["iov", "itpc"], how="left", validate="many_to_one").etau
         etau = etau.fillna(np.inf)
         etau.index = dqdxdf.index
+        etau[dqdxdf.run == 1] = 3.5e3 # set MC lifetime to MC default
 
         # compute TPC scale
         iov = _tpc_iov(dqdxdf.run)
@@ -177,12 +178,12 @@ def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False, smear=-1, scale
         this_alpha_emb = SBND_CALO_PARAMS["alpha_emb"][0] if isMC else SBND_CALO_PARAMS["alpha_emb"][1]
         this_beta_90 = SBND_CALO_PARAMS["beta_90"][0] if isMC else SBND_CALO_PARAMS["beta_90"][1]
         this_R_emb = SBND_CALO_PARAMS["R_emb"][0] if isMC else SBND_CALO_PARAMS["R_emb"][1]
-        dedx = calo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, this_alpha_emb, this_beta_90, this_R_emb)
+        dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, this_alpha_emb, this_beta_90, this_R_emb)
     else:
-        dedx = calo.recombination_cor(dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
+        dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
 
     if smear > 0:
-        dedx = dedx*np.random.normal(scale=smear, size=dedx.size)
+        dedx = dedx*np.random.normal(loc=1., scale=smear, size=dedx.size)
 
     return dedx
 
@@ -193,16 +194,23 @@ def _yz_zbin(z, yz_zbin):
     return np.searchsorted(yz_zbin, z) - 1
 
 def _yz_iov(run): 
-    return __iov(run, IC_yz_cal_iovdf)
+    iov = __iov(run, IC_yz_cal_iovdf)
+    iov[run == 1] = 4 # MC default to Run 4
+    return iov
 
 def _etau_iov(run):
-    return __iov(run, IC_etau_cal_iovdf)
+    iov = __iov(run, IC_etau_cal_iovdf)
+    iov[run == 1] = -1 # MC default to no run
+    return iov
 
 def _tpc_iov(run):
-    return __iov(run, IC_tpc_cal_iovdf)
+    iov = __iov(run, IC_tpc_cal_iovdf)
+    iov[run == 1] = 3 # MC default to Run 4
+    return iov
+    
 
 def __iov(run, df):
-    return pd.cut(run, list(df.run) + [np.inf], labels=df.iov)
+    return pd.cut(run, list(df.run) + [np.inf], labels=df.iov).astype(float).fillna(-1).astype(int)
 
 ##############################
 # EXPECTED dE/dx FILES
