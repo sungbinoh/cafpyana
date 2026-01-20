@@ -8,7 +8,7 @@ larsoft_data_v = "v1_02_02"
 icarus_data_v = "v10_06_00"
 sbnd_data_v = "v01_35_00"
 
-rr_max_cut_chi2 = 25. ## for resolving MC's hit RR cut, after fixing the issue, put this value to 26.
+rr_max_cut_chi2 = 26. ## for resolving MC's hit RR cut, after fixing the issue, put this value to 26.
 
 #### == use pandora_df_calo_update to apply these changes
 ICARUS_CALO_PARAMS = {
@@ -26,10 +26,12 @@ SBND_CALO_PARAMS = {
     "beta_90": [0.204, 0.204],
     "R_emb": [1.25, 1.25],
     "gains": [
-        [0.0203521, 0.0202351, 0.0200727], ## MC
-        [0.0223037, 0.0219534, 0.0215156]], ## Data
+        [0.02020, 0.02006, 0.02047], ## MC
+        #[0.0220552, 0.02168213, 0.02144327] ## Data
+        [0.02172, 0.02150, 0.0205] ## Data
+    ],
     "c_cal_frac": [1., 1., 1.],
-    "etau": [100., 35.], ## first value for MC and second value for data
+    "etau": [35., 35.], ## first value for MC and second value for data
 }
 
 
@@ -41,7 +43,8 @@ def chi2(hitdf, exprr, expdedx, experr, dedxname="dedx"):
 
     v_chi2 = (hitdf[dedxname] - dedx_exp)**2 / (dedx_err**2 + dedx_res**2)
 
-    when_chi2 = (hitdf.rr < rr_max_cut_chi2) & ~hitdf.firsthit & ~hitdf.lasthit & (hitdf[dedxname] < 1000.)
+    #when_chi2 = (hitdf.rr < rr_max_cut_chi2) & ~hitdf.firsthit & ~hitdf.lasthit & (hitdf[dedxname] < 1000.)
+    when_chi2 = (hitdf.rr < np.max(exprr)) & ~hitdf.firsthit & ~hitdf.lasthit & (hitdf[dedxname] < 1000.)
 
     chi2_group = v_chi2[when_chi2].groupby(level=list(range(hitdf.index.nlevels-1)))
 
@@ -133,17 +136,26 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
         #yzdf['scale'] = yz_scale
         #print(yzdf[yzdf.rr < 26.].head(50))
         # compute lifetime correction
-        iov = dqdxdf.iov ## FIXME: once SBND has time dep. calo, it should be updated
-        etaudf = pd.DataFrame({"itpc": itpc, "iov": iov})
-        etau = etaudf.merge(this_etau_df, on=["iov", "itpc"], how="left", validate="many_to_one").etau
+        if not isMC:
+            iov = _sbnd_etau_iov(dqdxdf.run)
+        else:
+            iov = pd.Series(0.0, index=dqdxdf.index, name='iov')
+
+        etaudf = pd.DataFrame({"iov": iov})
+        etau = etaudf.merge(this_etau_df, on=["iov"], how="left", validate="many_to_one")
+        #print(etau)
         etau = etau.fillna(np.inf)
         etau.index = dqdxdf.index
-
+        etau_correct_tpc = pd.Series(
+            np.where(dqdxdf.tpc == 0, etau.etau_E, etau.etau_W),
+            index=dqdxdf.index,
+            name='etau_correct_tpc'
+        )
         # apply the corrections
         t0 = 0 # assume in time
         tdrift = dqdxdf.t / 2000. - 0.2
-        dqdx = dqdx * np.exp(tdrift / etau) * yz_scale
-        #dqdx = dqdx / yz_scale
+        #dqdx = dqdx * np.exp(tdrift / etau_correct_tpc) / yz_scale ## FIXME, yz_scale should be multiplied for the nominal map
+        dqdx = dqdx / yz_scale
 
     else: # if not specified, rely on input calibration
         dqdx = dqdxdf.dqdx
@@ -203,6 +215,12 @@ def _tpc_iov(run):
 
 def __iov(run, df):
     return pd.cut(run, list(df.run) + [np.inf], labels=df.iov)
+
+def _sbnd_etau_iov(run):
+    return _sbnd_iov(run, SBND_etau_cal_iovdf)
+
+def _sbnd_iov(run, df):
+    return pd.cut(run, list(df.run) + [np.inf], labels=df.iov, right=False)
 
 ##############################
 # EXPECTED dE/dx FILES
@@ -341,8 +359,37 @@ conn.close()
 ##############################
 # SBND TPC calo files
 ##############################
+SBND_etau_cal_f = "/exp/sbnd/app/users/sungbino/sbn_calibration/calib_db/etau/lucy/tpc_elifetime.db"
+SBND_etau_cal_db = "tpc_elifetime_data"
+SBND_etau_cal_iov = "tpc_elifetime_iovs"
+conn = sqlite3.connect(SBND_etau_cal_f)
+cursor = conn.cursor()
+cursor.execute("SELECT * FROM %s" % SBND_etau_cal_db)
+rows = cursor.fetchall()
+data = list(zip(*rows))
+SBND_etau_cal_data_df = pd.DataFrame({
+  "iov": data[0],
+  "etau_E": data[5],
+  "etau_W": data[8],
+})
+
+cursor.execute("SELECT * FROM %s WHERE ACTIVE=1" % SBND_etau_cal_iov)
+rows = cursor.fetchall()
+data = list(zip(*rows))
+SBND_etau_cal_iovdf = pd.DataFrame({
+  "iov": data[0],
+  "begin_time": data[1],
+})
+SBND_etau_cal_iovdf["run"] = SBND_etau_cal_iovdf.begin_time % 1000000000
+SBND_etau_cal_iovdf.sort_values(by="run", inplace=True)
+conn.close()
+
+SBND_etau_cal_mc_df = pd.DataFrame( {'iov': [0, 1], 'itpc': [0, 0], 'etau_E': [SBND_CALO_PARAMS["etau"][0], SBND_CALO_PARAMS["etau"][0]], 'etau_W': [SBND_CALO_PARAMS["etau"][0], SBND_CALO_PARAMS["etau"][0]]})
+
 SBND_yz_cal_mc_f = "/cvmfs/sbnd.opensciencegrid.org/products/sbnd/sbnd_data/" + sbnd_data_v + "/YZmaps/yz_correction_map_mcp2025b5e18.root"
 SBND_yz_cal_data_f = "/cvmfs/sbnd.opensciencegrid.org/products/sbnd/sbnd_data/" + sbnd_data_v + "/YZmaps/yz_correction_map_data1e20.root"
+#SBND_yz_cal_mc_f = "/exp/sbnd/app/users/sungbino/sbn_calibration/yz_unif/output_YZ_unif_2025FallValidation2_MC_corr.root"
+#SBND_yz_cal_data_f = "/exp/sbnd/app/users/sungbino/sbn_calibration/yz_unif/output_YZ_unif_2025FallValidation2_data_corr.root"
 
 yz_zbin_sbnd_mc = []
 yz_ybin_sbnd_mc = []
@@ -383,5 +430,3 @@ def call_sbnd_yz_corr(map_f):
 SBND_yz_cal_mc_df, yz_zbin_sbnd_mc, yz_ybin_sbnd_mc = call_sbnd_yz_corr(SBND_yz_cal_mc_f)
 SBND_yz_cal_data_df, yz_zbin_sbnd_data, yz_ybin_sbnd_data = call_sbnd_yz_corr(SBND_yz_cal_data_f)
 
-SBND_etau_cal_mc_df = pd.DataFrame( {'iov': [0, 0], 'itpc': [0, 1], 'etau': [SBND_CALO_PARAMS["etau"][0], SBND_CALO_PARAMS["etau"][0]]})
-SBND_etau_cal_data_df = pd.DataFrame( {'iov': [0, 0], 'itpc': [0, 1], 'etau': [SBND_CALO_PARAMS["etau"][1], SBND_CALO_PARAMS["etau"][1]]})

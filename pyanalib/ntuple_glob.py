@@ -15,7 +15,7 @@ import time
 import uuid
 import tempfile
 
-from makedf.makedf import make_histpotdf
+from makedf.makedf import make_histpotdf, make_histgenevtdf
 
 CPU_COUNT = multiprocessing.cpu_count()
 
@@ -80,8 +80,11 @@ def _loaddf(applyfs, preprocess, g):
         with _open_with_retries(fname) as f:
 
             dfs = []
+            totevt = f['TotalEvents'].values()[0]
             if "recTree" not in f:
                 print("File (%s) missing recTree. Try only histpotdf and skipping other dfs..." % fname)
+            elif totevt < 1e-6:
+                print("File (%s) has 0 in TotalEvents. Try only histpotdf and skipping other dfs..." % fname)
             else:
                 for applyf in applyfs:
                     df = applyf(f)  # must fully read from 'f' here
@@ -115,6 +118,17 @@ def _loaddf(applyfs, preprocess, g):
                 dfs.append(df)
             else:
                 print("File (%s) missing TotalPOT histgoram. Cannot make histpotdf..." % fname)
+
+            if "TotalGenEvents" in f:
+                df = make_histgenevtdf(f)
+                df["__ntuple"] = index
+                df.set_index("__ntuple", append=True, inplace=True)
+                new_order = [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
+                df = df.reorder_levels(new_order)
+
+                dfs.append(df)
+            else:
+                print("File (%s) missing TotalGenEvents histgoram. Cannot make histgenevtdf..." % fname)
 
             if not dfs:
                 return None

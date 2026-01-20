@@ -47,6 +47,13 @@ def make_histpotdf(f):
     histpot.index.name = 'entry'
     return histpot
 
+def make_histgenevtdf(f):
+    # get the value from the TotalPOT histogram
+    genevt = f['TotalGenEvents'].values()
+    histgenevt = pd.DataFrame(data={'TotalGenEvents':genevt})
+    histgenevt.index.name = 'entry'
+    return histgenevt
+
 def make_hdrdf(f):
     hdr = loadbranches(f["recTree"], hdrbranches).rec.hdr
     return hdr
@@ -379,7 +386,11 @@ def make_all_pandora_df(f):
     slcdf = multicol_add(slcdf, dmagdf(slcdf.slc.vertex, slcdf.pfp.trk.start).rename(("pfp", "trk", "dist_to_vertex")))
     slcdf = multicol_add(slcdf, dmagdf(slcdf.slc.vertex, slcdf.pfp.shw.start).rename(("pfp", "shw", "dist_to_vertex")))
 
-    return pfpdf
+    # add bcfm branches
+    barycenterFM_df = loadbranches(f["recTree"], barycenterFMbranches).rec
+    slcdf = multicol_merge(barycenterFM_df, slcdf, left_index=True, right_index=True, how="right", validate="one_to_many")
+
+    return slcdf
 
 def make_pandora_df_calo_update(f, **trkArgs):
     pandoradf = make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=True, requireFiducial=False, updatecalo=True, **trkArgs)
@@ -402,8 +413,8 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
         chi2_pids = []
         for plane in range(0, 3):
             trkhitdf = make_trkhitdf(f, plane)
-            if det == "SBND": ## FIXME
-                trkhitdf = trkhitdf[InFV(df = trkhitdf, inzback = 0., det = "SBND_nohighyz")]
+            #if det == "SBND": ## FIXME
+            #    trkhitdf = trkhitdf[InFV(df = trkhitdf, inzback = 0., det = "SBND_nohighyz")]
             #dqdx_redo = chi2pid.dqdx(trkhitdf, gain=det, calibrate=det, isMC=ismc)
             dedx_redo = chi2pid.dedx(trkhitdf, gain=det, calibrate=det, plane=plane, isMC=ismc)
             dedx_bias = (dedx_redo - trkhitdf.dedx) / trkhitdf.dedx
@@ -412,7 +423,8 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
             #trkhitdf["dedx_bias"] = dedx_bias
             #print(trkhitdf[trkhitdf.rr < 26.].head(50))
             for par in ['muon', 'proton']:
-                this_chi2_new, this_chi2_ndof = chi2pid.chi2par(trkhitdf, dedxname="dedx_redo", par=par)
+                #this_chi2_new, this_chi2_ndof = chi2pid.chi2par(trkhitdf, dedxname="dedx_redo", par=par)
+                this_chi2_new, this_chi2_ndof = chi2pid.chi2par(trkhitdf, dedxname="dedx", par=par)
                 this_chi2_col = ('pfp', 'trk', 'chi2pid', 'I' + str(plane), 'chi2_' + par + '_new', '')
                 this_ndof_col = ('pfp', 'trk', 'chi2pid', 'I' + str(plane), 'ndof_' + par + '_new', '')
                 trkdf[this_chi2_col] = this_chi2_new
@@ -436,7 +448,6 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
     if requireFiducial:
         slcdf = slcdf[InFV(slcdf.slc.vertex, 50)]
 
-    #print(slcdf.pfp.trk.chi2pid.head(50))
     return slcdf
 
 def make_spine_df(f, trkDistCut=-1, requireFiducial=True, **trkArgs):
