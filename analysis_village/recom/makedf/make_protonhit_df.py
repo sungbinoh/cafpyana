@@ -231,6 +231,11 @@ def check_wireskip(df, plane=2):
 
 def make_protonhit_df(f):
 
+    det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
+    if (1 == det.unique()):
+        det = "SBND"
+    else:
+        det = "ICARUS"
     hdrdf = make_hdrdf(f)
     run = hdrdf.run
     subrun = hdrdf.subrun
@@ -239,7 +244,8 @@ def make_protonhit_df(f):
     mchdrdf = make_mchdrdf(f)
     ismc = hdrdf.ismc.iloc[0]
 
-    pandoradf = make_pandora_df(f)
+    #pandoradf = make_pandora_df(f)
+    pandoradf = make_pandora_df_calo_update(f)
     pandoradf = pandoradf[InFV_nohiyz(pandoradf.slc.vertex)]
     pandoradf = pandoradf[(pandoradf.pfp.trk.len > 4.) & (pandoradf.pfp.dist_to_vertex < 6.)]
 
@@ -331,6 +337,13 @@ def make_protonhit_df(f):
         #print(proton_hits)
 
     # output dfs
+
+    #proton_hits = proton_hits.set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index", "rec.slc.reco.pfp.trk.calo.2.points..index"])
+    #print(proton_hits)
+
+    dedx_redo = chi2pid.dedx(proton_hits, gain=det, calibrate=det, plane=2, isMC=ismc)
+    proton_hits["dedx_redo"] = dedx_redo
+
     proton_hits_selected = proton_hits.loc[:, [
         ("selection"),
         ("run"),
@@ -340,6 +353,7 @@ def make_protonhit_df(f):
         ("plane"),
         ("rr"),
         ("dqdx"),
+        ("dedx_redo"),
         ("integral"),
         ("sumadc"),
         ("h_e"),
@@ -368,6 +382,7 @@ def make_protonhit_df(f):
         "plane",
         "rr",
         "dqdx",
+        "dedx_redo",
         "integral",
         "sumadc",
         "h_e",

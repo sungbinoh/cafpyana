@@ -231,6 +231,11 @@ def check_wireskip(df, plane=2):
 
 def make_muonhit_df(f):
 
+    det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
+    if (1 == det.unique()):
+        det = "SBND"
+    else:
+        det = "ICARUS"
     hdrdf = make_hdrdf(f)
     run = hdrdf.run
     subrun = hdrdf.subrun
@@ -239,7 +244,8 @@ def make_muonhit_df(f):
     mchdrdf = make_mchdrdf(f)
     ismc = hdrdf.ismc.iloc[0]
 
-    pandoradf = make_pandora_df(f)
+    #pandoradf = make_pandora_df(f)
+    pandoradf = make_pandora_df_calo_update(f)
     pandoradf = pandoradf[InFV_nohiyz(pandoradf.slc.vertex)]
     pandoradf = pandoradf[(pandoradf.pfp.trk.len > 4.) & (pandoradf.pfp.dist_to_vertex < 6.)]
 
@@ -298,6 +304,9 @@ def make_muonhit_df(f):
     else:
         muon_hits['etau'] = etau_mc
 
+    dedx_redo = chi2pid.dedx(muon_hits, gain=det, calibrate=det, plane=2, isMC=ismc)
+    muon_hits["dedx_redo"] = dedx_redo
+
     # output dfs
     muon_hits_selected = muon_hits.loc[:, [
         ("selection"),
@@ -308,6 +317,7 @@ def make_muonhit_df(f):
         ("plane"),
         ("rr"),
         ("dqdx"),
+        ("dedx_redo"),
         ("integral"),
         ("sumadc"),
         ("h_e"),
@@ -336,6 +346,7 @@ def make_muonhit_df(f):
         "plane",
         "rr",
         "dqdx",
+        "dedx_redo",
         "integral",
         "sumadc",
         "h_e",

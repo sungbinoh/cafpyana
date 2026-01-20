@@ -8,7 +8,7 @@ larsoft_data_v = "v1_02_02"
 icarus_data_v = "v10_06_00"
 sbnd_data_v = "v01_35_00"
 
-rr_max_cut_chi2 = 25. ## for resolving MC's hit RR cut, after fixing the issue, put this value to 26.
+rr_max_cut_chi2 = 26. ## for resolving MC's hit RR cut, after fixing the issue, put this value to 26.
 
 #### == use pandora_df_calo_update to apply these changes
 ICARUS_CALO_PARAMS = {
@@ -27,7 +27,9 @@ SBND_CALO_PARAMS = {
     "R_emb": [1.25, 1.25],
     "gains": [
         [0.02020, 0.02006, 0.02047], ## MC
-        [0.02176, 0.02153, 0.02154]], ## Data
+        #[0.0220552, 0.02168213, 0.02144327] ## Data
+        [0.02172, 0.02150, 0.0205] ## Data
+    ],
     "c_cal_frac": [1., 1., 1.],
     "etau": [35., 35.], ## first value for MC and second value for data
 }
@@ -41,7 +43,8 @@ def chi2(hitdf, exprr, expdedx, experr, dedxname="dedx"):
 
     v_chi2 = (hitdf[dedxname] - dedx_exp)**2 / (dedx_err**2 + dedx_res**2)
 
-    when_chi2 = (hitdf.rr < rr_max_cut_chi2) & ~hitdf.firsthit & ~hitdf.lasthit & (hitdf[dedxname] < 1000.)
+    #when_chi2 = (hitdf.rr < rr_max_cut_chi2) & ~hitdf.firsthit & ~hitdf.lasthit & (hitdf[dedxname] < 1000.)
+    when_chi2 = (hitdf.rr < np.max(exprr)) & ~hitdf.firsthit & ~hitdf.lasthit & (hitdf[dedxname] < 1000.)
 
     chi2_group = v_chi2[when_chi2].groupby(level=list(range(hitdf.index.nlevels-1)))
 
@@ -140,6 +143,7 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
 
         etaudf = pd.DataFrame({"iov": iov})
         etau = etaudf.merge(this_etau_df, on=["iov"], how="left", validate="many_to_one")
+        #print(etau)
         etau = etau.fillna(np.inf)
         etau.index = dqdxdf.index
         etau_correct_tpc = pd.Series(
@@ -150,8 +154,8 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
         # apply the corrections
         t0 = 0 # assume in time
         tdrift = dqdxdf.t / 2000. - 0.2
-        dqdx = dqdx * np.exp(tdrift / etau_correct_tpc) / yz_scale ## FIXME, yz_scale should be multiplied for the nominal map
-        #dqdx = dqdx / yz_scale
+        #dqdx = dqdx * np.exp(tdrift / etau_correct_tpc) / yz_scale ## FIXME, yz_scale should be multiplied for the nominal map
+        dqdx = dqdx / yz_scale
 
     else: # if not specified, rely on input calibration
         dqdx = dqdxdf.dqdx
@@ -382,10 +386,10 @@ conn.close()
 
 SBND_etau_cal_mc_df = pd.DataFrame( {'iov': [0, 1], 'itpc': [0, 0], 'etau_E': [SBND_CALO_PARAMS["etau"][0], SBND_CALO_PARAMS["etau"][0]], 'etau_W': [SBND_CALO_PARAMS["etau"][0], SBND_CALO_PARAMS["etau"][0]]})
 
-#SBND_yz_cal_mc_f = "/cvmfs/sbnd.opensciencegrid.org/products/sbnd/sbnd_data/" + sbnd_data_v + "/YZmaps/yz_correction_map_mcp2025b5e18.root"
-#SBND_yz_cal_data_f = "/cvmfs/sbnd.opensciencegrid.org/products/sbnd/sbnd_data/" + sbnd_data_v + "/YZmaps/yz_correction_map_data1e20.root"
-SBND_yz_cal_mc_f = "/exp/sbnd/app/users/sungbino/sbn_calibration/yz_unif/output_YZ_unif_2025FallValidation2_MC_corr.root"
-SBND_yz_cal_data_f = "/exp/sbnd/app/users/sungbino/sbn_calibration/yz_unif/output_YZ_unif_2025FallValidation2_data_corr.root"
+SBND_yz_cal_mc_f = "/cvmfs/sbnd.opensciencegrid.org/products/sbnd/sbnd_data/" + sbnd_data_v + "/YZmaps/yz_correction_map_mcp2025b5e18.root"
+SBND_yz_cal_data_f = "/cvmfs/sbnd.opensciencegrid.org/products/sbnd/sbnd_data/" + sbnd_data_v + "/YZmaps/yz_correction_map_data1e20.root"
+#SBND_yz_cal_mc_f = "/exp/sbnd/app/users/sungbino/sbn_calibration/yz_unif/output_YZ_unif_2025FallValidation2_MC_corr.root"
+#SBND_yz_cal_data_f = "/exp/sbnd/app/users/sungbino/sbn_calibration/yz_unif/output_YZ_unif_2025FallValidation2_data_corr.root"
 
 yz_zbin_sbnd_mc = []
 yz_ybin_sbnd_mc = []
