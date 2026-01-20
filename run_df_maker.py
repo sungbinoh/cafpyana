@@ -92,8 +92,6 @@ def run_pool(output, inputs, nproc):
                     if buffer:  # only if buffer has data
                         concat_df = pd.concat(buffer, ignore_index=False)
                         this_key = k + "_" + str(k_idx)
-                        print(this_key)
-                        print(concat_df)
                         try:
                             hdf_pd.put(key=this_key, value=concat_df, format="fixed")
                             print(f"Saved {this_key}: {concat_df.memory_usage(deep=True).sum() / (1024**3):.4f} GB")
@@ -109,8 +107,6 @@ def run_pool(output, inputs, nproc):
             if buffer:
                 concat_df = pd.concat(buffer, ignore_index=False)
                 this_key = k + "_" + str(k_idx)
-                print(this_key)
-                print(concat_df)
                 try:
                     hdf_pd.put(key=this_key, value=concat_df, format="fixed")
                     print(f"Saved {this_key}: {concat_df.memory_usage(deep=True).sum() / (1024**3):.4f} GB")
