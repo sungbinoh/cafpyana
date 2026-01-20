@@ -79,7 +79,6 @@ def _loaddf(applyfs, preprocess, g):
     try:
         # Open AND close strictly within the context manager
         with _open_with_retries(fname) as f:
-
             dfs = []
             totevt = f['TotalEvents'].values()[0]
             if "recTree" not in f:
@@ -128,21 +127,17 @@ def _loaddf(applyfs, preprocess, g):
             df_histgenevt = df_histgenevt.reorder_levels(new_order)
             dfs.append(df_histgenevt)
 
-            if not dfs:
-                return None
-
-            return dfs
     except (OSError, ValueError) as e:
         print(f"Could not open file ({fname}). Skipping...")
         print(e)
         dfs = None
 
 
-    if madef:
-        os.remove(fname)
-
     for f in tempfiles:
         os.remove(f)
+            
+    if not dfs:
+        return None
 
     return dfs
 
