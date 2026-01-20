@@ -83,9 +83,9 @@ def _loaddf(applyfs, preprocess, g):
             dfs = []
             totevt = f['TotalEvents'].values()[0]
             if "recTree" not in f:
-                print("File (%s) missing recTree. Try only histpotdf and skipping other dfs..." % fname)
+                print("File (%s) missing recTree. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
             elif totevt < 1e-6:
-                print("File (%s) has 0 in TotalEvents. Try only histpotdf and skipping other dfs..." % fname)
+                print("File (%s) has 0 in TotalEvents. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
             else:
                 for applyf in applyfs:
                     df = applyf(f)  # must fully read from 'f' here
