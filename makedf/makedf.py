@@ -622,7 +622,7 @@ def make_spinepartdf(f, requirePrimary=False):
 
     etpartdf = loadbranches(f["recTree"], etrueparticlebranches)
     etpartdf = etpartdf.rec.dlp_true.particles
-    etpartdf.columns = [s for s in etpartdf.columns]
+    etpartdf.columns = ["_".join([c for c in s if c]) for s in etpartdf.columns]
     
     # Do matching
     # 
@@ -637,7 +637,7 @@ def make_spinepartdf(f, requirePrimary=False):
     bestmatch.columns = [s for s in bestmatch.columns]
 
     # Then use betmatch.match to get the G4 track IDs in etpartdf
-    bestmatch_wids = pd.merge(bestmatch, etpartdf, left_on=["entry", "match_ids"], right_on=["entry", "id"], how="left")
+    bestmatch_wids = pd.merge(bestmatch, etpartdf[["id", "track_id"]], left_on=["entry", "match_ids"], right_on=["entry", "id"], how="left")
     bestmatch_wids.index = bestmatch.index
 
     # Now use the G4 track IDs to get the true particle information
