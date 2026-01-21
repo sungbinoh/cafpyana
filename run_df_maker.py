@@ -1,6 +1,7 @@
 #!/usr/bin/env python3 
 import os,sys,time
 import datetime
+import tempfile
 #from TimeTools import *
 import argparse
 import tables
@@ -55,9 +56,37 @@ def run_pool(output, inputs, nproc):
 
     dfss = ntuples.dataframes(nproc=nproc, fs=DFS, preprocess=PREPROCESS)
     output = output + ".df"
+    
+    # Handle XRootD output paths - write to temp file first, then copy
+    is_xrootd = output.startswith("root://")
+    if is_xrootd:
+        # Create temp file in system temp directory
+        temp_dir = tempfile.gettempdir()
+        temp_filename = os.path.basename(output)
+        local_output = os.path.join(temp_dir, temp_filename)
+        print(f"Writing to temporary local file: {local_output}")
+        print(f"Will copy to XRootD location: {output}")
+        # Extract directory path from XRootD URL (everything after root://host:port/)
+        # Format: root://host:port/path/to/file
+        parts = output.split("/", 4)  # Split into ['root:', '', 'host:port', 'path', 'to', 'file']
+        if len(parts) >= 4:
+            xrootd_path = "/" + parts[3]  # Get the path part
+            xrootd_dir = os.path.dirname(xrootd_path)
+            host_port = parts[2]  # e.g., "fndcadoor.fnal.gov:1094"
+            print(f"Creating XRootD directory: {xrootd_dir} on {host_port}")
+            mkdir_cmd = f"xrdfs {host_port} mkdir -p {xrootd_dir}"
+            result = os.system(mkdir_cmd)
+            if result != 0:
+                print(f"Warning: Could not create XRootD directory (may already exist): {xrootd_dir}")
+    else:
+        local_output = output
+        # Ensure local directory exists
+        output_path = Path(output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+    
     k_idx = 0
     split_margin = args.SplitSize
-    with pd.HDFStore(output) as hdf_pd:
+    with pd.HDFStore(local_output) as hdf_pd:
         NAMES.append("histpotdf")
         NAMES.append("histgenevtdf")
         size_counters = {k: 0 for k in NAMES}
@@ -109,6 +138,21 @@ def run_pool(output, inputs, nproc):
         split_df = pd.DataFrame({"n_split": [k_idx + 1]})  # +1 because k_idx is 0-based
         hdf_pd.put(key="split", value=split_df, format="fixed")
         print(f"Saved split info: {split_df.iloc[0]['n_split']} total splits")
+    
+    # If writing to XRootD, copy the file now
+    if is_xrootd:
+        print(f"Copying {local_output} to {output}")
+        copy_cmd = f"xrdcp {local_output} {output}"
+        result = os.system(copy_cmd)
+        if result != 0:
+            raise RuntimeError(f"Failed to copy file to XRootD location: {output}")
+        print(f"Successfully copied to {output}")
+        # Clean up temp file
+        try:
+            os.remove(local_output)
+            print(f"Removed temporary file: {local_output}")
+        except Exception as e:
+            print(f"Warning: Could not remove temporary file {local_output}: {e}")
 
 def run_grid(inputfiles):
     # 1) dir/file name style

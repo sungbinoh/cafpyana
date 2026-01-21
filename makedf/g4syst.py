@@ -6,6 +6,6 @@ g4_systematics = [
     "reinteractions_proton_Geant4"
 ]
 
-def g4syst(f, nuind):
-    return getsyst.getsyst(f, g4_systematics, nuind)
+def g4syst(f, nuind, slim=False):
+    return getsyst.getsyst(f, g4_systematics, nuind, slim=slim)
 

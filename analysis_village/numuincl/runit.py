@@ -12,6 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
+from sbnd.general.utils import convert_pnfs_to_xroot
 
 import yaml
 
@@ -44,8 +45,8 @@ def main() -> None:
     yaml_path = Path(args.yaml).resolve()
     config = load_config(yaml_path)
     jobs = config["jobs"]
-    input_dir = config.get("input_dir")
-    output_dir = config.get("output_dir")
+    input_dir = convert_pnfs_to_xroot(config.get("input_dir"))
+    output_dir = convert_pnfs_to_xroot(config.get("output_dir"))
     selected = set(args.only) if args.only else None
 
     GENERATED_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -67,7 +68,6 @@ def main() -> None:
             output_dir=output_dir,
         )
 
-
 def load_config(path: Path) -> Dict[str, Any]:
     if not path.exists():
         raise SystemExit(f"YAML file not found: {path}")
@@ -77,6 +77,28 @@ def load_config(path: Path) -> Dict[str, Any]:
     if not isinstance(jobs, list):
         raise SystemExit("mcbnb.yaml must define a top-level 'jobs' list.")
     return data
+
+
+def file_exists(path: str) -> bool:
+    """Check if a file exists, handling both local paths and XRootD URLs."""
+    if path.startswith("root://"):
+        # Extract host:port and path from XRootD URL
+        # Format: root://host:port/path/to/file
+        parts = path.split("/", 4)
+        if len(parts) >= 4:
+            host_port = parts[2]  # e.g., "fndcadoor.fnal.gov:1094"
+            xrootd_path = "/" + parts[3]  # Get the path part
+            # Use xrdfs to check if file exists
+            result = subprocess.run(
+                ["xrdfs", host_port, "stat", xrootd_path],
+                capture_output=True,
+                text=True
+            )
+            return result.returncode == 0
+        return False
+    else:
+        # Local filesystem path
+        return Path(path).exists()
 
 
 def run_job(
@@ -89,6 +111,22 @@ def run_job(
     slug = slugify(job["name"])
     cfg_path = GENERATED_CONFIG_DIR / f"{slug}.py"
     cfg_path.write_text(render_config(job))
+
+    # Get output path to check if file already exists
+    output = job.get("output")
+    if not output:
+        raise SystemExit(f"Job '{job['name']}' missing output field.")
+    output = output.format(name=job["name"], slug=slug)
+    output = resolve_path(output, output_dir)
+    output = output + ".df"  # run_df_maker adds .df extension
+    
+    # Check if output file already exists
+    if file_exists(output):
+        print("=" * 80)
+        print(f"[{job['name']}] SKIPPED - Output file already exists:")
+        print(f"  {output}")
+        print("=" * 80)
+        return
 
     cmd = build_command(job, cfg_path, slug, input_dir, output_dir)
     print("=" * 80)
@@ -147,8 +185,12 @@ def render_config(job: Dict[str, Any]) -> str:
         lines.append(f"NAMES = {names_override!r}")
     else:
         lines.append("NAMES = _base.NAMES")
-    lines.append("if hasattr(_base, 'PREPROCESS'):")
-    lines.append("    PREPROCESS = _base.PREPROCESS")
+    # Only set PREPROCESS if INCLUDE_WEIGHTS is True
+    # lines.append("if maker.INCLUDE_WEIGHTS:")
+    # lines.append("    from preprocess import Script")
+    # lines.append('    PREPROCESS = [Script("/exp/sbnd/app/users/gputnam/Ar23-knobs/update_reweight_anywhere.sh")]')
+    # lines.append("else:")
+    # lines.append("    PREPROCESS = []")
     return "\n".join(lines) + "\n"
 
 
@@ -222,6 +264,16 @@ def python_literal(value: Any) -> str:
 def resolve_path(value: str, base: Optional[str]) -> str:
     if not value:
         return value
+    # If value is already an XRootD URL, return it as-is
+    if value.startswith("root://"):
+        return value
+    # If base is an XRootD URL, append the relative path to it
+    if base and base.startswith("root://"):
+        # Remove trailing slash from base if present, then append value
+        base_clean = base.rstrip("/")
+        value_clean = value.lstrip("/")
+        return f"{base_clean}/{value_clean}"
+    # Normal filesystem path handling
     path = Path(value)
     if path.is_absolute() or not base:
         return str(path)

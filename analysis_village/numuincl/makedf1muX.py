@@ -23,6 +23,7 @@ DEFAULT_FULL_CUTS = False
 DEFAULT_PRELIM_CUTS = False
 DEFAULT_TRK_CUTS = True
 DEFAULT_VERBOSE = False
+DEFAULT_ADD_STAT_UNC = False
 
 def _resolve_flag(value, fallback):
     return fallback if value is None else value
@@ -49,6 +50,7 @@ FULL_CUTS = DEFAULT_FULL_CUTS
 PRELIM_CUTS = DEFAULT_PRELIM_CUTS
 TRK_CUTS = DEFAULT_TRK_CUTS
 VERBOSE = DEFAULT_VERBOSE
+ADD_STAT_UNC = DEFAULT_ADD_STAT_UNC
 _set_update_recomb(DEFAULT_UPDATE_RECOMB)
 apply_setting_dependencies()
 
@@ -148,7 +150,7 @@ def make_custom_trkdf(f, trkScoreCut=None, updaterecomb=None, **trkArgs):
     trkdf = make_trkdf(f, scoreCut=trkScoreCut, updaterecomb=updaterecomb, **trkArgs)
     return trkdf
 
-def make_pandora_evtdf(f, include_weights=None, wgt_types=["bnb","genie"], slim=None,
+def make_pandora_evtdf(f, include_weights=None, wgt_types=["bnb","genie","g4"], slim=None,
                        trkScoreCut=None, trkDistCut=-1., cutClearCosmic=True, updaterecomb=None,
                        return_mcdf=False, **trkArgs):
     include_weights = _resolve_flag(include_weights, INCLUDE_WEIGHTS)
@@ -226,6 +228,25 @@ def make_pandora_evtdf(f, include_weights=None, wgt_types=["bnb","genie"], slim=
 
         # mu candidate is track pfp with smallest chi2_mu/chi2_p
         mudf = trkdf[(trkdf.pfp.trackScore > 0.6) & (trkdf[("pfp", "trk", f"is_muon{key_suffix}", "", "", "")] ) & ~(trkdf[("pfp", "trk", f"is_muon{key_suffix}", "", "", "")] .isna())].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid", "I2", f"mu_over_p{key_suffix}", "")]).groupby(level=[0,1]).head(1)
+        
+        # Filter columns to only include those matching the current key_suffix or base columns (no variation suffix)
+        # This prevents mixing variation suffixes (e.g., mu_R_embm1 containing chi2_proton_alpha_embp1)
+        if key_suffix:  # Only filter if we have a variation suffix
+            # Get all variation suffixes
+            all_suffixes = [s for s in MU_KEY_SUFFIXES if s]
+            # Filter columns: keep base columns (no variation suffix) or columns with current key_suffix
+            def should_keep_col(col_tuple):
+                col_str = str(col_tuple)
+                # Check if column contains any variation suffix
+                contains_any_suffix = any(suffix in col_str for suffix in all_suffixes)
+                if not contains_any_suffix:
+                    # Base column, keep it
+                    return True
+                # Column has a variation suffix, only keep if it matches current key_suffix
+                return key_suffix in col_str
+            cols_to_keep = [c for c in mudf.columns if should_keep_col(c)]
+            mudf = mudf[cols_to_keep]
+        
         mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu" + key_suffix] + list(c)) for c in mudf.columns])
         mudf_list.append(mudf)
 
@@ -314,8 +335,8 @@ def _process_mcnu(mcdf, slc, ismc):
         return mcnu
     return None
 
-def make_pandora_evtdf_processed(f, include_weights=None, wgt_types=["bnb","genie"], slim=None, 
-                       trkScoreCut=None, updaterecomb=None, **trkArgs):
+def make_pandora_evtdf_processed(f, include_weights=None, wgt_types=["bnb","genie","g4"], slim=None, 
+                       trkScoreCut=None, updaterecomb=None, add_stat_unc=None, **trkArgs):
     """
     Utilize my CAF class to add the necessary columns to the dataframe
     """
@@ -323,6 +344,7 @@ def make_pandora_evtdf_processed(f, include_weights=None, wgt_types=["bnb","geni
     slim = _resolve_flag(slim, SLIM)
     updaterecomb = _resolve_flag(updaterecomb, UPDATE_RECOMB)
     trkScoreCut = _resolve_flag(trkScoreCut, TRK_CUTS)
+    add_stat_unc = _resolve_flag(add_stat_unc, ADD_STAT_UNC)
     df, mcdf = make_pandora_evtdf(f, include_weights=include_weights,  wgt_types=wgt_types, slim=slim, 
                             trkScoreCut=trkScoreCut, updaterecomb=updaterecomb, return_mcdf=True, **trkArgs)
     hdr = make_hdrdf(f)
@@ -344,12 +366,19 @@ def make_pandora_evtdf_processed(f, include_weights=None, wgt_types=["bnb","geni
 
     slc.clean(dummy_vals=[-9999,-999,999,9999,-5])
 
-    slc.add_has_muon(suffix=MU_KEY_SUFFIXES[-1])
+    # Need this for calo variations
+    for key_suffix in MU_KEY_SUFFIXES:
+        slc.add_has_muon(suffix=key_suffix)
     slc.add_in_av()
     slc.add_in_fv()
-    slc.add_event_type(suffix=MU_KEY_SUFFIXES[-1])
+    slc.add_event_type(suffix=key_suffix)
+    slc.add_track_flipping(suffix=key_suffix)
 
-    slc.add_track_flipping(suffix=MU_KEY_SUFFIXES[-1])
+    #Add totp and dirz for true muon
+    # totp = np.sqrt(slc.data.mu.pfp.trk.truth.p.genp.x**2 + slc.data.mu.pfp.trk.truth.p.genp.y**2 + slc.data.mu.pfp.trk.truth.p.genp.z**2)
+    # slc.add_cols('mu.pfp.trk.truth.p.totp',totp)
+    # dirz = slc.data.mu.pfp.trk.truth.p.genp.z/totp
+    # slc.add_cols('mu.pfp.trk.truth.p.dir.z',dirz)
 
     #Opt0 cuts
     #slc.cut_flashmatch(cut=False)
@@ -361,6 +390,10 @@ def make_pandora_evtdf_processed(f, include_weights=None, wgt_types=["bnb","geni
     slc.cut_muon(cut=False,min_ke=0.1,suffix=MU_KEY_SUFFIXES[-1])
     slc.cut_lowz(cut=False,z_max=6,include_start=True,suffix=MU_KEY_SUFFIXES[-1])
     slc.cut_is_cont(cut=False,suffix=MU_KEY_SUFFIXES[-1]) #Don't apply containment cut
+    slc.cut_all(cut=False) #Add the all cut column
+
+    if add_stat_unc:
+        slc.add_stat_unc()
 
     if VERBOSE:
         from naming import PAND_CUTS_CONT, PAND_CUTS
@@ -373,7 +406,7 @@ def make_pandora_evtdf_processed(f, include_weights=None, wgt_types=["bnb","geni
     
     return slc.data
 
-def make_mcnu_processed(f, include_weights=None, wgt_types=["bnb","genie"], slim=None, 
+def make_mcnu_processed(f, include_weights=None, wgt_types=["bnb","genie","g4"], slim=None, 
                        trkScoreCut=None, updaterecomb=None, **trkArgs):
     """
     Process and return the mcnu dataframe with the same processing as make_pandora_evtdf_processed.
@@ -411,7 +444,7 @@ def make_mcnu_processed(f, include_weights=None, wgt_types=["bnb","genie"], slim
         # Return empty dataframe with same structure if not MC or no data
         return pd.DataFrame()
     
-def make_pandora_evtdf_processed_signal_cut(f, include_weights=None, wgt_types=["bnb","genie"], slim=None, 
+def make_pandora_evtdf_processed_signal_cut(f, include_weights=None, wgt_types=["bnb","genie","g4"], slim=None, 
     trkScoreCut=None, updaterecomb=None, **trkArgs):
     """
     Utilize my CAF class to add the necessary columns to the dataframe
@@ -436,7 +469,7 @@ def make_pandora_evtdf_processed_signal_cut(f, include_weights=None, wgt_types=[
 
     return slc.data #return just the df
 
-def make_pandora_evtdf_processed_selected_cut(f, include_weights=None, wgt_types=["bnb","genie"], slim=None, 
+def make_pandora_evtdf_processed_selected_cut(f, include_weights=None, wgt_types=["bnb","genie","g4"], slim=None, 
     trkScoreCut=None, updaterecomb=None, **trkArgs):
     """
     Utilize my CAF class to add the necessary columns to the dataframe

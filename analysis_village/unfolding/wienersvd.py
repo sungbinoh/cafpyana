@@ -82,7 +82,24 @@ def WienerSVD(Response, Signal, Measure, Covariance, C_type, Norm_type, verbose=
     m, n = Response.shape  # m measure, n signal bins
 
     # Decomposition of the Covariance matrix to obtain Q.
-    U_cov, s_cov, Vh_cov = np.linalg.svd(Covariance)
+    try:
+        U_cov, s_cov, Vh_cov = np.linalg.svd(Covariance)
+    except:
+        print('SVD decomposition of Covariance failed, using eigendecomposition instead')
+        # Ensure symmetry
+        #assert Covariance.T-Covariance < 1e-6*np.min(np.abs(Covariance[Covariance != 0]))*np.eye(Covariance.shape[0])
+
+        # Eigendecomposition (more stable for symmetric matrices)
+        eigenvals, eigenvecs = np.linalg.eigh(Covariance)
+        # Sort in descending order
+        idx = eigenvals.argsort()[::-1]
+        eigenvals = eigenvals[idx]
+        eigenvecs = eigenvecs[:, idx]
+
+        # Convert to SVD-like format
+        s_cov = eigenvals
+        Vh_cov = eigenvecs.T
+        U_cov = eigenvecs  # For symmetric matrices, U = V
     # Q0 is the transpose of V from the SVD (numpy's Vh is already V^T).
     Q0 = Vh_cov
     if verbose:
@@ -159,25 +176,12 @@ def WienerSVD(Response, Signal, Measure, Covariance, C_type, Norm_type, verbose=
     CovRotation = C_inv @ V @ W @ D_t @ U_t @ Q
     SystUnfoldCov = CovRotation @ Covariance @ CovRotation.T
 
-    # Assume Poisson statistics: variance = Measure 
-    # TODO: if Measure == 0, set to 1 to avoid zero/negative
-    # stat_var = np.where(Measure > 0, Measure, 1.0)
-
-    data_eylow, data_eyhigh = return_data_stat_err(Measure)
-    StatCov = np.diag((data_eyhigh - data_eylow) / 2)
-    StatUnfoldCov = CovRotation @ StatCov @ CovRotation.T
-
-    # Total unfolded covariance is sum of statistical and systematic
-    UnfoldCov = SystUnfoldCov + StatUnfoldCov
-
     return {
         'unfold': unfold,
         'AddSmear': AddSmear,
         'WF': WF,
         'CovRotation': CovRotation,
-        'StatUnfoldCov': StatUnfoldCov,
-        'SystUnfoldCov': SystUnfoldCov,
-        'UnfoldCov': UnfoldCov
+        'UnfoldCov': SystUnfoldCov,
     }
 
 

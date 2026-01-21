@@ -13,14 +13,14 @@ jobs:
       - analysis_village.numuincl.makedf1muX.make_pandora_evtdf_processed
       - analysis_village.numuincl.makedf1muX.make_custom_trkdf
     names: [hdr, mcnu, evt_pand, trk]
-    input_list: mc_smallpand.list
-    output: mc_smallpand_nosyst_nocuts_recomb3
+    input_list: mc_fullpand.list
+    output: mc_medpand_nosyst_nocuts_recomb
     settings:
       INCLUDE_WEIGHTS: false
       SLIM: false
       UPDATE_RECOMB: true
       VERBOSE: false
     args:
-      ngrid: 500
-      ncpu: -1
-      nfile: 1
+      #ngrid: -1
+      ncpu: 50
+      nfile: 10000

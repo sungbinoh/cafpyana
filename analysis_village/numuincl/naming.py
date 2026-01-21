@@ -17,7 +17,7 @@ SPINE_QUALIFIER_INTERNAL_LABEL = SPINE_QUALIFIER + INTERNAL_LABEL
 SPINE_QUALIFIER_INTERNAL_LABEL = SPINE_QUALIFIER + INTERNAL_LABEL
 # Cut lists
 PAND_CUTS = ['flashmatch','fv','muon','cosmic','lowz']
-PAND_CUT_LABELS = ['Flash Match\n($\chi^2$ cut, by TPC)','Fiducial','Has Muon','Flash Score','Low Z']
+PAND_CUT_LABELS = ['Flash Match\n(best BCFM)','Fiducial','Has Muon','Flash Score\n(score cut)','Low Z']
 
 PAND_CUTS_CONT = ['flashmatch','fv','muon','cont','cosmic']
 PAND_CUT_LABELS_CONT = ['Flash Match (by TPC)','Fiducial','Has Muon','Muon Contained','Flash Score']

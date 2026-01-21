@@ -5,7 +5,8 @@ from analysis_village.numuincl import makedf1muX as maker
 maker.INCLUDE_WEIGHTS = True
 maker.SLIM = True
 maker.set_update_recomb(False)
-maker.VERBOSE = True
+maker.VERBOSE = False
+maker.ADD_STAT_UNC = True
 maker.apply_setting_dependencies()
 
 _base = import_module('analysis_village.numuincl.configs.base')
@@ -15,5 +16,3 @@ DFS = [
     getattr(import_module('analysis_village.numuincl.makedf1muX'), 'make_pandora_evtdf_processed'),
 ]
 NAMES = ['hdr', 'mcnu', 'evt_pand']
-if hasattr(_base, 'PREPROCESS'):
-    PREPROCESS = _base.PREPROCESS

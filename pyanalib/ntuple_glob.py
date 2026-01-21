@@ -59,24 +59,33 @@ def _open_with_retries(path, attempts=10, sleep=2.0, timeout=300):
 def _loaddf(applyfs, preprocess, g):
     # fname, index, applyfs = inp
     index, fname = g
+    og_fname = fname
     # Convert pnfs to xroot URL's
     if fname.startswith("/pnfs"):
         fname = fname.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
     # fix xroot URL's
     elif fname.startswith("xroot"):
         fname = fname[1:]
+    # Revert to original filename if it was an XRootD URL
+    elif fname.startswith("root://"):
+        og_fname = fname.replace("root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr","/pnfs")
     madef = False
 
     # run any preprocess-ing commands
     tempfiles = []
     if preprocess is not None:
         for i, p in enumerate(preprocess):
-            temp_directory = tempfile.gettempdir()
+            temp_directory = '/exp/sbnd/data/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/pandora/tmp'
             temp_file_name = os.path.join(temp_directory, "temp%i_%s.flat.caf.root" % (i, str(uuid.uuid4()))) 
-            p.run(fname, temp_file_name)
-            tempfiles.append(temp_file_name)
+            p.run(og_fname, temp_file_name)
+            print(f"Preprocess command: {p.script} {og_fname} {temp_file_name} completed")
+            #After running, make sure it's visible to EAF
+            temp_file_name = temp_file_name.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
+            temp_directory = temp_directory.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
             fname = temp_file_name
-
+            tempfiles.append(temp_file_name)
+            print(f"Temp file: {temp_file_name} added to tempfiles list")
+            print(f'Files in {temp_directory} after preprocess: {os.listdir(temp_directory)}')
     # Retry the entire file operation (open, read, close)
     attempts = 1
     sleep = 1.0
@@ -153,13 +162,11 @@ def _loaddf(applyfs, preprocess, g):
                 traceback.print_exc(file=sys.stderr)
                 dfs = None
 
-
-    if madef:
-        os.remove(fname)
-
-    for f in tempfiles:
-        os.remove(f)
-
+    if tempfiles:
+        os.system("source /exp/sbnd/app/users/brindenc/develop/cafpyana/pyanalib/remove_temp.sh")
+        
+    if not dfs:
+        return None
     return dfs
 
 class NTupleGlob(object):

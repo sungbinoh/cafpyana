@@ -14,3 +14,4 @@ analysis_village/numuincl/sbnd
 *__pycache__*
 analysis_village/numuincl/*.txt
 analysis_village/numuincl/unfolding.ipynb
+*.cursor
