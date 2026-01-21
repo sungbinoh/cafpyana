@@ -282,13 +282,14 @@ slcbranches = [
     "rec.slc.opt0.hypoPE",
 ]
 
-## making this branches separately to support sbnd flat.caf versions older than v10_10_*
+# making this branches separately from slcbranches since ICARUS CAFs do not have rec.slc.barycenterFM.score
 barycenterFMbranches = [
     "rec.slc.barycenterFM.chargeTotal",
     "rec.slc.barycenterFM.flashTime",
     "rec.slc.barycenterFM.flashPEs",
     "rec.slc.barycenterFM.chi2",
     "rec.slc.barycenterFM.score",
+    "rec.slc.barycenterFM.deltaZ",
 ]
 
 mcbranches = [
