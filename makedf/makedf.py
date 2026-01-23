@@ -439,6 +439,15 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
     #print(slcdf.pfp.trk.chi2pid.head(50))
     return slcdf
 
+def make_pandora_cc2p_df(f):
+    pd_df = make_pandora_df(f)
+    
+    # preselection to remove obvious cosmics
+    pd_df = pd_df[pd_df.slc.barycenterFM.score>0.04]
+    pd_df[pd_df.slc.is_clear_cosmic == 0]
+    return pd_df
+    
+
 def make_spine_df(f, trkDistCut=-1, requireFiducial=True, **trkArgs):
     # load
     partdf = make_spinepartdf(f, **trkArgs)

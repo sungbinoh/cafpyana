@@ -3,6 +3,10 @@
 export machine=${HOSTNAME}
 export CAFPYANA_DIR=$(pwd)
 
+if [[ $machine == *sbnd* ]]; then
+  export EXPERIMENT="sbnd"
+fi
+
 # try: get SAM Web from FNAL tools env. Do this first, since next
 # spack will override this one
 SPACK_ROOT_FNAL_TOOLS="/cvmfs/fermilab.opensciencegrid.org/packages/common/setup-env.sh"
