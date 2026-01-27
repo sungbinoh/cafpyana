@@ -6,6 +6,8 @@ import numpy as np
 from makedf.makedf import *
 from makedf.constants import *
 
+from analysis_village.numucc_1p0pi.makedf.util import *
+
 def make_spine_evtdf(f):
     # load slices and particles
     partdf = make_epartdf(f)
@@ -50,161 +52,265 @@ def make_spine_evtdf(f):
     return df
 
 
-def make_pandora_evtdf_wgt(f, include_weights=True, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=True, 
+def make_pandora_evtdf_wgts(f, include_weights=True, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=True, 
                        trkScoreCut=False, trkDistCut=10., cutClearCosmic=True, **trkArgs):
     df = make_pandora_evtdf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
                             trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, **trkArgs)
     return df
 
+def make_pandora_evtdf_mup_wgts(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["bnb","genie","g4"], slim=True, 
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, **trkArgs):
+    df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, **trkArgs)
+    return df
 
-def make_pandora_evtdf(f, include_weights=True, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=True, 
-                       trkScoreCut=False, trkDistCut=10., cutClearCosmic=True, **trkArgs):
-    # ----- sbnd or icarus? -----
-    det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
-    if (1 == det.unique()):
-        DETECTOR = "SBND"
-    else:
-        DETECTOR = "ICARUS"
+def make_pandora_evtdf_mup(f, sel_level="mup", include_weights=False, multisim_nuniv=0, wgt_types=[], slim=True, 
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, **trkArgs):
+    df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, **trkArgs)
+    return df
 
-    assert DETECTOR == "SBND"
-    
-    mcdf = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim)
-    trkdf = make_trkdf(f, trkScoreCut, **trkArgs)
-    slcdf = make_slcdf(f)
+# GENIE dfs
+qe_genie_systematics = [
+'GENIEReWeight_SBN_v1_multisim_RPA_CCQE',
+'GENIEReWeight_SBN_v1_multisim_CoulombCCQE',
+]
+def make_pandora_evtdf_mup_wgts_CCQE(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["genie"], slim=False, 
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=None, **trkArgs):
+    df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=qe_genie_systematics, **trkArgs)
+    return df
 
-    # stubdf = make_stubs(f, det=DETECTOR)
-    # load stubs
-    # slcdf = multicol_merge(slcdf, stubdf, left_index=True, right_index=True)
-    
-    # ----- merge dfs -----
-    # load pfps
-    # slcdf = multicol_merge(slcdf, trkdf, left_index=True, right_index=True, how="right", validate="one_to_many")
+def make_mcnudf_CCQE(f, include_weights=True, multisim_nuniv=100, wgt_types=["genie"], slim=False, genie_systematics=None):
+    df = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, genie_systematics=qe_genie_systematics)
+    return df
 
-    trkdf = multicol_add(trkdf, dmagdf(slcdf.slc.vertex, trkdf.pfp.trk.start).rename(("pfp", "dist_to_vertex")))
-    if trkDistCut > 0:
-        trkdf = trkdf[trkdf.pfp.dist_to_vertex < trkDistCut]
-    if cutClearCosmic:
-        slcdf = slcdf[slcdf.slc.is_clear_cosmic==0]
+mec_genie_systematics = [
+'GENIEReWeight_SBN_v1_multisim_NormCCMEC',
+'GENIEReWeight_SBN_v1_multisim_NormNCMEC',
+"GENIEReWeight_SBN_v1_multisigma_DecayAngMEC",
+]
 
-    # ---- calculate additional info ----
-    
-    # track containment
-    trkdf[("pfp", "trk", "is_contained", "", "", "")] = (InFV(trkdf.pfp.trk.start, 0, det=DETECTOR)) & (InFV(trkdf.pfp.trk.end, 0, det=DETECTOR))
+def make_pandora_evtdf_mup_wgts_MEC(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["genie"], slim=False, 
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=None, **trkArgs):
+    df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=mec_genie_systematics, **trkArgs)
 
-    # reco momentum -- range for contained, MCS for exiting
-    trkdf[("pfp", "trk", "P", "p_muon", "", "")] = np.nan
-    trkdf.loc[trkdf.pfp.trk.is_contained, ("pfp", "trk", "P", "p_muon", "", "")]  = trkdf.loc[(trkdf.pfp.trk.is_contained), ("pfp", "trk", "rangeP", "p_muon", "", "")]
-    trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "P", "p_muon","", "")] = trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "mcsP", "fwdP_muon", "", "")]
+def make_mcnudf_MEC(f, include_weights=True, multisim_nuniv=100, wgt_types=["genie"], slim=False, genie_systematics=None):
+    df = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, genie_systematics=mec_genie_systematics)
+    return df
 
-    trkdf[("pfp", "trk", "P", "p_pion", "", "")] = np.nan
-    trkdf.loc[trkdf.pfp.trk.is_contained, ("pfp", "trk", "P", "p_pion", "", "")]  = trkdf.loc[(trkdf.pfp.trk.is_contained), ("pfp", "trk", "rangeP", "p_pion", "", "")]
-    trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "P", "p_pion", "", "")] = trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "mcsP", "fwdP_pion", "", "")]
+res_genie_systematics = [
+'GENIEReWeight_SBN_v1_multisim_RDecBR1gamma',
+'GENIEReWeight_SBN_v1_multisim_RDecBR1eta',
+"GENIEReWeight_SBN_v1_multisigma_Theta_Delta2Npi",
+"GENIEReWeight_SBN_v1_multisigma_ThetaDelta2NRad",
 
-    trkdf[("pfp", "trk", "P", "p_proton", "", "")] = np.nan
-    trkdf.loc[trkdf.pfp.trk.is_contained, ("pfp", "trk", "P", "p_proton", "", "")]  = trkdf.loc[(trkdf.pfp.trk.is_contained), ("pfp", "trk", "rangeP", "p_proton", "", "")]
-    trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "P", "p_proton", "", "")] = trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "mcsP", "fwdP_proton", "", "")]
+"GENIEReWeight_SBN_v1_multisigma_MaCCRES",
+"GENIEReWeight_SBN_v1_multisigma_MaNCRES",
+"GENIEReWeight_SBN_v1_multisigma_MvCCRES",
+"GENIEReWeight_SBN_v1_multisigma_MvNCRES",
+]
+def make_pandora_evtdf_mup_wgts_RES(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["genie"], slim=False, 
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=None, **trkArgs):
+    df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=res_genie_systematics, **trkArgs)
 
-    # opening angles
-    trkdf[("pfp", "trk", "dir", "x", "", "")] = np.nan
-    trkdf[("pfp", "trk", "dir", "x", "", "")] = (trkdf.pfp.trk.end.x-trkdf.pfp.trk.start.x)/trkdf.pfp.trk.len
-    trkdf[("pfp", "trk", "dir", "y", "", "")] = np.nan
-    trkdf[("pfp", "trk", "dir", "y", "", "")] = (trkdf.pfp.trk.end.y-trkdf.pfp.trk.start.y)/trkdf.pfp.trk.len
-    trkdf[("pfp", "trk", "dir", "z", "", "")] = np.nan
-    trkdf[("pfp", "trk", "dir", "z", "", "")] = (trkdf.pfp.trk.end.z-trkdf.pfp.trk.start.z)/trkdf.pfp.trk.len
+def make_mcnudf_RES(f, include_weights=True, multisim_nuniv=100, wgt_types=["genie"], slim=False, genie_systematics=None):
+    df = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, genie_systematics=res_genie_systematics)
+    return df
 
-    # truth
-    trkdf.loc[:, ("pfp","trk","truth","p","totp","")] = np.sqrt(trkdf.pfp.trk.truth.p.genp.x**2 + trkdf.pfp.trk.truth.p.genp.y**2 + trkdf.pfp.trk.truth.p.genp.z**2)
-    trkdf.loc[:, ("pfp","trk","truth","p","dir","x")] = trkdf.pfp.trk.truth.p.genp.x/trkdf.pfp.trk.truth.p.totp
-    trkdf.loc[:, ("pfp","trk","truth","p","dir","y")] = trkdf.pfp.trk.truth.p.genp.y/trkdf.pfp.trk.truth.p.totp
-    trkdf.loc[:, ("pfp","trk","truth","p","dir","z")] = trkdf.pfp.trk.truth.p.genp.z/trkdf.pfp.trk.truth.p.totp
+def make_pandora_evtdf_mup_wgts_NonRES(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["genie"], slim=True, 
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=None, **trkArgs):
+    this_genie_systematics = [
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvpCC1pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvpCC2pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvpNC1pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvpNC2pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvnCC1pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvnCC2pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvnNC1pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvnNC2pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpCC1pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpCC2pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpNC1pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpNC2pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnCC1pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnCC2pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnNC1pi',
+    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnNC2pi',
+    ]
+    df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=this_genie_systematics, **trkArgs)
 
-    # ----- loose PID for candidates ----
-    trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = np.nan
-    trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.pfp.trk.chi2pid.I2.chi2_muon/trkdf.pfp.trk.chi2pid.I2.chi2_proton
-    
-    # mu candidate is track pfp with smallest chi2_mu/chi2_p
-    mudf = trkdf[(trkdf.pfp.trackScore > 0.5)].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")]).groupby(level=[0,1]).head(1)
-    mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
-    slcdf = multicol_merge(slcdf, mudf.droplevel(-1), left_index=True, right_index=True, how="left", validate="one_to_one")
-    idx_mu = mudf.index
-        
-    # p candidate is track pfp with largest chi2_mu/chi2_p of remaining pfps
-    idx_pfps = trkdf.index
-    idx_not_mu = idx_pfps.difference(idx_mu)
-    notmudf = trkdf.loc[idx_not_mu]
-    pdf = notmudf[(notmudf.pfp.trackScore > 0.5)].sort_values(notmudf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")]).groupby(level=[0,1]).tail(1)
-    pdf.columns = pd.MultiIndex.from_tuples([tuple(["p"] + list(c)) for c in pdf.columns])
-    slcdf = multicol_merge(slcdf, pdf.droplevel(-1), left_index=True, right_index=True, how="left", validate="one_to_one")
-    idx_p = pdf.index
-    
-    # note if there are any other track/showers
-    idx_not_mu_p = idx_not_mu.difference(idx_p)
-    otherdf = trkdf.loc[idx_not_mu_p]
-    # longest other shower
-    othershwdf = otherdf[otherdf.pfp.trackScore < 0.5]
-    other_shw_length = othershwdf.pfp.trk.len.groupby(level=[0,1]).max().rename("other_shw_length")
-    slcdf = multicol_add(slcdf, other_shw_length)
-    # longest other track
-    othertrkdf = otherdf[otherdf.pfp.trackScore > 0.5]
-    other_trk_length = othertrkdf.pfp.trk.len.groupby(level=[0,1]).max().rename("other_trk_length")
-    slcdf = multicol_add(slcdf, other_trk_length)
+def make_pandora_evtdf_mup_wgts_DIS(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["genie"], slim=False, 
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=None, **trkArgs):
+    this_genie_systematics = [
+    'GENIEReWeight_SBN_v1_multisigma_AhtBY',
+    'GENIEReWeight_SBN_v1_multisigma_BhtBY',
+    'GENIEReWeight_SBN_v1_multisigma_CV1uBY',
+    'GENIEReWeight_SBN_v1_multisigma_CV2uBY',
+    ]
+    df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=this_genie_systematics, **trkArgs)
 
-    # calculate and save transverse kinematic variables for reco slices
-    slc_mudf = slcdf.mu.pfp.trk
-    slc_pdf = slcdf.p.pfp.trk
-    slc_P_mu_col = pad_column_name(("P", "p_muon"), slc_mudf)
-    slc_P_p_col = pad_column_name(("P", "p_proton"), slc_pdf)
-    tki_reco = get_tki(slc_mudf, slc_pdf, slc_P_mu_col, slc_P_p_col)
+def make_pandora_evtdf_mup_wgts_Other(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["genie"], slim=False, 
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=None, **trkArgs):
+    this_genie_systematics = [
+    'GENIEReWeight_SBN_v1_multisigma_MFP_pi',
+    'GENIEReWeight_SBN_v1_multisigma_FrCEx_pi',
+    'GENIEReWeight_SBN_v1_multisigma_FrInel_pi',
+    'GENIEReWeight_SBN_v1_multisigma_FrAbs_pi',
+    'GENIEReWeight_SBN_v1_multisigma_FrPiProd_pi',
+    'GENIEReWeight_SBN_v1_multisigma_MFP_N',
+    'GENIEReWeight_SBN_v1_multisigma_FrCEx_N',
+    'GENIEReWeight_SBN_v1_multisigma_FrInel_N',
+    'GENIEReWeight_SBN_v1_multisigma_FrAbs_N',
+    'GENIEReWeight_SBN_v1_multisigma_FrPiProd_N',
+    "GENIEReWeight_SBN_v1_multisigma_NormCCCOH", # Handled by re-tuning
+    "GENIEReWeight_SBN_v1_multisigma_NormNCCOH",
+    'GENIEReWeight_SBN_v1_multisigma_MaNCEL',
+    'GENIEReWeight_SBN_v1_multisigma_EtaNCEL',
+    ]
+    df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=this_genie_systematics, **trkArgs)
 
-    slcdf = multicol_add(slcdf, tki_reco["del_alpha"].rename("del_alpha"))
-    slcdf = multicol_add(slcdf, tki_reco["del_phi"].rename("del_phi"))
-    slcdf = multicol_add(slcdf, tki_reco["del_Tp"].rename("del_Tp"))
-    slcdf = multicol_add(slcdf, tki_reco["del_p"].rename("del_p"))
+def make_pandora_evtdf(f, sel_level="all", include_weights=True, multisim_nuniv=1000, wgt_types=[], slim=True, genie_systematics=None,
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, **trkArgs):
 
-    # calculate and save transverse kinematic variables for MC
+    """
+    sel_level:
+        "all": all slices, no cuts
+        "clearcosmic": cosmic rejection
+        "fv": vertex in FV
+        "nu": n-score cut
+        "2prong": 2-prong slices
+        "2prong_qual": 2-prong slices with quality cuts on the 2 prongs
+        "muX": muon-X cuts
+        "mup": final selection
+    """
+
+    if sel_level not in ["all", "clearcosmic", "fv", "nu", "2prong", "2prong_contained", "2prong_trackscore", "2prong_vtxdist", "muX", "mup"]:
+        raise ValueError("Invalid sel_level: {}".format(sel_level))
+
+    def truth_match(this_evtdf, this_mcdf):
+        # ---- truth match ----
+        bad_tmatch = np.invert(this_evtdf.slc.tmatch.eff > 0.5) & (this_evtdf.slc.tmatch.idx >= 0)
+        # this_evtdf.loc[bad_tmatch, ("slc","tmatch","idx", "", "", "", "")] = np.nan
+        this_evtdf.loc[bad_tmatch, pad_column_name(("slc","tmatch","idx"), this_evtdf)] = np.nan
+
+        nlevels = this_evtdf.columns.nlevels
+
+        this_mcdf.columns = pd.MultiIndex.from_tuples([tuple(["mc"] + list(c) +[""] * (nlevels-len(c)-1)) for c in this_mcdf.columns])     # match # of column levels
+        df = multicol_merge(this_evtdf.reset_index(), 
+                    this_mcdf.reset_index(),
+                    left_on=[("entry", "", "",), 
+                            ("slc", "tmatch", "idx")], 
+                    right_on=[("entry", "", ""), 
+                                ("rec.mc.nu..index", "", "")], 
+                    how="left"
+                    ) 
+
+        df = df.set_index(this_evtdf.index.names, verify_integrity=True) 
+        return df
+
+    # SBND Gen 1 analysis
+    DETECTOR = "SBND_nohighyz"
+
+    # event selection cuts
+    # slice cuts
+    nu_score_th = 0.45
+    save_ntrks = 2
+
+    # track cuts
+    trackscore_th = 0.5
+    vtxdist_th = 1.2
+
+    # muon candidate cuts
+    mu_chi2mu_th = 30
+    mu_chi2p_th = 100
+    mu_len_th = 50
+    qual_th = 0.2
+
+    # proton candidate cuts
+    p_chi2p_th = 90
+    p_len_th = 0
+
+    # track kinematics cuts
+    mu_Plo_th = 0.22
+    mu_Phi_th = 1
+    p_Plo_th = 0.3
+    p_Phi_th = 1
+
+    mcdf = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, genie_systematics=genie_systematics)
+    # calculate TKI for MC 
+    tki_var_names = ["del_alpha", "del_phi", "del_Tp", "del_p", "del_Tp_x", "del_Tp_y"]
     mc_mudf = mcdf.mu
     mc_pdf = mcdf.p
     mc_P_mu_col = pad_column_name(("totp",), mc_mudf)
     mc_P_p_col = pad_column_name(("totp",), mc_pdf)
-    tki_mc = get_tki(mc_mudf, mc_pdf, mc_P_mu_col, mc_P_p_col)
+    tki_mc = get_cc1p0pi_tki(mc_mudf, mc_pdf, mc_P_mu_col, mc_P_p_col)
+    for var_name in tki_var_names:
+        mcdf = multicol_add(mcdf, tki_mc[var_name].rename("{}".format(var_name)))
 
-    mcdf = multicol_add(mcdf, tki_mc["del_alpha"].rename("mc_del_alpha"))
-    mcdf = multicol_add(mcdf, tki_mc["del_phi"].rename("mc_del_phi"))
-    mcdf = multicol_add(mcdf, tki_mc["del_Tp"].rename("mc_del_Tp"))
-    mcdf = multicol_add(mcdf, tki_mc["del_p"].rename("mc_del_p"))
+    slcdf = make_slcdf(f)
+    trkdf = make_trkdf(f, det=DETECTOR, scoreCut=trkScoreCut, **trkArgs)
 
-    # ----- apply cuts for lightweight df -----
-    # vertex in FV
-    slcdf = slcdf[InFV(slcdf.slc.vertex, 0, det=DETECTOR)]
+    if sel_level == "all":
+        return truth_match(slcdf, mcdf)
 
-    # neutrino cuts
-    slcdf = slcdf[slcdf.slc.nu_score > 0.5]
+    slcdf = cut_clear_cosmic(slcdf)
+    if sel_level == "clearcosmic":
+        return truth_match(slcdf, mcdf)
 
-    # require both muon and proton to be present
-    mask = (~np.isnan(slcdf.mu.pfp.trk.P.p_muon)) & (~np.isnan(slcdf.p.pfp.trk.P.p_proton))
-    # mask = mask.reindex(slcdf.index, fill_value=False)
-    slcdf = slcdf[mask]
+    slcdf = cut_vertex_in_fv(slcdf, det=DETECTOR)
+    if sel_level == "fv":
+        return truth_match(slcdf, mcdf)
 
-    # ---- truth match ----
-    bad_tmatch = np.invert(slcdf.slc.tmatch.eff > 0.5) & (slcdf.slc.tmatch.idx >= 0)
-    slcdf.loc[bad_tmatch, ("slc","tmatch","idx", "", "", "", "")] = np.nan
+    slcdf = cut_nu_score(slcdf, nu_score_th)
+    if sel_level == "nu":
+        return truth_match(slcdf, mcdf)
 
-    mcdf.columns = pd.MultiIndex.from_tuples([tuple(list(c) +["", "", "", "", ""]) for c in mcdf.columns])     # match # of column levels
+    trkdf = get_valid_trks(trkdf)
+    trkdf = match_trkdf_to_slcdf(trkdf, slcdf)
+    evtdf = get_trk_info(slcdf, trkdf, save_ntrks)
 
-    # neutrino cuts
-    slcdf = slcdf[InFV(slcdf.slc.vertex, 0, det=DETECTOR)]
-    slcdf = slcdf[slcdf.slc.nu_score > 0.5]
+    evtdf = cut_2prong(evtdf)
+    if sel_level == "2prong":
+        return truth_match(evtdf, mcdf)
 
-    df = multicol_merge(slcdf.reset_index(), 
-                  mcdf.reset_index(),
-                  left_on=[("entry", "", "",), 
-                           ("slc", "tmatch", "idx")], 
-                  right_on=[("entry", "", ""), 
-                            ("rec.mc.nu..index", "", "")], 
-                  how="left"
-                  ) 
+    evtdf = cut_2prong_contained(evtdf, det=DETECTOR)
+    if sel_level == "2prong_contained":
+        return truth_match(evtdf, mcdf)
 
-    df = df.set_index(slcdf.index.names, verify_integrity=True)
-    
-    return df
+    evtdf = cut_2prong_trackscore(evtdf, trackscore_th)
+    if sel_level == "2prong_trackscore":
+        return truth_match(evtdf, mcdf)
 
+    evtdf = cut_2prong_vtxdist(evtdf, vtxdist_th)
+    if sel_level == "2prong_vtxdist":
+        return truth_match(evtdf, mcdf)
+
+    evtdf = get_mu_p_candidate(evtdf, 
+                                mu_chi2mu_th=mu_chi2mu_th, mu_chi2p_th=mu_chi2p_th, mu_len_th=mu_len_th, qual_th=qual_th, 
+                                p_chi2mu_th=-1, p_chi2p_th=p_chi2p_th, p_len_th=p_len_th)
+
+    evtdf = cut_has_mu(evtdf)
+    evtdf = cut_mu_kinematics(evtdf, mu_Plo_th=mu_Plo_th, mu_Phi_th=mu_Phi_th)
+    if sel_level == "muX":
+        return truth_match(evtdf, mcdf)
+
+    evtdf = cut_has_p(evtdf)
+    evtdf = cut_p_kinematics(evtdf, p_Plo_th=p_Plo_th, p_Phi_th=p_Phi_th)
+
+    # calculate TKI for reco slices
+    slc_mudf = evtdf.mu.pfp.trk
+    slc_pdf = evtdf.p.pfp.trk
+    slc_P_mu_col = pad_column_name(("P", "p_muon"), slc_mudf)
+    slc_P_p_col = pad_column_name(("P", "p_proton"), slc_pdf)
+    tki_reco = get_cc1p0pi_tki(slc_mudf, slc_pdf, slc_P_mu_col, slc_P_p_col)
+    for var_name in tki_var_names:
+        evtdf = multicol_add(evtdf, tki_reco[var_name].rename(var_name))
+
+    if sel_level == "mup":
+        return truth_match(evtdf, mcdf)
