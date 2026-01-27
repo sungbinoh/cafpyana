@@ -89,6 +89,75 @@ regen_systematics = [
     'GENIEReWeight_SBN_v1_multisigma_EtaNCEL',
 ]
 
+
+# grouped syst knobs
+qe_genie_systematics = [
+'GENIEReWeight_SBN_v1_multisim_RPA_CCQE',
+'GENIEReWeight_SBN_v1_multisim_CoulombCCQE',
+]
+
+mec_genie_systematics = [
+'GENIEReWeight_SBN_v1_multisim_NormCCMEC',
+'GENIEReWeight_SBN_v1_multisim_NormNCMEC',
+"GENIEReWeight_SBN_v1_multisigma_DecayAngMEC",
+]
+
+res_genie_systematics = [
+'GENIEReWeight_SBN_v1_multisim_RDecBR1gamma',
+'GENIEReWeight_SBN_v1_multisim_RDecBR1eta',
+"GENIEReWeight_SBN_v1_multisigma_Theta_Delta2Npi",
+"GENIEReWeight_SBN_v1_multisigma_ThetaDelta2NRad",
+
+"GENIEReWeight_SBN_v1_multisigma_MaCCRES",
+"GENIEReWeight_SBN_v1_multisigma_MaNCRES",
+"GENIEReWeight_SBN_v1_multisigma_MvCCRES",
+"GENIEReWeight_SBN_v1_multisigma_MvNCRES",
+]
+
+nonres_genie_systematics = [
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvpCC1pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvpCC2pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvpNC1pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvpNC2pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvnCC1pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvnCC2pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvnNC1pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvnNC2pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpCC1pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpCC2pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpNC1pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpNC2pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnCC1pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnCC2pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnNC1pi',
+'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnNC2pi',
+]
+
+dis_genie_systematics = [
+'GENIEReWeight_SBN_v1_multisigma_AhtBY',
+'GENIEReWeight_SBN_v1_multisigma_BhtBY',
+'GENIEReWeight_SBN_v1_multisigma_CV1uBY',
+'GENIEReWeight_SBN_v1_multisigma_CV2uBY',
+]
+
+other_genie_systematics = [
+'GENIEReWeight_SBN_v1_multisigma_MFP_pi',
+'GENIEReWeight_SBN_v1_multisigma_FrCEx_pi',
+'GENIEReWeight_SBN_v1_multisigma_FrInel_pi',
+'GENIEReWeight_SBN_v1_multisigma_FrAbs_pi',
+'GENIEReWeight_SBN_v1_multisigma_FrPiProd_pi',
+'GENIEReWeight_SBN_v1_multisigma_MFP_N',
+'GENIEReWeight_SBN_v1_multisigma_FrCEx_N',
+'GENIEReWeight_SBN_v1_multisigma_FrInel_N',
+'GENIEReWeight_SBN_v1_multisigma_FrAbs_N',
+'GENIEReWeight_SBN_v1_multisigma_FrPiProd_N',
+"GENIEReWeight_SBN_v1_multisigma_NormCCCOH", # Handled by re-tuning
+"GENIEReWeight_SBN_v1_multisigma_NormNCCOH",
+'GENIEReWeight_SBN_v1_multisigma_MaNCEL',
+'GENIEReWeight_SBN_v1_multisigma_EtaNCEL',
+]
+
+
 def geniesyst(f, nuind, multisim_nuniv=100, slim=False, systematics=None):
     if systematics is None:
         systematics = regen_systematics
