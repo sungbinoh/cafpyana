@@ -36,6 +36,12 @@ TRUE_KE_THRESHOLDS = {"nmu_27MeV": ["muon", 0.027],
                       "nn_0MeV": ["neutron", 0.0]
                       }
 
+TRUE_P_THRESHOLDS = {"nmu_220MeVc": ["muon", 0.22],
+                      "np_300MeVc": ["proton", 0.3],
+                      "np_200MeVc": ["proton", 0.2],
+                      "npi_70MeVc": ["pipm", 0.07],
+                      }
+
 def make_envdf(f):
     env = getenv.get_env(f)
     return env
@@ -98,6 +104,9 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nun
             if "genie" in wgt_types:
                 geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim, systematics=genie_systematics)
                 df_list.append(geniewgtdf)
+            if "g4" in wgt_types:
+                g4wgtdf = g4syst.g4syst(f, mcdf.ind)
+                df_list.append(g4wgtdf)
 
             wgtdf = pd.concat(df_list, axis=1)
             mcdf = multicol_concat(mcdf, wgtdf)
@@ -163,7 +172,7 @@ def make_opflashdf(f):
     opflashdf = loadbranches(f["recTree"], opflashbranches).rec.opflashes
     return opflashdf
 
-def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False):
+def make_trkdf(f, det="SBND", scoreCut=False, requiret0=False, requireCosmic=False, mcs=False):
     trkdf = loadbranches(f["recTree"], trkbranches)
     if scoreCut:
         trkdf = trkdf.rec.slc.reco[trkdf.rec.slc.reco.pfp.trackScore > 0.5]
@@ -187,6 +196,17 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
         maxlen = (cumlen*(mcsdf.seg_scatter_angles >= 0)).groupby(level=mcsgroup).max()
         trkdf[("pfp", "trk", "mcsP", "len", "", "")] = maxlen
     trkdf[("pfp", "tindex", "", "", "", "")] = trkdf.index.get_level_values(2)
+
+    # pre-calculate additional stuff
+    trkdf[("pfp", "trk", "is_contained", "", "", "")] = (InFV(trkdf.pfp.trk.start, 0, det=det)) & (InFV(trkdf.pfp.trk.end, 0, det=det))
+
+    # reco momentum -- range for contained, MCS for exiting
+    for particle in ["muon", "pion", "proton"]:
+        trkdf[("pfp", "trk", "P", "p_{}".format(particle), "", "")] = np.nan
+        trkdf.loc[trkdf.pfp.trk.is_contained, ("pfp", "trk", "P", "p_{}".format(particle), "", "")]  = trkdf.loc[(trkdf.pfp.trk.is_contained), ("pfp", "trk", "rangeP", "p_{}".format(particle), "", "")]
+        trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "P", "p_{}".format(particle), "", "")] = trkdf.loc[np.invert(trkdf.pfp.trk.is_contained), ("pfp", "trk", "mcsP", "fwdP_{}".format(particle), "", "")]
+
+    trkdf.loc[:, ("pfp","trk","truth","p","totp","")] = np.sqrt(trkdf.pfp.trk.truth.p.genp.x**2 + trkdf.pfp.trk.truth.p.genp.y**2 + trkdf.pfp.trk.truth.p.genp.z**2)
 
     return trkdf
 
@@ -323,6 +343,11 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     for identifier, (particle, threshold) in TRUE_KE_THRESHOLDS.items():
         this_KE = mcprimdf[np.abs(mcprimdf.pdg)==PDG[particle][0]].genE - PDG[particle][2]
         mcdf = multicol_add(mcdf, ((np.abs(mcprimdf.pdg)==PDG[particle][0]) & (this_KE > threshold)).groupby(level=[0,1]).sum().rename(identifier))
+
+    # particle counts w/ threshold in momentum
+    for identifier, (particle, threshold) in TRUE_P_THRESHOLDS.items():
+        this_p = np.sqrt(mcprimdf[np.abs(mcprimdf.pdg)==PDG[particle][0]].genp.x**2 + mcprimdf[np.abs(mcprimdf.pdg)==PDG[particle][0]].genp.y**2 + mcprimdf[np.abs(mcprimdf.pdg)==PDG[particle][0]].genp.z**2)
+        mcdf = multicol_add(mcdf, ((np.abs(mcprimdf.pdg)==PDG[particle][0]) & (this_p > threshold)).groupby(level=[0,1]).sum().rename(identifier))
  
     # muon info
     mudf = mcprimdf[np.abs(mcprimdf.pdg)==13].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
