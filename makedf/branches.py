@@ -13,6 +13,7 @@ mchdrbranches = [
 
 hdrbranches = [
     "rec.hdr.pot",
+    "rec.hdr.nbnbinfo",
     "rec.hdr.first_in_subrun",
     "rec.hdr.ismc",
     "rec.hdr.run",
