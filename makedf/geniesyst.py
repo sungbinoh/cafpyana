@@ -7,8 +7,13 @@ import numpy as np
 regen_systematics = [
     # CCQE
     "GENIEReWeight_SBN_v1_multisigma_VecFFCCQEshape",
-    'GENIEReWeight_SBN_v1_multisim_RPA_CCQE',
-    'GENIEReWeight_SBN_v1_multisim_CoulombCCQE',
+    'GENIEReWeight_SBN_v1_multisigma_RPA_CCQE',
+    'GENIEReWeight_SBN_v1_multisigma_CoulombCCQE',
+
+    'GENIEReWeight_SBN_v1_multisigma_ZExpA1CCQE',
+    'GENIEReWeight_SBN_v1_multisigma_ZExpA2CCQE',
+    'GENIEReWeight_SBN_v1_multisigma_ZExpA3CCQE',
+    'GENIEReWeight_SBN_v1_multisigma_ZExpA4CCQE',
     # 'ZExpPCAWeighter_SBNnusyst_b1',
     # 'ZExpPCAWeighter_SBNnusyst_b2', 
     # 'ZExpPCAWeighter_SBNnusyst_b3',
@@ -18,8 +23,8 @@ regen_systematics = [
 
     # MEC
     # "GENIEReWeight_SBN_v1_multisigma_NormNCMEC",
-    'GENIEReWeight_SBN_v1_multisim_NormCCMEC',
-    'GENIEReWeight_SBN_v1_multisim_NormNCMEC',
+    'GENIEReWeight_SBN_v1_multisigma_NormCCMEC',
+    'GENIEReWeight_SBN_v1_multisigma_NormNCMEC',
     "GENIEReWeight_SBN_v1_multisigma_DecayAngMEC",
 
     # RES

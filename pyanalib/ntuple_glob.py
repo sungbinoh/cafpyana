@@ -16,6 +16,7 @@ import uuid
 import tempfile
 
 from makedf.makedf import make_histpotdf
+from makedf.makedf import make_histgenevtdf
 
 CPU_COUNT = multiprocessing.cpu_count()
 
@@ -78,10 +79,12 @@ def _loaddf(applyfs, preprocess, g):
     try:
         # Open AND close strictly within the context manager
         with _open_with_retries(fname) as f:
-
             dfs = []
+            totevt = f['TotalEvents'].values()[0]
             if "recTree" not in f:
-                print("File (%s) missing recTree. Try only histpotdf and skipping other dfs..." % fname)
+                print("File (%s) missing recTree. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
+            elif totevt < 1e-6:
+                print("File (%s) has 0 in TotalEvents. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
             else:
                 for applyf in applyfs:
                     df = applyf(f)  # must fully read from 'f' here
@@ -105,32 +108,36 @@ def _loaddf(applyfs, preprocess, g):
 
                     dfs.append(df)
 
-            if "TotalPOT" in f:
-                df = make_histpotdf(f)
-                df["__ntuple"] = index
-                df.set_index("__ntuple", append=True, inplace=True)
-                new_order = [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
-                df = df.reorder_levels(new_order)
 
-                dfs.append(df)
-            else:
-                print("File (%s) missing TotalPOT histgoram. Cannot make histpotdf..." % fname)
+            df_histpot = make_histpotdf(f)
+            if "TotalPOT" not in f:
+                print(f"File ({fname}) missing TotalPOT histogram. Using empty DataFrame.")
+            df_histpot["__ntuple"] = index
+            df_histpot.set_index("__ntuple", append=True, inplace=True)
+            new_order = [df_histpot.index.nlevels - 1] + list(range(df_histpot.index.nlevels - 1))
+            df_histpot = df_histpot.reorder_levels(new_order)
+            dfs.append(df_histpot)
 
-            if not dfs:
-                return None
+            df_histgenevt = make_histgenevtdf(f)
+            if "TotalGenEvents" not in f:
+                print(f"File ({fname}) missing TotalGenEvents histogram. Using empty DataFrame.")
+            df_histgenevt["__ntuple"] = index
+            df_histgenevt.set_index("__ntuple", append=True, inplace=True)
+            new_order = [df_histgenevt.index.nlevels - 1] + list(range(df_histgenevt.index.nlevels - 1))
+            df_histgenevt = df_histgenevt.reorder_levels(new_order)
+            dfs.append(df_histgenevt)
 
-            return dfs
     except (OSError, ValueError) as e:
         print(f"Could not open file ({fname}). Skipping...")
         print(e)
         dfs = None
 
 
-    if madef:
-        os.remove(fname)
-
     for f in tempfiles:
         os.remove(f)
+            
+    if not dfs:
+        return None
 
     return dfs
 

@@ -315,11 +315,75 @@ gump_genie_systematics = [
     'GENIEReWeight_SBN_v1_multisigma_EtaNCEL',
 ]
 
+# additional (re-weights)
+gump_genie_reknob_systematics = gump_genie_systematics + [
+    'ZExpPCAWeighter_SBNNuSyst_multisigma_D_ZExp_b1',
+    'ZExpPCAWeighter_SBNNuSyst_multisigma_D_ZExp_b3',
+    'ZExpPCAWeighter_SBNNuSyst_multisigma_D_ZExp_b2',
+    'ZExpPCAWeighter_SBNNuSyst_multisigma_D_ZExp_b4',
+
+    'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b1',
+    'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b3',
+    'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b2',
+    'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b4',
+
+    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin1',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin2',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin3',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin4',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin5',
+
+    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin1',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin2',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin3',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin4',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin5',
+
+    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_0',
+    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_1',
+    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_2',
+    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_3',
+    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_4',
+    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_5',
+
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCL_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4LoE_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCLLoE_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4M1E_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCLM1E_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4M2E_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCLM2E_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4HiE_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCLHiE_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_MFPLoE_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_MFPM1E_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_MFPM2E_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_MFPHiE_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrKin_PiProFix_N',
+    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrKin_PiProBias_N',
+
+    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_ValQ0Bin0_MECResponse',
+    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_ValQ0Bin1_MECResponse',
+    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_ValQ0Bin2_MECResponse',
+    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_ValQ0Bin3_MECResponse',
+    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_ValQ0Bin4_MECResponse',
+
+    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_MarQ0Bin0_MECResponse',
+    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_MarQ0Bin1_MECResponse',
+    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_MarQ0Bin2_MECResponse',
+    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_MarQ0Bin3_MECResponse',
+    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_MarQ0Bin4_MECResponse',
+]
+
 def make_gump_nuslimwgtdf(f):
     return make_mcnudf(f, include_weights=True, slim=True, genie_systematics=gump_genie_systematics)
 
 def make_gump_nuwgtdf(f):
     return make_mcnudf(f, include_weights=True, slim=False, genie_systematics=gump_genie_systematics)
+
+def make_gump_nurewgtdf(f):
+    return make_mcnudf(f, include_weights=True, slim=False, genie_systematics=gump_genie_reknob_systematics)
 
 def make_gump_nudf(f, is_slc=False):
     # note: setting is_slc to false results in pdg for the slice not being used
