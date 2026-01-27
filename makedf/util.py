@@ -29,7 +29,7 @@ def InAV(df,det="SBND"):
         zmax = 495
     return (df.x > xmin) & (df.x < xmax) & (df.y > ymin) & (df.y < ymax) & (df.z > zmin) & (df.z < zmax)
 
-def InFV(df, inzback, inx=10, iny=10, inzfront=10, det="ICARUS"):
+def InFV(df, inzback=10, inx=10, iny=10, inzfront=10, det="ICARUS"):
     if det == "ICARUS":
         xmin_C0 = -358.49
         xmax_C0 = -61.94
