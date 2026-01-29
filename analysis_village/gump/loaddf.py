@@ -5,7 +5,7 @@ from scipy.interpolate import CubicSpline
 
 from tqdm.auto import tqdm
 import pyanalib.pandas_helpers as ph
-from multiprocessing import Pool
+from multiprocess import Pool
 from functools import partial
 import syst
 
@@ -143,23 +143,37 @@ truthvars = {
 
 def load_one(fname, idf, 
     include_syst=True, nuniv=100, spline=False, xsec_univ=False, # systematic handling
-    load_truth=True, load_crt=False, # load extra information
+    load_truth=True, load_crt=False, match_Enu=True, # load extra information
     offbeampot_SBND=False, offbeampot_ICARUS=False, # POT handling
+    preselection=None, # apply preselection cut
     hdrname=HDR, evtname=EVT, wgtname=WGT, mcname=MC, crtname=CRT): # override default table names
 
     df =  pd.read_hdf(fname, evtname % idf)
+    if preselection is not None:
+        df = df[preselection(df)]
+
     hdr = pd.read_hdf(fname, hdrname % idf)
+
+    match = hdr[["run", "evt"]]
+    # if needed, include neutrino energy in matching information
+    if match_Enu:
+        mcdf = pd.read_hdf(fname, mcname % idf)
+        match = match.merge(mcdf.nu_E.groupby(level=[0,1]).max().rename("nu_E0"), on=["__ntuple", "entry"], how="left")
+
+    df = df.merge(match, on=["__ntuple", "entry"], how="left")
+
+    match = match.set_index(list(match.columns), append=True).droplevel([0,1]).sort_index()
 
     # LOAD POT
     if offbeampot_SBND:
         N_GATES_ON_PER_5e12POT = 1.05104 # TODO: update
         pot = hdr.noffbeambnb.sum()*N_GATES_ON_PER_5e12POT*5e12
     elif offbeampot_ICARUS:
+        trig = pd.read_hdf(fname, "trig_%i" % idf)
         N_GATES_ON_PER_5e12POT = 1.3886218026202426 # TODO: update
-        pot = hdr.gate_delta.sum()*(1-1/20.)*N_GATES_ON_PER_5e12POT*5e12
+        pot = trig.gate_delta.sum()*(1-1/20.)*N_GATES_ON_PER_5e12POT*5e12
     else:
         pot = hdr.pot.sum()
-
 
     # LOAD TRUTH
     if load_truth:
@@ -181,7 +195,7 @@ def load_one(fname, idf,
 
     # EARLY RETURN IF NOT LOADING WEIGHTS
     if not include_syst:
-        return df, pot
+        return df, match, pot
 
     # LOAD WEIGHTS
     wgt = pd.read_hdf(fname, wgtname % idf) 
@@ -231,7 +245,7 @@ def load_one(fname, idf,
             how="left") ## -- save all sllices
     mrg.loc[np.isnan(mrg[skim.columns[0]]), skim.columns] = 1
 
-    return mrg, pot
+    return mrg, match, pot
 
 
 def load(fname, **kwargs):
@@ -240,13 +254,16 @@ def load(fname, **kwargs):
 
     pots = 0
     dfs = []
+    matches = []
     for idf in range(ndf):
-        df, pot = load_one(fname, idf, **kwargs)
+        df, match, pot = load_one(fname, idf, **kwargs)
         pots += pot
         dfs.append(df)
+        matches.append(match)
     df = pd.concat(dfs).reset_index(drop=True)
+    match = pd.concat(matches)
 
-    return df, pots
+    return df, match, pots
         
 def loadl(flist, progress=True, njob=None, **kwargs):
     if njob is not None:
@@ -264,16 +281,37 @@ def loadl(flist, progress=True, njob=None, **kwargs):
         it = tqdm(it, total=len(flist))
 
     dfs = []
+    matches = []
     pots = 0
-    for df, pot in it:
+    for df, match, pot in it:
         pots += pot
         dfs.append(df)
+        matches.append(match)
     df = pd.concat(dfs).reset_index(drop=True)
 
     if njob is not None:
         pool.close()
 
-    return df, pots
+    return df, matches, pots
+
+def match_common_evts(mrgs, dfs, pots):
+    common_ind = mrgs[0].index
+    for m in mrgs[1:]:
+        common_ind = common_ind.intersection(m.index)
+
+    common_df = pd.DataFrame({"common": 1}, index=common_ind)
+
+    outdfs = []
+    outpots = []
+    for m, df, p in zip(mrgs, dfs, pots):
+        common_frac = common_ind.size / m.index.size
+        outpots.append(common_frac*p)
+        outdf = df.merge(common_df, left_on=common_ind.names, right_index=True, how="left")
+        outdf["common"] = outdf["common"].fillna(0)
+        outdf = outdf[outdf.common == 1]
+        outdfs.append(outdf)
+
+    return outdfs, outpots
 
 # Systematic class helpers for what is in these files
 class FluxSystematic(syst.WeightSystematic):
