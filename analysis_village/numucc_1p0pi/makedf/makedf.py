@@ -7,6 +7,7 @@ from makedf.makedf import *
 from makedf.constants import *
 
 from analysis_village.numucc_1p0pi.makedf.util import *
+from makedf.geniesyst import *
 
 def make_spine_evtdf(f):
     # load slices and particles
@@ -51,6 +52,24 @@ def make_spine_evtdf(f):
 
     return df
 
+def make_pandora_evtdf_all(f, sel_level="all", include_weights=False, multisim_nuniv=0, wgt_types=[], slim=True, 
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, **trkArgs):
+    df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, **trkArgs)
+    return df
+
+def make_pandora_evtdf_2prong(f, sel_level="2prong", include_weights=False, multisim_nuniv=0, wgt_types=[], slim=True, 
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, **trkArgs):
+    df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, **trkArgs)
+    return df
+
+def make_pandora_evtdf_mup(f, sel_level="mup", include_weights=False, multisim_nuniv=0, wgt_types=[], slim=True, 
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, **trkArgs):
+    df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, **trkArgs)
+    return df
+
 
 def make_pandora_evtdf_wgts(f, include_weights=True, multisim_nuniv=1000, wgt_types=["bnb","genie"], slim=True, 
                        trkScoreCut=False, trkDistCut=10., cutClearCosmic=True, **trkArgs):
@@ -64,17 +83,7 @@ def make_pandora_evtdf_mup_wgts(f, sel_level="mup", include_weights=True, multis
                             trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, **trkArgs)
     return df
 
-def make_pandora_evtdf_mup(f, sel_level="mup", include_weights=False, multisim_nuniv=0, wgt_types=[], slim=True, 
-                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, **trkArgs):
-    df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
-                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, **trkArgs)
-    return df
-
-# GENIE dfs
-qe_genie_systematics = [
-'GENIEReWeight_SBN_v1_multisim_RPA_CCQE',
-'GENIEReWeight_SBN_v1_multisim_CoulombCCQE',
-]
+# dfs that save all univs for selected knobs
 def make_pandora_evtdf_mup_wgts_CCQE(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["genie"], slim=False, 
                        trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=None, **trkArgs):
     df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
@@ -85,36 +94,22 @@ def make_mcnudf_CCQE(f, include_weights=True, multisim_nuniv=100, wgt_types=["ge
     df = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, genie_systematics=qe_genie_systematics)
     return df
 
-mec_genie_systematics = [
-'GENIEReWeight_SBN_v1_multisim_NormCCMEC',
-'GENIEReWeight_SBN_v1_multisim_NormNCMEC',
-"GENIEReWeight_SBN_v1_multisigma_DecayAngMEC",
-]
 
 def make_pandora_evtdf_mup_wgts_MEC(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["genie"], slim=False, 
-                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=None, **trkArgs):
+                       trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=mec_genie_systematics, **trkArgs):
     df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
-                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=mec_genie_systematics, **trkArgs)
-
-def make_mcnudf_MEC(f, include_weights=True, multisim_nuniv=100, wgt_types=["genie"], slim=False, genie_systematics=None):
-    df = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, genie_systematics=mec_genie_systematics)
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=genie_systematics, **trkArgs)
     return df
 
-res_genie_systematics = [
-'GENIEReWeight_SBN_v1_multisim_RDecBR1gamma',
-'GENIEReWeight_SBN_v1_multisim_RDecBR1eta',
-"GENIEReWeight_SBN_v1_multisigma_Theta_Delta2Npi",
-"GENIEReWeight_SBN_v1_multisigma_ThetaDelta2NRad",
+def make_mcnudf_MEC(f, include_weights=True, multisim_nuniv=100, wgt_types=["genie"], slim=False, genie_systematics=mec_genie_systematics):
+    df = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, genie_systematics=genie_systematics)
+    return df
 
-"GENIEReWeight_SBN_v1_multisigma_MaCCRES",
-"GENIEReWeight_SBN_v1_multisigma_MaNCRES",
-"GENIEReWeight_SBN_v1_multisigma_MvCCRES",
-"GENIEReWeight_SBN_v1_multisigma_MvNCRES",
-]
 def make_pandora_evtdf_mup_wgts_RES(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["genie"], slim=False, 
                        trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=None, **trkArgs):
     df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
                             trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=res_genie_systematics, **trkArgs)
+    return df
 
 def make_mcnudf_RES(f, include_weights=True, multisim_nuniv=100, wgt_types=["genie"], slim=False, genie_systematics=None):
     df = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, genie_systematics=res_genie_systematics)
@@ -122,58 +117,33 @@ def make_mcnudf_RES(f, include_weights=True, multisim_nuniv=100, wgt_types=["gen
 
 def make_pandora_evtdf_mup_wgts_NonRES(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["genie"], slim=True, 
                        trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=None, **trkArgs):
-    this_genie_systematics = [
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvpCC1pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvpCC2pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvpNC1pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvpNC2pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvnCC1pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvnCC2pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvnNC1pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvnNC2pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpCC1pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpCC2pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpNC1pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpNC2pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnCC1pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnCC2pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnNC1pi',
-    'GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnNC2pi',
-    ]
     df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
-                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=this_genie_systematics, **trkArgs)
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=nonres_genie_systematics, **trkArgs)
+    return df
+
+def make_mcnudf_NonRES(f, include_weights=True, multisim_nuniv=100, wgt_types=["genie"], slim=False, genie_systematics=None):
+    df = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, genie_systematics=nonres_genie_systematics)
+    return df
 
 def make_pandora_evtdf_mup_wgts_DIS(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["genie"], slim=False, 
                        trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=None, **trkArgs):
-    this_genie_systematics = [
-    'GENIEReWeight_SBN_v1_multisigma_AhtBY',
-    'GENIEReWeight_SBN_v1_multisigma_BhtBY',
-    'GENIEReWeight_SBN_v1_multisigma_CV1uBY',
-    'GENIEReWeight_SBN_v1_multisigma_CV2uBY',
-    ]
     df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
-                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=this_genie_systematics, **trkArgs)
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=dis_genie_systematics, **trkArgs)
+    return df
+
+def make_mcnudf_DIS(f, include_weights=True, multisim_nuniv=100, wgt_types=["genie"], slim=False, genie_systematics=None):
+    df = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, genie_systematics=dis_genie_systematics)
+    return df
 
 def make_pandora_evtdf_mup_wgts_Other(f, sel_level="mup", include_weights=True, multisim_nuniv=200, wgt_types=["genie"], slim=False, 
                        trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, genie_systematics=None, **trkArgs):
-    this_genie_systematics = [
-    'GENIEReWeight_SBN_v1_multisigma_MFP_pi',
-    'GENIEReWeight_SBN_v1_multisigma_FrCEx_pi',
-    'GENIEReWeight_SBN_v1_multisigma_FrInel_pi',
-    'GENIEReWeight_SBN_v1_multisigma_FrAbs_pi',
-    'GENIEReWeight_SBN_v1_multisigma_FrPiProd_pi',
-    'GENIEReWeight_SBN_v1_multisigma_MFP_N',
-    'GENIEReWeight_SBN_v1_multisigma_FrCEx_N',
-    'GENIEReWeight_SBN_v1_multisigma_FrInel_N',
-    'GENIEReWeight_SBN_v1_multisigma_FrAbs_N',
-    'GENIEReWeight_SBN_v1_multisigma_FrPiProd_N',
-    "GENIEReWeight_SBN_v1_multisigma_NormCCCOH", # Handled by re-tuning
-    "GENIEReWeight_SBN_v1_multisigma_NormNCCOH",
-    'GENIEReWeight_SBN_v1_multisigma_MaNCEL',
-    'GENIEReWeight_SBN_v1_multisigma_EtaNCEL',
-    ]
     df = make_pandora_evtdf(f, sel_level=sel_level, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, 
-                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=this_genie_systematics, **trkArgs)
+                            trkScoreCut=trkScoreCut, trkDistCut=trkDistCut, cutClearCosmic=cutClearCosmic, genie_systematics=other_genie_systematics, **trkArgs)
+    return df
+
+def make_mcnudf_Other(f, include_weights=True, multisim_nuniv=100, wgt_types=["genie"], slim=False, genie_systematics=None):
+    df = make_mcnudf(f, include_weights=include_weights, multisim_nuniv=multisim_nuniv, wgt_types=wgt_types, slim=slim, genie_systematics=other_genie_systematics)
+    return df
 
 def make_pandora_evtdf(f, sel_level="all", include_weights=True, multisim_nuniv=1000, wgt_types=[], slim=True, genie_systematics=None,
                        trkScoreCut=False, trkDistCut=100., cutClearCosmic=True, **trkArgs):
