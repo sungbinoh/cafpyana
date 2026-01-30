@@ -22,6 +22,7 @@ hdrbranches = [
     "rec.hdr.proc",
     "rec.hdr.cluster",
     "rec.hdr.fno",
+    "rec.hdr.nbnbinfo",
     "rec.hdr.noffbeambnb",
 ]
 
