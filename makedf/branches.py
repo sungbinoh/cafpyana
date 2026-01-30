@@ -235,6 +235,8 @@ trkhitbranches_perplane = lambda IPLANE : [
 trktruehitbranches_perplane = lambda IPLANE : [
     trkbranch + "calo.%i.points.truth.h_e"% IPLANE,
     trkbranch + "calo.%i.points.truth.h_nelec"% IPLANE,
+    trkbranch + "calo.%i.points.truth.h_e_sed"% IPLANE,
+    trkbranch + "calo.%i.points.truth.h_nelec_sed"% IPLANE,
 ]
 
 trkhitbranches = trkhitbranches_perplane(2)
