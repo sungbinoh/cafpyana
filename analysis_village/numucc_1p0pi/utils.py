@@ -1533,3 +1533,156 @@ def plot_heatmap(matrix, var_config, title="", save_fig=False, save_fig_name=Non
     if save_fig:
         plt.savefig("{}.png".format(save_fig_name), bbox_inches='tight', dpi=300)
     plt.show();
+
+
+def get_univ_rates(evtdf, var_config, syst_name):
+    var = evtdf[var_config.var_evt_reco_col]
+    cv_events, _ = np.histogram(var, bins=var_config.bins)
+
+    univ_events = []
+    for uidx in range(len(evtdf[syst_name].columns)):
+        weights = evtdf[syst_name]["univ_{}".format(uidx)]
+        # fill nan (these are non-neutrino events) with 1
+        weights = np.where(np.isnan(weights), 1, weights)
+        n, bins = np.histogram(var, bins=var_config.bins, weights=weights)
+        univ_events.append(n)
+    univ_events = np.array(univ_events)
+    return univ_events, cv_events
+
+def get_clipped_evts(df, var_col, bins):
+    eps = 1e-8
+    var = df[var_col]
+    var = np.clip(var, bins[0], bins[-1] - eps)
+
+    if 'pot_weight' in df.columns:
+        weights = df.loc[:, 'pot_weight']
+    else:
+        print("No pot_weight column found, return 1 as pot scale")
+        weights = np.ones_like(var)
+    return var, weights
+
+def get_distributions(mc_evt_df, mc_nu_df, var_config):
+    # Total MC reco muon momentum: for fake data
+    var_total_mc, weights_total_mc = get_clipped_evts(mc_evt_df, var_config.var_evt_reco_col, var_config.bins)
+
+    # --- all events, selected ---
+    # mc_evt_df divided into topology modes for subtraction from data in future
+    # first item in list is the signal topology
+    mc_evt_df_divided = [mc_evt_df[mc_evt_df.nuint_categ == mode]for mode in topology_list]
+
+    # Reco variable distribution for each 'nuint_categ' for stack plot and subtraction from the fake data
+    var_per_nuint_categ_mc, weights_per_categ = [], []
+    for mode in topology_list:
+        var, weights = get_clipped_evts(mc_evt_df[mc_evt_df.nuint_categ == mode], var_config.var_evt_reco_col, var_config.bins)
+        var_per_nuint_categ_mc.append(var)
+        weights_per_categ.append(weights)
+
+    # Reco variable distribution for each genie mode
+    var_per_genie_mode_mc, weights_per_genie_mode = [], []
+    for mode in genie_mode_list:
+        var, weights = get_clipped_evts(mc_evt_df[mc_evt_df.genie_categ == mode], var_config.var_evt_reco_col, var_config.bins)
+        var_per_genie_mode_mc.append(var)
+        weights_per_genie_mode.append(weights)
+
+    # --- signal events ---
+    # selected, for response matrix
+    # Signal event's reco muon momentum after the event selection
+    var_signal_sel_reco, weight_signal = get_clipped_evts(mc_evt_df[mc_evt_df.nuint_categ == 1], var_config.var_evt_reco_col, var_config.bins)
+
+    # Signal event's true muon momentum after the event selection
+    var_signal_sel_truth, weight_true_signal = get_clipped_evts(mc_evt_df[mc_evt_df.nuint_categ == 1], var_config.var_evt_truth_col, var_config.bins)
+
+    # total generated, for efficiency vector
+    # Signal event's true muon momentum without event selection
+    var_truth_signal, weight_truth_signal = get_clipped_evts(mc_nu_df[mc_nu_df.nuint_categ == 1], var_config.var_nu_col, var_config.bins)
+
+    return {
+        "var_total_mc": var_total_mc,
+        "weights_total_mc": weights_total_mc,
+        "mc_evt_df_divided": mc_evt_df_divided,
+        "var_per_nuint_categ_mc": var_per_nuint_categ_mc,
+        "weights_per_categ": weights_per_categ,
+        "var_per_genie_mode_mc": var_per_genie_mode_mc,
+        "weights_per_genie_mode": weights_per_genie_mode,
+        "var_signal_sel_reco": var_signal_sel_reco,
+        "weight_signal": weight_signal,
+        "var_signal_sel_truth": var_signal_sel_truth,
+        "weight_true_signal": weight_true_signal,
+        "var_truth_signal": var_truth_signal,
+        "weight_truth_signal": weight_truth_signal,
+    }
+
+
+# TODO: load xsec unit factor as a global variable, instead of calculating it every time
+def get_genie_univs(cov_type, mc_evt_df, mc_nu_df, var_config, syst_name, n_univ=100, plot=False):
+    """
+    for the GENIE uncertainty on the xsec measurement
+    """
+    XSEC_UNIT = 1e-38
+
+    if cov_type == "xsec":
+        print("generating covariance for xsec, using scale factor: {}".format(XSEC_UNIT))
+        scale_factor = XSEC_UNIT
+    elif cov_type == "rate":
+        scale_factor = 1.0
+    else:
+        raise ValueError("Invalid covariance type: {}, choose xsec or rate".format(cov_type))
+
+    ret_dists = get_distributions(mc_evt_df, mc_nu_df, var_config)
+    nevts_signal_truth, _     = np.histogram(ret_dists["var_truth_signal"],     bins=var_config.bins, weights=ret_dists["weight_truth_signal"])
+    nevts_signal_sel_truth, _ = np.histogram(ret_dists["var_signal_sel_truth"], bins=var_config.bins, weights=ret_dists["weight_signal"])
+    nevts_signal_sel_reco, _  = np.histogram(ret_dists["var_signal_sel_reco"],  bins=var_config.bins, weights=ret_dists["weight_signal"])
+
+    signal_cv = nevts_signal_sel_reco * scale_factor # = Response @ true_signal
+
+    univ_events = []
+    univ_effs   = []
+    univ_smears = []
+    for uidx in range(n_univ):
+        # univ_col_evt = ("mc", syst_name, "univ_{}".format(uidx)) #, "", "", "", "") #, "", "")
+        # univ_col_mc = ("mc", syst_name, "univ_{}".format(uidx), "")
+        univ_col = ("mc", syst_name, "univ_{}".format(uidx))
+
+        # ---- uncertainty on the signal rate ----
+        # only consider effect on the response matrix for the signal channel
+        if cov_type == "xsec":
+            true_signal_univ, _ = np.histogram(ret_dists["var_truth_signal"], bins=var_config.bins, 
+                                               weights=ret_dists["weight_truth_signal"]*mc_nu_df[mc_nu_df.nuint_categ == 1][univ_col])
+            
+            reco_vs_true = get_smear_matrix(ret_dists["var_signal_sel_truth"], ret_dists["var_signal_sel_reco"], [var_config.bins, var_config.bins],
+                                            weights=mc_evt_df[mc_evt_df.nuint_categ == 1][univ_col], plot=plot)
+            univ_smears.append(reco_vs_true)
+
+            eff = get_eff(reco_vs_true, true_signal_univ) 
+            univ_effs.append(eff)
+
+            Response_univ = get_response_matrix(reco_vs_true, eff, var_config.bins, plot=plot)
+            signal_univ = Response_univ @ nevts_signal_truth # note that we multiply the CV signal rate!
+            # signal_univ = signal_cv
+
+        elif cov_type == "rate":
+            signal_univ, _ = np.histogram(ret_dists["var_signal_sel_reco"], bins=var_config.bins, 
+                                          weights=mc_evt_df[mc_evt_df.nuint_categ == 1][univ_col])
+
+        else:
+            raise ValueError("Invalid covariance type: {}, choose xsec or rate".format(cov_type))
+
+        # ---- uncertainty on the background rate ----
+        # loop over background categories
+        # + univ background - cv background
+        # note: cv background subtraction cancels out with the cv background subtraction for the cv event rate. 
+        #       doing it anyways for the plot of universes on background subtracted event rate.
+        for this_mc_evt_df in ret_dists["mc_evt_df_divided"][1:]:
+            weights = this_mc_evt_df[univ_col].copy()
+            weights[np.isnan(weights)] = 1 ## IMPORTANT: make nan weights to 1. to ignore them
+            this_var = this_mc_evt_df[var_config.var_evt_reco_col]
+            this_var = np.clip(this_var, var_config.bins[0], var_config.bins[-1] - eps)
+            background_univ, _ = np.histogram(this_var, bins=var_config.bins, weights=weights)
+            background_cv, _   = np.histogram(this_var, bins=var_config.bins)
+            signal_univ += background_univ - background_cv
+
+        signal_univ *= scale_factor
+        univ_events.append(signal_univ)
+
+    univ_events = np.array(univ_events)
+    return univ_events, signal_cv
