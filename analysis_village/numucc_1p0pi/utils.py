@@ -7,6 +7,8 @@ from matplotlib.offsetbox import AnchoredText
 from matplotlib.offsetbox import AnchoredOffsetbox, DrawingArea, HPacker, VPacker, TextArea
 from matplotlib.legend import Legend
 
+from scipy.stats import chi2
+
 import sys
 sys.path.append('../../')
 from analysis_village.numucc_1p0pi.selection_definitions import *
@@ -18,6 +20,7 @@ from pyanalib.variable_calculator import get_cc1p0pi_tki
 from pyanalib.pandas_helpers import pad_column_name
 from analysis_village.unfolding.wienersvd import *
 from analysis_village.unfolding.unfolding_inputs import *
+from analysis_village.unfolding.wienersvd import *
 
 DETECTOR = "SBND_nohighyz"
 # DETECTOR = "SBND"
@@ -441,6 +444,7 @@ genie_colors = ["gray", "sienna", "crimson", "darkgreen",
                 "#390C1E", "#9b5580"]
 
 
+# TODO: combine with "plot_topology_breakdown" and "plot_genie_breakdown" functions below
 def hist_plot(type,
               evtdf, vardf, 
               vardf_data, var_intime,
@@ -1397,7 +1401,8 @@ def match_trkdf_to_slcdf(trkdf, slcdf):
 
 
 def plot_univ_hist(evtdf, var_config, syst_name, univ_events, cv_events):
-    n_univ = len(evtdf[syst_name].columns)
+    # n_univ = len(evtdf[syst_name].columns)
+    n_univ = univ_events.shape[0]
     if (n_univ > 10):
         colors = ["C0", "C1", "C2"]
 
@@ -1445,7 +1450,8 @@ def plot_univ_hist(evtdf, var_config, syst_name, univ_events, cv_events):
     plt.title(syst_name)
 
     # plt.text(0.05, 0.05, "SBND Internal", fontsize=12, color="rosybrown", ha="left", va="bottom", transform=ax.transAxes)
-    plt.legend(reverse=True, frameon=False)
+    # plt.legend(reverse=True, frameon=False)
+    plt.legend(frameon=False)
     plt.show();
 
 def get_covariance(univ_events, cv_events):
@@ -1686,3 +1692,538 @@ def get_genie_univs(cov_type, mc_evt_df, mc_nu_df, var_config, syst_name, n_univ
 
     univ_events = np.array(univ_events)
     return univ_events, signal_cv
+
+def cov_from_fraccov(cov_frac, cv_vals):
+    cov = np.zeros_like(cov_frac)
+    for i in range(cov_frac.shape[0]):
+        for j in range(cov_frac.shape[1]):
+            cov[i, j] = cov_frac[i, j] * (cv_vals[i] * cv_vals[j])
+    return cov
+
+def corr_from_fraccov(cov_frac):
+    corr = np.zeros_like(cov_frac)
+    for i in range(cov_frac.shape[0]):
+        for j in range(cov_frac.shape[1]):
+            corr[i, j] = cov_frac[i, j] / np.sqrt(cov_frac[i, i] * cov_frac[j, j])
+    return corr
+
+
+def plot_unfolded_result(unfold, bins, measured, models,
+                         plot_labels, model_names, 
+                         save_fig=False, save_name=None,
+                         closure_test=False):
+
+    # need to divide by bin width for differential xsec
+    bin_widths = np.diff(bins)
+    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+
+    fig, ax = plt.subplots(figsize=(8.5, 7))
+
+    # --- stat uncertainties
+    UnfoldCov_stat = unfold['StatUnfoldCov']
+    Unfold_uncert_stat = np.diag(UnfoldCov_stat)
+
+    # --- syst uncertainties
+    UnfoldCov_syst = unfold['SystUnfoldCov']
+    Unfold_uncert_syst = np.diag(UnfoldCov_syst)
+
+    # decomose into norm and shape components
+    # TODO: the first item in models is the true model
+    SystUnfoldCov_norm, SystUnfoldCov_shape = Matrix_Decomp(models[0], UnfoldCov_syst)
+    print(np.diag(SystUnfoldCov_norm))
+    Unfold_uncert_norm = np.sqrt(np.abs(np.diag(SystUnfoldCov_norm)))
+    Unfold_uncert_shape = np.sqrt(np.abs(np.diag(SystUnfoldCov_shape)))
+
+    # --- plot
+    # unfolded result
+    Unfolded = unfold['unfold']
+    UnfoldedCov = unfold["UnfoldCov"]
+    Unfolded_perwidth = Unfolded / bin_widths
+
+    # set err to 0 for closure test
+    if closure_test:
+        dummy_err = np.zeros_like(Unfolded_perwidth)
+        bar_handle = plt.errorbar(bin_centers, Unfolded_perwidth, yerr=dummy_err, fmt='o', color='black')
+
+    else:
+        # plot shape syst and stat as error bars
+        Unfold_uncert_stat_perwidth = Unfold_uncert_stat / bin_widths
+        Unfold_uncert_shape_perwidth = Unfold_uncert_shape / bin_widths
+        # Unfold_uncert_stat_shape_perwidth = Unfold_uncert_stat_perwidth + Unfold_uncert_shape_perwidth
+        Unfold_uncert_stat_shape_perwidth = Unfold_uncert_shape_perwidth
+        bar_handle = plt.errorbar(bin_centers, Unfolded_perwidth, yerr=Unfold_uncert_stat_shape_perwidth, fmt='o', color='black')
+
+        # plot syst norm component as histogram at the bottom
+        Unfold_uncert_norm_perwidth = Unfold_uncert_norm / bin_widths
+        norm_handle = plt.bar(bin_centers, Unfold_uncert_norm_perwidth, width=bin_widths, label='Syst. error (norm)', alpha=0.5, color='gray')
+
+    # Also divide measured & model by bin width
+    measured_perwidth = measured / bin_widths
+    reco_handle, = plt.step(bins, np.append(measured_perwidth, measured_perwidth[-1]), where='post', label='Meausred Signal (Input)')
+
+    # --- get chi2 values for each model to compare
+    chi2_vals = []
+    p_values = []
+    model_handles = []
+    model_labels = []
+    for midx, model in enumerate(models):
+
+        model_smeared = unfold['AddSmear'] @ model
+        # chi2_val = chi2(Unfolded, model_smeared, UnfoldCov_syst)
+        # chi2_vals.append(chi2_val)
+        # p_val = 0
+
+        chi2_val, p_val = get_chi2(Unfolded, model_smeared, UnfoldCov_syst)
+        chi2_vals.append(chi2_val)
+        p_values.append(p_val)
+
+        # # calculated the p-value for the chi2 test
+        # import scipy.stats as stats
+        # dof = len(bins) - 1
+        # p_value = 1 - stats.chi2.cdf(chi2_val, dof)
+        # p_values.append(p_value)
+
+        # Example histograms
+        # statistic, p_value = chisquare(Unfolded, f_exp=model_smeared)
+        # chi2_vals.append(statistic)
+        # p_values.append(p_value)
+
+        model_smeared_perwidth = model_smeared / bin_widths
+        model_handle, = plt.step(bins, np.append(model_smeared_perwidth, model_smeared_perwidth[-1]), where='post')
+        model_handles.append(model_handle)
+        model_labels.append(f'$A_c \\otimes$ {model_names[midx]} ($\chi^2$ = {chi2_vals[midx]:.2f}/{len(bins)-1}), p-value = {p_values[midx]:.3f}')
+
+    # legend
+    if closure_test:
+        handles = [bar_handle, reco_handle] + model_handles
+        labels = ['Unfolded Asimov Data', 'Measured Signal'] + model_labels
+    else:
+        handles = [bar_handle, norm_handle, reco_handle] + model_handles
+        labels = ['Unfolded', 'Norm. Syst. Unc.', 'Measured Signal'] + model_labels
+    plt.legend(handles, labels, 
+               loc='upper left', fontsize=12, frameon=False, ncol=1, bbox_to_anchor=(0.02, 0.98))
+
+    n_firsthalf = np.sum(Unfolded_perwidth[:len(bins)//2])
+    n_secondhalf = np.sum(Unfolded_perwidth[len(bins)//2:])
+    if n_firsthalf > n_secondhalf:
+        textloc_x = 0.95
+        ha = 'right'
+    else:
+        textloc_x = 0.05
+        ha = 'left'
+
+    ax.text(textloc_x, 0.65, r"$\mathbf{SBND}$ Preliminary", 
+            transform=ax.transAxes, 
+            fontsize=16, 
+            color='gray',
+            ha=ha, 
+            va='top')
+    # ax.text(textloc_x, 0.58, r"Work in Progress", 
+    #         transform=ax.transAxes, 
+    #         fontsize=16, 
+    #         color='gray',
+    #         ha=ha, 
+    #         va='top')
+
+    # leave space for legend
+    plt.xlabel(plot_labels[0])
+    plt.ylabel(plot_labels[1])
+    plt.xlim(bins[0], bins[-1])
+    plt.ylim(0., np.max(Unfolded_perwidth)*1.7)
+
+    if save_fig:
+        plt.savefig(save_name, bbox_inches='tight')
+    plt.show()
+
+def plot_unfolded_data(unfold, bins, measured, models,
+                         plot_labels, model_names,
+                         save_fig=False, save_name=None):
+
+    # need to divide by bin width for differential xsec
+    bin_widths = np.diff(bins)
+    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+
+    Unfolded = unfold['unfold']
+
+    # --- stat uncertainties
+    UnfoldCov_stat = unfold['StatUnfoldCov'] 
+    # print(UnfoldCov_stat)
+    UnfoldCov_stat = np.diag(measured/XSEC_UNIT)
+    # print(UnfoldCov_stat)
+    Unfold_uncert_stat = np.diag(UnfoldCov_stat)  * XSEC_UNIT
+    # print(Unfold_uncert_stat)
+    # print(UnfoldCov_stat)
+
+    # mask = Unfolded != 0
+    UnfoldCov_stat_frac = np.zeros_like(UnfoldCov_stat)
+    for i in range(len(Unfolded)):
+        for j in range(len(Unfolded)):
+            if Unfolded[i] != 0 and Unfolded[j] != 0:
+                UnfoldCov_stat_frac[i, j] = UnfoldCov_stat[i, j] / (Unfolded[i] * Unfolded[j])
+            else:
+                UnfoldCov_stat_frac[i, j] = 0.0
+    UnfoldCov_stat_frac = UnfoldCov_stat_frac * XSEC_UNIT**2
+    # print(UnfoldCov_stat_frac)
+
+
+    # --- syst uncertainties
+    UnfoldCov_syst = unfold['SystUnfoldCov']
+    Unfold_uncert_syst = np.diag(UnfoldCov_syst)
+
+    UnfoldCov_syst_frac = np.zeros_like(UnfoldCov_syst)
+    for i in range(len(Unfolded)):
+        for j in range(len(Unfolded)):
+            if Unfolded[i] != 0 and Unfolded[j] != 0:
+                UnfoldCov_syst_frac[i, j] = UnfoldCov_syst[i, j] / (Unfolded[i] * Unfolded[j])
+            else:
+                UnfoldCov_syst_frac[i, j] = 0.0
+    # print(UnfoldCov_syst_frac)
+
+    UnfoldedCov_frac = UnfoldCov_stat_frac + UnfoldCov_syst_frac
+    UnfoldedCov = np.zeros_like(UnfoldedCov_frac)
+    for i in range(len(Unfolded)):
+        for j in range(len(Unfolded)):
+            UnfoldedCov[i, j] = Unfolded[i] * Unfolded[j] * UnfoldedCov_frac[i, j]
+
+
+    # decomose into norm and shape components
+    # TODO: the first item in models is the true model
+    SystUnfoldCov_norm, SystUnfoldCov_shape = Matrix_Decomp(models[0], UnfoldCov_syst)
+    Unfold_uncert_norm = np.sqrt(np.abs(np.diag(SystUnfoldCov_norm)))
+    Unfold_uncert_shape = np.sqrt(np.abs(np.diag(SystUnfoldCov_shape)))
+    # print(Unfold_uncert_stat)
+    # print(Unfold_uncert_shape)
+
+    # --- plot
+    # unfolded result
+    Unfolded_perwidth = Unfolded / bin_widths
+
+    # set err to 0 for closure test
+    # plot shape syst and stat as error bars
+    Unfold_uncert_stat_perwidth = Unfold_uncert_stat / bin_widths
+    Unfold_uncert_shape_perwidth = Unfold_uncert_shape / bin_widths
+    # Plot errorbars so that inner cap is stat, outer cap is syst
+    # First, plot stat-only errorbars with smaller capsize (inner)
+    bar_handle_stat = plt.errorbar(
+        bin_centers, Unfolded_perwidth, 
+        yerr=Unfold_uncert_stat_perwidth, 
+        fmt='o', color='black', linewidth=1.5, 
+        capsize=3, elinewidth=1.5, markeredgewidth=1.5
+    )
+    # Then, plot total (stat+syst) errorbars with larger capsize (outer), but no marker
+    Unfold_uncert_total = np.sqrt(Unfold_uncert_stat_perwidth**2 + Unfold_uncert_shape_perwidth**2)
+    bar_handle = plt.errorbar(
+        bin_centers, Unfolded_perwidth, 
+        yerr=Unfold_uncert_total, 
+        fmt='none', ecolor='black', elinewidth=1, capsize=7
+    )
+
+    # plot syst norm component as histogram at the bottom
+    Unfold_uncert_norm_perwidth = Unfold_uncert_norm / bin_widths
+    norm_handle = plt.bar(bin_centers, Unfold_uncert_norm_perwidth, width=bin_widths, label='Syst. error (norm)', alpha=0.5, color='gray')
+
+    # Also divide measured & model by bin width
+    measured_perwidth = measured / bin_widths
+
+    # --- get chi2 values for each model to compare
+    chi2_vals = []
+    model_handles = []
+    model_labels = []
+    for midx, model in enumerate(models):
+
+        model_smeared = unfold['AddSmear'] @ model
+        chi2_val = chi2(Unfolded, model_smeared, UnfoldedCov)
+        # chi2_val = chi2(Unfolded, model_smeared, UnfoldCov)
+        chi2_vals.append(chi2_val)
+
+        model_smeared_perwidth = model_smeared / bin_widths
+        model_handle, = plt.step(bins, np.append(model_smeared_perwidth, model_smeared_perwidth[-1]), where='post', linewidth=2)
+        model_handles.append(model_handle)
+        model_labels.append(f'$A_c \\otimes$ {model_names[midx]} ($\chi^2$ = {chi2_vals[midx]:.0f}/{len(bins)-1})')
+
+    # legend
+    # Show both inner and outer cap in legend, and write legend accordingly
+    # Only unfolded result and models
+    # For errorbars, show both stat and syst errorbar handles in legend
+    # Plot main legend for unfolded result
+    handles = [bar_handle_stat, bar_handle]
+    labels = [
+        'Stat. Unc.',
+        'Stat. $\oplus$ Shape Syst. Unc.'
+    ]
+    valign = 0.6
+    main_legend = plt.legend(handles, labels, 
+                                loc='upper left', fontsize=10, frameon=False, ncol=1, bbox_to_anchor=(valign, 0.88),
+                                title="Unfolded Data", title_fontproperties={'weight': 'bold'})
+
+    plt.gca().add_artist(main_legend)
+    model_legend = plt.legend(model_handles, model_labels, 
+                                loc='upper left', fontsize=10, frameon=False, ncol=1, bbox_to_anchor=(valign, 0.98))
+
+    # leave space for legend
+    plt.xlabel(plot_labels[0])
+    plt.ylabel(plot_labels[1])
+    plt.xlim(bins[0], bins[-1])
+    plt.ylim(0., np.max(Unfolded_perwidth)*1.3)
+
+    if save_fig:
+        plt.savefig(save_name, bbox_inches='tight')
+    plt.show()
+
+def get_chi2(data, model, cov):
+    chi2_value = (data - model) @ np.linalg.inv(cov) @ (data - model)
+    ndof = len(data)
+    p_value = 1 - chi2.cdf(chi2_value, df=ndof)
+    return chi2_value, p_value
+
+
+
+def plot_topology_breakdown(var_categ, weights_categ, var_total, weights_total, bins,
+                            plot_labels, 
+                            colors, labels, 
+                            save_fig=False, save_name=None):
+
+    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+
+    plt.figure(figsize=(8.5, 6))
+
+    # TODO: make this more general?
+    # our categroy breakdown list have signal at the front
+    # stack in reverse order so that signal is on top
+    var_categ = var_categ[::-1]
+    weights_categ = weights_categ[::-1]
+    colors = colors[::-1]
+    labels = labels[::-1]
+    mc_stack, _, _ = plt.hist(var_categ,
+                              bins=bins,
+                              weights=weights_categ,
+                              stacked=True,
+                              color=colors,
+                              edgecolor='none',
+                              linewidth=0,
+                              density=False,
+                              histtype='stepfilled')
+
+    # background_cv = mc_stack[-1] - mc_stack[0]
+    background_cv = mc_stack[-2]
+
+    # use MC as fake data for closure test
+    totmc, _ = np.histogram(var_total, bins=bins, weights=weights_total)
+    fake_data     = totmc
+    fake_data_err = np.sqrt(totmc)
+    plt.errorbar(bin_centers, fake_data, yerr=fake_data_err, 
+                 fmt='o', color='black')
+
+    # note the % breakdown in the legend
+    accum_sum = [0.] + [np.sum(data) for data in mc_stack]
+    total_sum = accum_sum[-1]
+    individual_sums = [accum_sum[i + 1] - accum_sum[i] for i in range(len(accum_sum) - 1)]
+    fractions = [(count / total_sum) * 100 for count in individual_sums]
+    legend_labels = [f"{label} ({frac:.1f}%)" for label, frac in zip(labels[::-1], fractions[::-1])]
+    legend_labels.append("Fake Data")
+    plt.legend(legend_labels, 
+                loc='upper left', 
+                fontsize=10, 
+                frameon=False, 
+                ncol=3, 
+                bbox_to_anchor=(0.02, 0.98))
+
+    n_firsthalf = np.sum(totmc[:len(bins)//2])
+    n_secondhalf = np.sum(totmc[len(bins)//2:])
+    if n_firsthalf > n_secondhalf:
+        textloc_x = 0.95
+        ha = 'right'
+    else:
+        textloc_x = 0.05
+        ha = 'left'
+
+    plt.text(textloc_x, 0.5, "SBND Simulation\nSBND Preliminary", 
+            transform=plt.gca().transAxes, 
+            fontsize=12, 
+            color='gray',
+            ha=ha, 
+            va='top')
+
+    # leave whitespace at the top for the legend
+    plt.xlabel(plot_labels[0])
+    plt.ylabel(plot_labels[1])
+    plt.xlim(bins[0], bins[-1])
+    plt.ylim(0., 1.45 * fake_data.max())
+
+    if save_fig:
+        plt.savefig(save_name, bbox_inches='tight', dpi=300)
+    plt.show()
+    
+    return fake_data, background_cv
+
+
+def plot_genie_breakdown(var_categ, weights_categ, var_total, weights_total, bins,
+                         plot_labels, 
+                         colors, labels, 
+                         save_fig=False, save_name=None):
+
+    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+
+    plt.figure(figsize=(8.5, 6))
+
+    # stack in reverse order so that signal is on top 
+    var_categ = var_categ[::-1]
+    weights_categ = weights_categ[::-1]
+    colors = colors[::-1]
+    labels = labels[::-1]
+
+    mc_stack, _, _ = plt.hist(var_categ,
+                                bins=bins,
+                                weights=weights_categ,
+                                stacked=True,
+                                color=colors,
+                                edgecolor='none',
+                                linewidth=0,
+                                density=False,
+                                histtype='stepfilled')
+
+    # use MC as fake data for closure test
+    totmc, bins = np.histogram(var_total, bins=bins, weights=weights_total)
+    fake_data     = totmc
+    fake_data_err = np.sqrt(totmc)
+    plt.errorbar(bin_centers, fake_data, yerr=fake_data_err, 
+                 fmt='o', color='black')
+
+    # note the % breakdown in the legend
+    accum_sum = [np.sum(data) for data in mc_stack]
+    accum_sum = [0.] + accum_sum
+    total_sum = accum_sum[-1]
+    individual_sums = [accum_sum[i + 1] - accum_sum[i] for i in range(len(accum_sum) - 1)]
+    fractions = [(count / total_sum) * 100 for count in individual_sums]
+    legend_labels = [f"{label} ({frac:.1f}%)" for label, frac in zip(labels[::-1], fractions[::-1])]
+    legend_labels.append("Fake Data")
+    plt.legend(legend_labels, 
+                loc='upper left', 
+                fontsize=10, 
+                frameon=False, 
+                ncol=3, 
+                bbox_to_anchor=(0.02, 0.98))
+
+    n_firsthalf = np.sum(totmc[:len(bins)//2])
+    n_secondhalf = np.sum(totmc[len(bins)//2:])
+    if n_firsthalf > n_secondhalf:
+        textloc_x = 0.95
+        ha = 'right'
+    else:
+        textloc_x = 0.05
+        ha = 'left'
+
+    plt.text(textloc_x, 0.5, "SBND Simulation\nSBND Preliminary", 
+            transform=plt.gca().transAxes, 
+            fontsize=12, 
+            color='gray',
+            ha=ha, 
+            va='top')
+
+    # leave whitespace at the top for the legend
+    plt.xlabel(plot_labels[0])
+    plt.ylabel(plot_labels[1])
+    plt.xlim(bins[0], bins[-1])
+    plt.ylim(0., 1.45 * fake_data.max())
+
+    if save_fig:
+        plt.savefig(save_name, bbox_inches='tight', dpi=300)
+    plt.show()
+
+
+# Plotters for detector variation analysis
+def overlay_hists(evtdfs, vardfs, bins,
+              colors, labels,
+              plot_labels=["", "", ""],
+              vline = None,
+              approval="internal",
+              save_fig=False, save_name=None): 
+
+    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+
+    fig, axs = plt.subplots(2, 1, figsize=(7.5, 7), 
+                            sharex=True, gridspec_kw={'height_ratios': [4, 1]})
+    fig.subplots_adjust(hspace=0.05)
+    ax = axs[0]
+    ax_r = axs[1]
+
+    total_mc_list = []
+    mc_stat_err_list = []
+    for i, (evtdf, vardf) in enumerate(zip(evtdfs, vardfs)):
+        # scale_mc = evtdf.pot_weight.unique()[0]
+        total_mc, _ = np.histogram(vardf, bins=bins)
+        total_mc_err2, _ = np.histogram(vardf, bins=bins)
+        mc_stat_err = np.sqrt(total_mc_err2)
+        total_mc_list.append(total_mc)
+        mc_stat_err_list.append(mc_stat_err)
+
+        ax.hist(vardf, bins=bins, histtype="step", 
+                 color=colors[i], label=labels[i])
+
+    # ax.set_xlabel(plot_labels[0])
+    ax.set_ylabel(plot_labels[1])
+    ax.set_title(plot_labels[2])
+    ax.set_xlim(bins[0], bins[-1])
+    ax.legend()
+
+    # ratio plot -- divide by the first df (CV)
+
+    for i, (evtdf, vardf) in enumerate(zip(evtdfs, vardfs)):
+        if i == 0:
+            continue
+        # Avoid division by zero: ignore bins where denominator is 0
+        ratio = np.full_like(total_mc_list[0], np.nan, dtype=float)
+        nonzero_mask = total_mc_list[0] != 0
+        ratio[nonzero_mask] = total_mc_list[i][nonzero_mask] / total_mc_list[0][nonzero_mask]
+        # this_err = np.sqrt(
+        #     (mc_stat_err_list[0] / total_mc_list[0])**2 + 
+        #     (mc_stat_err_list[i] / total_mc_list[i])**2
+        # )
+        # Only plot nonzero, non-nan elements in the ratio
+        valid_mask = (~np.isnan(ratio)) & (ratio != 0)
+        ax_r.hist(bin_centers[valid_mask], bins=bins, weights=ratio[valid_mask], linewidth=1, histtype="step")
+
+    ax_r.axhline(1.0, color='red', linestyle='--', linewidth=1)
+    
+    ax_r.grid(True)
+    ax_r.minorticks_on()
+    ax_r.grid(which='minor', linestyle=':', linewidth=0.5, color='gray', alpha=0.5)
+
+    ax_r.set_xlabel(plot_labels[0])
+    ax_r.set_ylabel("Variation / CV")
+    ax_r.set_xlim(bins[0], bins[-1])
+    ax_r.set_ylim(0.9, 1.1)
+
+    if vline is not None:
+        for v in vline:
+            ax.axvline(x=v, color='red', linestyle='--')
+            ax_r.axvline(x=v, color='red', linestyle='--')
+
+    # --- approval textbox
+    # decide if the distribution is tilted to the right or left
+    n_firsthalf = np.sum(total_mc[:len(bins)//2])
+    n_secondhalf = np.sum(total_mc[len(bins)//2:])
+    if n_firsthalf > n_secondhalf:
+        textloc_x = 0.95
+        textloc_ha = 'right'
+    else:
+        textloc_x = 0.05
+        textloc_ha = 'left'
+
+    if approval == "internal":
+        ax.text(textloc_x, 0.65, "SBND Internal", transform=ax.transAxes, 
+                fontsize=14, color='rosybrown',
+                ha=textloc_ha, va='top')
+
+    elif approval == "preliminary":
+        ax.text(textloc_x, 0.65, "SBND Preliminary", transform=ax.transAxes, 
+                fontsize=14, color='gray',
+                ha=textloc_ha, va='top')
+
+    if save_fig:
+        plt.savefig(save_name, bbox_inches='tight', dpi=300)
+    plt.show()
+
+    return total_mc_list
