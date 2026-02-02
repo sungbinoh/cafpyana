@@ -9,6 +9,8 @@ from multiprocess import Pool
 from functools import partial
 import syst
 
+import gump_cuts as gc
+
 # Dataframe names
 EVT = "mcnu_%i"
 WGT = "histpotdf_%i"
@@ -115,6 +117,10 @@ xsec_syst = [
     'GENIEReWeight_SBN_v1_multisigma_EtaNCEL',
 ]
 
+xsec_cv_rwgt = [
+    "ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b1", 
+]
+
 flux_syst = [
  'expskin_Flux',
  'horncurrent_Flux',
@@ -141,8 +147,16 @@ truthvars = {
   "true_vtx_z": ("pos_z", ""),
 }
 
+def scale_pot(df, pot, desired_pot):
+    """Scale DataFrame by desired POT."""
+    print(f"POT: {pot}\nScaling to: {desired_pot}")
+    scale = desired_pot / pot
+    df['glob_scale'] = scale * df.cvwgt
+    return pot, scale
+
 def load_one(fname, idf, 
     include_syst=True, nuniv=100, spline=False, xsec_univ=False, # systematic handling
+    reweight_aFF=False,
     load_truth=True, load_crt=False, match_Enu=True, # load extra information
     offbeampot_SBND=False, offbeampot_ICARUS=False, # POT handling
     preselection=None, # apply preselection cut
@@ -155,14 +169,25 @@ def load_one(fname, idf,
     hdr = pd.read_hdf(fname, hdrname % idf)
 
     match = hdr[["run", "evt"]]
+    match_ind = list(match.columns)
     # if needed, include neutrino energy in matching information
     if match_Enu:
         mcdf = pd.read_hdf(fname, mcname % idf)
         match = match.merge(mcdf.nu_E.groupby(level=[0,1]).max().rename("nu_E0"), on=["__ntuple", "entry"], how="left")
+        match_ind = list(match.columns)
+
+        # Add in other meta-data to match.
+        vtx = pd.DataFrame({
+          "x": mcdf.pos_x,
+          "y": mcdf.pos_y,
+          "z": mcdf.pos_z,
+        })
+        any_in_AV = gc._fv_cut(vtx, "ICARUS", 0, 0, 0, 0).groupby(level=[0,1]).any().rename("AVnu")
+        match = match.merge(any_in_AV, on=["__ntuple", "entry"], how="left")
 
     df = df.merge(match, on=["__ntuple", "entry"], how="left")
 
-    match = match.set_index(list(match.columns), append=True).droplevel([0,1]).sort_index()
+    match = match.set_index(match_ind, append=True).droplevel([0,1]).sort_index()
 
     # LOAD POT
     if offbeampot_SBND:
@@ -192,6 +217,17 @@ def load_one(fname, idf,
         crthit = ((crt.time > -1) & (crt.time < 1.8) & (crt.plane != 50)).groupby(level=[0, 1]).any()
         crthit.name = "crthit"
         df = df.join(crthit, on=["__ntuple", "entry"])
+
+    # LOAD AXIAL FORM FACTOR REWEIGHT
+    if reweight_aFF:
+        rewgt = pd.read_hdf(fname, wgtname % idf)[xsec_cv_rwgt]
+        rewgt["cvwgt"] = 1.
+        for w in xsec_cv_rwgt:
+            rewgt["cvwgt"] = rewgt.cvwgt * rewgt[w]["cv"]
+        df = df.merge(rewgt.cvwgt.rename("cvwgt"), left_on=["__ntuple", "entry", "tmatch_idx"], right_index=True, how="left")
+        df.cvwgt = df.cvwgt.fillna(1.)
+    else:
+        df["cvwgt"] = 1.
 
     # EARLY RETURN IF NOT LOADING WEIGHTS
     if not include_syst:
@@ -288,6 +324,7 @@ def loadl(flist, progress=True, njob=None, **kwargs):
         dfs.append(df)
         matches.append(match)
     df = pd.concat(dfs).reset_index(drop=True)
+    matches = pd.concat(matches)
 
     if njob is not None:
         pool.close()
