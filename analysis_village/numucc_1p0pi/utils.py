@@ -28,10 +28,10 @@ DETECTOR = "SBND_nohighyz"
 eps = 1e-6
 
 
-import pickle
-with open("/exp/sbnd/app/users/munjung/xsec/cafpyana/analysis_village/numucc1p0pi/NuINT_uncs/tot_uncert_dict.pkl", "rb") as f:
-    syst_uncert_dict = pickle.load(f)
-syst_uncert_dict.keys()
+# import pickle
+# with open("/exp/sbnd/app/users/munjung/xsec/cafpyana/analysis_village/numucc1p0pi/NuINT_uncs/tot_uncert_dict.pkl", "rb") as f:
+#     syst_uncert_dict = pickle.load(f)
+# syst_uncert_dict.keys()
 
 
 # KE <-> p conversion for providing the sig threshold in terms of KE in technote
@@ -445,10 +445,10 @@ genie_colors = ["gray", "sienna", "crimson", "darkgreen",
 
 
 # TODO: combine with "plot_topology_breakdown" and "plot_genie_breakdown" functions below
-def hist_plot(type,
-              evtdf, vardf, 
-              vardf_data, var_intime,
-              bins,
+def hist_plot(breakdown_type="topology",
+              mc_df=None,
+              data_df=None,
+              intime_df=None,
               var_config="",
               plot_labels=["", "", ""],
               ax_ylim_ratio=1.5,
@@ -456,199 +456,184 @@ def hist_plot(type,
               syst = False,
               vline = None,
               approval="internal",
-              save_fig=False, save_name=None): 
+              save_fig=False, 
+              save_name=None): 
 
-    assert len(evtdf) == len(vardf)
-    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+    # ==== prepare dfs for plotting ====
 
-    tot_mc_count = len(evtdf)
-    tot_data_count = len(vardf_data)
+    # MC
+    if mc_df is not None:
+        vardf, _        = get_clipped_evts(mc_df, var_config.var_evt_reco_col, var_config.bins)
+        # TODO: get from column?
+        scale_mc = mc_df.pot_weight.unique()[0]
 
-    if type == "nu_cosmics":
-        labels = nu_cosmics_labels
-        colors = nu_cosmics_colors
+        # breakdown MC events into truth categories
+        if breakdown_type == "topology":
+            labels = topology_labels
+            colors = topology_colors
+            cuts = get_int_category(mc_df, ret_cuts=True)
 
-        cut_cosmic = IsCosmic(evtdf)
-        cut_nu_outfv = IsNuOutFV(evtdf)
-        cut_nu_infv = IsNuInFV(evtdf)
-        cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv]
+        elif breakdown_type == "genie":
+            labels = genie_labels
+            colors = genie_colors
+            cuts = get_genie_category(mc_df, ret_cuts=True)
 
-    elif type == "topology":
-        labels = topology_labels
-        colors = topology_colors
+        else:
+            raise ValueError("Invalid breakdown_type: %s, please choose between [topology, or genie]" % breakdown_type)
+        var_categ = [vardf[i] for i in cuts]
+        weights_categ = [scale_mc*np.ones_like(vardf[i]) for i in cuts] 
 
-        cut_cosmic = IsCosmic(evtdf)
-        cut_nu_outfv = IsNuOutFV(evtdf)
-        cut_nu_infv_nu_other = IsNuInFV_NuOther(evtdf)
-        cut_nu_infv_numu_nc = IsNuInFV_NumuNC(evtdf)
-        cut_nu_infv_numu_cc_other = IsNuInFV_NumuCC_Other(evtdf)
-        cut_nu_infv_numu_cc_np0pi = IsNuInFV_NumuCC_Np0pi(evtdf)
-        cut_nu_infv_numu_cc_1p0pi = IsNuInFV_NumuCC_1p0pi(evtdf)
-        cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
-                cut_nu_infv_numu_cc_other, cut_nu_infv_numu_cc_np0pi, cut_nu_infv_numu_cc_1p0pi]
+        # MC stat err
+        each_mc_hist_data = []
+        each_mc_hist_err2 = []  # sum of squared weights for error
 
-    elif type == "genie":
-        labels = genie_labels
-        colors = genie_colors
+        for v, w in zip(var_categ, weights_categ):
+            hist_vals, _ = np.histogram(v, weights=w, bins=var_config.bins)
+            hist_err2, _ = np.histogram(v, weights=np.square(w), bins=var_config.bins)
+            each_mc_hist_data.append(hist_vals)
+            each_mc_hist_err2.append(hist_err2)
 
-        cut_cosmic = IsCosmic(evtdf)
-        cut_nu_outfv = IsNuOutFV(evtdf)
-        cut_nu_infv_nu_other = IsNuInFV_NuOther(evtdf)
-        cut_nu_infv_numu_nc = IsNuInFV_NumuNC(evtdf)
-        # cut_nu_infv_numu_coh = IsNuInFV_NumuCC_COH(evtdf)
-        cut_nu_infv_numu_othermode = IsNuInFV_NumuCC_OtherMode(evtdf)
-        cut_nu_infv_numu_cc_dis = IsNuInFV_NumuCC_DIS(evtdf)
-        cut_nu_infv_numu_cc_res = IsNuInFV_NumuCC_RES(evtdf)
-        cut_nu_infv_numu_cc_me = IsNuInFV_NumuCC_MEC(evtdf)
-        cut_nu_infv_numu_cc_qe = IsNuInFV_NumuCC_QE(evtdf)
-        cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
-                cut_nu_infv_numu_othermode, cut_nu_infv_numu_cc_dis, cut_nu_infv_numu_cc_res, 
-                cut_nu_infv_numu_cc_me, cut_nu_infv_numu_cc_qe]
-        
+        total_mc = np.sum(each_mc_hist_data, axis=0)
+        total_mc_err2 = np.sum(each_mc_hist_err2, axis=0)
+        mc_stat_err = np.sqrt(total_mc_err2)
 
     else:
-        raise ValueError("Invalid type: %s, please choose between [nu_cosmics, topolgy, or genie]" % type)
+        vardf = None
+        var_categ = None
+        total_mc = None
+        print("No MC data provided")
 
-    # ratio = False
+    # Data
+    if data_df is not None:
+        vardf_data, _   = get_clipped_evts(data_df, var_config.var_evt_reco_col, var_config.bins)
+        total_data, _ = np.histogram(vardf_data, bins=var_config.bins)
+        data_err = np.sqrt(total_data)
+    else:
+        vardf_data = None
+        total_data = None
+        print("No data data provided")
 
-    # --- Plot template
+    # Intime cosmics
+    if intime_df is not None:
+        vardf_intime, _ = get_clipped_evts(intime_df, var_config.var_evt_reco_col, var_config.bins)
+        var_categ = [vardf_intime] + var_categ
+        # TODO: get the correct cosmic scale factor
+        scale_intime_to_lightdata = 0.008
+        scale_intime = scale_intime_to_lightdata
+        weights_categ = [scale_intime*np.ones_like(vardf_intime)] + weights_categ
+        colors = ["silver"] + colors
+        labels = ["In-time\nCosmic"] + labels
+
+    else:
+        vardf_intime = None
+        print("No intime cosmics provided")
+
+    # ========================================================
+
+    # ==== plot template ====
     if ratio:
         fig, axs = plt.subplots(2, 1, figsize=(8.5, 8.5), 
                                sharex=True, gridspec_kw={'height_ratios': [4, 1]})
+        ax, ax_r = axs[0], axs[1]
         fig.subplots_adjust(hspace=0.1)
-        ax = axs[0]
-        ax_r = axs[1]
 
-        # --- Data
-        total_data, bins = np.histogram(vardf_data, bins=bins)
-        data_err = np.sqrt(total_data)
-        ax.errorbar(bin_centers, total_data, yerr=data_err, 
-                    fmt='o', color='black', label='Data')  # error bars
+        ax_r.axhline(1.0, color='red', linestyle='--', linewidth=1)
+
+        ax_r.set_ylim(0.4, 1.6)
+
+        ax_r.set_xlabel(plot_labels[0])
+        ax_r.set_ylabel("Data/MC")
+
+        ax_r.grid(True)
+        ax_r.grid(which='minor', linestyle=':', linewidth=0.5, color='gray', alpha=0.5)
+        ax_r.minorticks_on()
+
 
     else:
         fig, ax = plt.subplots(figsize=(8.5, 7))
 
-    # --- MC
-    # collect all MC + intime
-    var_categ = [var_intime] + [vardf[i] for i in cuts]
-    scale_mc = evtdf.pot_weight.unique()[0]
-    # TODO:
-    scale_intime_to_lightdata = 0.008
-    scale_intime = scale_intime_to_lightdata
-    weights_categ = [scale_intime*np.ones_like(var_intime)] + [scale_mc*np.ones_like(vardf[i]) for i in cuts] 
-    colors = ["silver"] + colors
-    labels = ["In-time\nCosmic"] + labels
-
-    mc_stack, _, _ = ax.hist(var_categ,
-                                bins=bins,
-                                weights=weights_categ,
-                                stacked=True,
-                                color=colors,
-                                label=labels,
-                                edgecolor='none',
-                                linewidth=0,
-                                density=False,
-                                histtype='stepfilled')
-
-
-    # ---- MC stat err
-    each_mc_hist_data = []
-    each_mc_hist_err2 = []  # sum of squared weights for error
-
-    for data, w in zip(var_categ, weights_categ):
-        hist_vals, _ = np.histogram(data, bins=bins, weights=w)
-        hist_err2, _ = np.histogram(data, bins=bins, weights=np.square(w))
-        each_mc_hist_data.append(hist_vals)
-        each_mc_hist_err2.append(hist_err2)
-
-    total_mc = np.sum(each_mc_hist_data, axis=0)
-    total_mc_err2 = np.sum(each_mc_hist_err2, axis=0)
-    mc_stat_err = np.sqrt(total_mc_err2)
-
-    if syst:
-        syst_err = syst_uncert_dict[var_config.var_save_name]
-
-        n_univ = []
-        for i in range(100):
-            weights = evtdf.mc.GENIE["univ_{}".format(i)]
-            weights = np.nan_to_num(weights, nan=1)
-            n, bins = np.histogram(vardf, bins=bins, weights=weights)
-            n_univ.append(n)
-        n_cv, _ = np.histogram(vardf, bins=bins)
-        genie_unc = np.std(n_univ, axis=0)
-        print("genie_unc",genie_unc)
-        print("n_cv",n_cv)
-        genie_unc_frac = genie_unc / n_cv
-        # bin_centers = 0.5 * (bins[:-1] + bins[1:])
-        # # plt.errorbar(bin_centers, n_cv, yerr=unc, fmt='o', color='black')
-
-        # print(genie_unc_frac)
-        # print(syst_err)
-        syst_err = np.sqrt(genie_unc_frac**2 + syst_err**2)
-
-        ax.bar(
-        bin_centers,
-            2 * syst_err * total_mc,
-            width=np.diff(bins),
-            bottom=total_mc - syst_err * total_mc,
-            facecolor='none',             # transparent fill
-            edgecolor='dimgray',            # outline color of the hatching
-            hatch='xxx',                 # hatch pattern similar to ROOT's 3004
-            linewidth=0.0,
-            label='Syst. Unc.'
-        )
-    else:
-        ax.bar(
-            bin_centers,
-            2 * mc_stat_err,
-            width=np.diff(bins),
-            bottom=total_mc - mc_stat_err,
-            facecolor='none',             # transparent fill
-            edgecolor='dimgray',            # outline color of the hatching
-            hatch='xxx',                 # hatch pattern similar to ROOT's 3004
-            linewidth=0.0,
-            label='MC Stat. Unc.'
-        )
-
-
-    ax.set_xlim(bins[0], bins[-1])
-    if ratio == False: # only plot xlabel if we're not plotting the ratio panel
         ax.set_xlabel(plot_labels[0])
+
+    # common formatting
+    ax.set_xlim(var_config.bins[0], var_config.bins[-1])
+
     ax.set_ylabel(plot_labels[1])
     ax.set_title(plot_labels[2])
 
+
+    # ==== Plot histograms ====
+
+    # MC
+    if var_categ is not None:
+        mc_stack, _, _ = ax.hist(var_categ,
+                                 weights=weights_categ,
+                                 bins=var_config.bins,
+                                 stacked=True,
+                                 color=colors,
+                                 label=labels,
+                                 linewidth=0,
+                                 edgecolor='none',
+                                 histtype='stepfilled')
+
+        breakdown_accum = [np.sum(this_mode) for this_mode in mc_stack]
+        breakdown_fractions = [breakdown_accum[0]] + [(breakdown_accum[i+1] - breakdown_accum[i]) for i in range(len(breakdown_accum) - 1)]
+        breakdown_fractions = [frac / breakdown_accum[-1] for frac in breakdown_fractions]
+
+    if syst:
+        syst_err = mc_stat_err
+        # TODO: other syst sources
+        # if 
+        # mc_stat_err_frac = 
+        # syst_err = np.sqrt(syst_err**2 + this_syst_err**2)
+
+        ax.bar(
+            var_config.bin_centers,
+            2 * syst_err,
+            width=np.diff(var_config.bins),
+            bottom=total_mc - syst_err,
+            facecolor='none',             # transparent fill
+            hatch='xxx',                 # hatch pattern similar to ROOT's 3004
+            linewidth=0.0,
+            edgecolor='dimgray',            # outline color of the hatching
+            label='MC Stat. Unc.'
+        )
+ 
+    else:
+        print("no syst provided")
+
+    # Data
+    if vardf_data is not None:
+        ax.errorbar(var_config.bin_centers, 
+                    total_data, 
+                    yerr=data_err,
+                    color='black', 
+                    fmt='o', markersize=5, capsize=3, linewidth=1.5,
+                    label='Data')
+
+
     if ratio:
-        # MC stat err
-        mc_stat_err_ratio = mc_stat_err / total_mc
-        mc_content_ratio = total_mc / total_mc
-        mc_stat_err_ratio = np.nan_to_num(mc_stat_err_ratio, nan=0.)
-        mc_content_ratio = np.nan_to_num(mc_content_ratio, nan=-999.)
+        # MC 
         if syst:
+            mc_content_ratio = total_mc / total_mc # dummy
+            # TODO: other syst sources
+            syst_err = mc_stat_err
+            mc_stat_err_ratio = mc_stat_err / total_mc
+            mc_stat_err_ratio = np.nan_to_num(mc_stat_err_ratio, nan=0.)
             ax_r.bar(
-               bin_centers,
-                2 * syst_err,
-                width=np.diff(bins),
-                bottom=mc_content_ratio - syst_err,
-                facecolor='none',             # transparent fill
-                edgecolor='dimgray',            # outline color of the hatching
-                hatch='xxx',                 # hatch pattern similar to ROOT's 3004
-                linewidth=0.0,
-                label='Syst. Unc.'
-            )
-        else:
-            ax_r.bar(
-                bin_centers,
+                var_config.bin_centers,
                 2*mc_stat_err_ratio,
-                width=np.diff(bins),
+                width=np.diff(var_config.bins),
                 bottom=mc_content_ratio - mc_stat_err_ratio,
-                facecolor='none',             # transparent fill
-                edgecolor='dimgray',          # outline color of the hatching
-                hatch='xxx',                 # hatch pattern similar to ROOT's 3004
+                facecolor='none',
+                edgecolor='dimgray',
+                hatch='xxx',
                 linewidth=0.0,
                 label='MC Stat. Unc.'
             )
+        else:
+            print("No syst provided")
 
-        # data/MC ratio err
+        # data/MC 
         data_eylow, data_eyhigh = return_data_stat_err(total_data)
 
         data_ratio = total_data / total_mc
@@ -658,137 +643,92 @@ def hist_plot(type,
         data_ratio_eylow = np.nan_to_num(data_ratio_eylow, nan=0.)
         data_ratio_eyhigh = np.nan_to_num(data_ratio_eyhigh, nan=0.)
         
-        #data_ratio_errors = data_ratio_eylow + data_ratio_eyhigh
-        #ax_ratio.errorbar(bin_centers, data_ratio, yerr=data_ratio_errors,
-        #                 fmt='o', color='black', label='Data',
-        #                 markersize=5, capsize=3, linewidth=1.5)
+        ax_r.errorbar(var_config.bin_centers, data_ratio, 
+                        yerr=np.vstack((data_ratio_eylow, data_ratio_eyhigh)),
+                        fmt='o', color='black',
+                        markersize=5, capsize=3, linewidth=1.5)
 
-        ax_r.errorbar(bin_centers, data_ratio,
-                  yerr=np.vstack((data_ratio_eylow, data_ratio_eyhigh)),
-                  fmt='o', color='black')
-                #   , label='Data')
-                #   markersize=5, capsize=3, linewidth=1.5)
-        
-        # if highest value is greater than 2.0, set ylim to 2.0
-        ax_r.axhline(1.0, color='red', linestyle='--', linewidth=1)
-        
-        ax_r.grid(True)
-        ax_r.minorticks_on()
-        ax_r.grid(which='minor', linestyle=':', linewidth=0.5, color='gray', alpha=0.5)
+    # ===============================
 
-        ax_r.set_xlabel(plot_labels[0])
-        ax_r.set_ylabel("Data/MC")
-
-        # if np.max(data_ratio + data_ratio_eyhigh) > 2.0:
-        ax_r.set_ylim(0.4, 1.6)
-
-    # --- Legend
-    accum_sum = [np.sum(data) for data in mc_stack]
-    # need to add the intime contribution
-    accum_sum = [0.] + accum_sum 
-    total_sum = accum_sum[-1]
-    individual_sums = [accum_sum[i + 1] - accum_sum[i] for i in range(len(accum_sum) - 1)]
-    fractions = [(count / total_sum) * 100 for count in individual_sums]
-    fractions[-1] = 92.1
-    mc_legend_labels = [f"{label} ({frac:.1f}%)"
-                        for label, frac in zip(labels[::-1], fractions[::-1])]
-
+    # ==== Legend ====
+    # legend order: data, mc, syst
     handles, labels_orig = ax.get_legend_handles_labels()
 
-    if ratio:
-        # Find the Data handle (usually from errorbar) and put it first
+    ordered_handles = []
+    ordered_labels = []
+
+    if data_df is not None:
         data_handle_index = labels_orig.index('Data')
         data_handle = handles[data_handle_index]
+        ordered_handles.extend([data_handle])
+        ordered_labels.extend(['Data'])
 
-        # Collect MC handles (exclude Data and uncertainties)
+    if mc_df is not None:
         mc_handles = [h for i, h in enumerate(handles) if i != data_handle_index and 'Unc.' not in labels_orig[i]]
-        mc_labels = [l for l in mc_legend_labels if l != 'Data' and 'Unc.' not in l]
+        mc_labels = [f"{label} ({frac*100:.1f}%)"
+                            for label, frac in zip(labels[::-1], breakdown_fractions[::-1])]
+        ordered_handles.extend(mc_handles)
+        ordered_labels.extend(mc_labels)
 
-        # Collect uncertainty handle
+    if syst:
         unc_handle = [h for i, h in enumerate(handles) if 'Unc.' in labels_orig[i]]
         unc_label = [l for l in labels_orig if 'Unc.' in l]
+        ordered_handles.extend(unc_handle)
+        ordered_labels.extend(unc_label)
 
-        # Reorder handles and labels: Data first, MC next, uncertainty last
-        ordered_handles = [data_handle] + mc_handles + unc_handle
-        ordered_labels = ['Data'] + mc_labels + unc_label
-
-    else:
-        # Collect MC handles (exclude Data and uncertainties)
-        mc_handles = [h for i, h in enumerate(handles) if 'Unc.' not in labels_orig[i]]
-        mc_labels = [l for l in mc_legend_labels if 'Unc.' not in l]
-
-        # Collect uncertainty handle
-        unc_handle = [h for i, h in enumerate(handles) if 'Unc.' in labels_orig[i]]
-        unc_label = [l for l in labels_orig if 'Unc.' in l]
-        ordered_handles = mc_handles + unc_handle
-        ordered_labels = mc_labels + unc_label
-
-    leg = ax.legend(
+    ax.legend(
         ordered_handles,
         ordered_labels,
         loc='upper left',
-        fontsize=11.5,
+        fontsize=12,
         frameon=False,
         ncol=3,
         bbox_to_anchor=(0.015, 0.985)
     )
 
-    leg_height = leg.get_bbox_to_anchor().height
-
+    # ==== set y-axis limit ====
     max_data_with_err = np.max(total_mc + mc_stat_err)
-    if ratio:
-        max_data_with_err = np.max(total_data + data_eyhigh)
-        # ax.set_ylim(0., 1.05 * max_data_with_err + leg_height)
     ax.set_ylim(0., ax_ylim_ratio* max_data_with_err)
 
+    # ==== option to plot vertical lines ====
     if vline is not None:
-        # Draw a vertical line from y=0 up to the max value of the histogram
         for v in vline:
             ymax = ax.get_ylim()[1]
             ax.vlines(x=v, ymin=0, ymax=ymax*0.75, color='red', linestyle='--')
 
-    # --- approval textbox
-    # decide if the distribution is tilted to the right or left
-    n_firsthalf = np.sum(total_mc[:len(bins)//2])
-    n_secondhalf = np.sum(total_mc[len(bins)//2:])
+    # ==== textbox to add approval rank and GENIE version ====
+    # decide text location based on the distribution
+    n_firsthalf = np.sum(total_mc[:len(var_config.bins)//2])
+    n_secondhalf = np.sum(total_mc[len(var_config.bins)//2:])
     if n_firsthalf > n_secondhalf:
-        textloc_x = 0.95
-        textloc_ha = 'right'
+        textloc_x, textloc_ha = 0.95, 'right'
     else:
-        textloc_x = 0.05
-        textloc_ha = 'left'
+        textloc_x, textloc_ha = 0.05, 'left'
 
+    # GEINE version
+    ax.text(textloc_x, 0.57, r"GENIE v3.4.0 AR23_00i_00_000", transform=ax.transAxes, 
+            fontsize=11.5, color='gray',
+            ha=textloc_ha, va='top')
+
+    # SBND approval rank
     if approval == "internal":
-        ax.text(textloc_x, 0.65, r"$\mathbf{SBND}$ Internal", transform=ax.transAxes, 
-                fontsize=20, color='rosybrown',
-                ha=textloc_ha, va='top')
-        ax.text(textloc_x, 0.57, r"GENIE v3.4.0 AR23_00i_00_000", transform=ax.transAxes, 
-                fontsize=11.5, color='gray',
-                ha=textloc_ha, va='top')
-
+        approval_text = r"$\mathbf{SBND}$ Internal"
     elif approval == "preliminary":
-        ax.text(textloc_x, 0.65, r"$\mathbf{SBND}$ Preliminary", transform=ax.transAxes, 
-                fontsize=20, color='gray',
-                ha=textloc_ha, va='top')
-        ax.text(textloc_x, 0.57, r"GENIE v3.4.0 AR23_00i_00_000", transform=ax.transAxes, 
-                fontsize=11.5, color='gray',
-                ha=textloc_ha, va='top')
+        approval_text = r"$\mathbf{SBND}$ Preliminary"
 
+    ax.text(textloc_x, 0.65, 
+            approval_text, 
+            transform=ax.transAxes, 
+            ha=textloc_ha, va='top',
+            fontsize=20, color='gray')
 
     if save_fig:
         plt.savefig(save_name+".pdf", bbox_inches='tight')
     plt.show()
 
-    # bolder figure lines?
-    # ax.tick_params(width=2, length=10)
-    # for spine in ax.spines.values():
-    #     spine.set_linewidth(2)
-    
-    if ratio:
-        ret_dict = {"cuts": cuts, "total_data": total_data}
-    else:
-        ret_dict = {"cuts": cuts}
-    return ret_dict
+    return {"cuts": cuts, 
+            "total_mc": total_mc, 
+            "total_data": total_data}
 
 
 
@@ -922,36 +862,37 @@ def hist_plot_genie_sb(type,
     mc_stat_err = np.sqrt(total_mc_err2)
 
     if syst:
-        syst_err = syst_uncert_dict[var_config.var_save_name]
+        print("No syst provided")
+        # syst_err = syst_uncert_dict[var_config.var_save_name]
 
-        vardf = np.clip(vardf, bins[0], bins[-1] - eps)
-        n_univ = []
-        for i in range(100):
-            weights = evtdf.mc.GENIE["univ_{}".format(i)]
-            weights = np.nan_to_num(weights, nan=1)
-            n, bins = np.histogram(vardf, bins=bins, weights=weights)
-            n_univ.append(n)
-        n_cv, _ = np.histogram(vardf, bins=bins)
-        genie_unc = np.std(n_univ, axis=0)
-        genie_unc_frac = genie_unc / n_cv
-        bin_centers = 0.5 * (bins[:-1] + bins[1:])
-        # plt.errorbar(bin_centers, n_cv, yerr=unc, fmt='o', color='black')
+        # vardf = np.clip(vardf, bins[0], bins[-1] - eps)
+        # n_univ = []
+        # for i in range(100):
+        #     weights = evtdf.mc.GENIE["univ_{}".format(i)]
+        #     weights = np.nan_to_num(weights, nan=1)
+        #     n, bins = np.histogram(vardf, bins=bins, weights=weights)
+        #     n_univ.append(n)
+        # n_cv, _ = np.histogram(vardf, bins=bins)
+        # genie_unc = np.std(n_univ, axis=0)
+        # genie_unc_frac = genie_unc / n_cv
+        # bin_centers = 0.5 * (bins[:-1] + bins[1:])
+        # # plt.errorbar(bin_centers, n_cv, yerr=unc, fmt='o', color='black')
 
-        print(genie_unc_frac)
-        print(syst_err)
-        syst_err = np.sqrt(genie_unc_frac**2 + syst_err**2)
+        # print(genie_unc_frac)
+        # print(syst_err)
+        # syst_err = np.sqrt(genie_unc_frac**2 + syst_err**2)
 
-        ax.bar(
-            bin_centers,
-            2 * syst_err * total_mc,
-            width=np.diff(bins),
-            bottom=total_mc - syst_err * total_mc,
-            facecolor='none',             # transparent fill
-            edgecolor='dimgray',            # outline color of the hatching
-            hatch='xxx',                 # hatch pattern similar to ROOT's 3004
-            linewidth=0.0,
-            label='Syst. Unc.'
-        )
+        # ax.bar(
+        #     bin_centers,
+        #     2 * syst_err * total_mc,
+        #     width=np.diff(bins),
+        #     bottom=total_mc - syst_err * total_mc,
+        #     facecolor='none',             # transparent fill
+        #     edgecolor='dimgray',            # outline color of the hatching
+        #     hatch='xxx',                 # hatch pattern similar to ROOT's 3004
+        #     linewidth=0.0,
+        #     label='Syst. Unc.'
+        # )
 
     else:
         ax.bar(
