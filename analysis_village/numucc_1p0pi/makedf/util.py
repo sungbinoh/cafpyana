@@ -1,29 +1,10 @@
 import pandas as pd
 import numpy as np
 from pyanalib.variable_calculator import *
-from makedf.constants import *
 from pyanalib.pandas_helpers import *
+from makedf.constants import *
+from makedf.util import *
 
-def match_trkdf_to_slcdf(trkdf, slcdf):
-    # trkdf: df to match
-    # slcdf: df to match to
-    nlevels = len(trkdf.index.names)
-    common_idx = trkdf.reset_index(level=[nlevels-1]).index.intersection(slcdf.index)
-    matched_trkdf = trkdf.reset_index(level=[nlevels-1]).loc[common_idx].reset_index().set_index(trkdf.index.names)
-    return matched_trkdf
-
-def avg_chi2(df, var_name):
-    planes = ['I0', 'I1', 'I2']
-    # planes = ['I2']
-    chi2_vals = []
-    for plane in planes:
-        chi2 = df['pfp']['trk']['chi2pid'][plane][var_name]
-        chi2_vals.append(chi2)
-    chi2_df = pd.concat(chi2_vals, axis=1)
-    # fill 0 with nan
-    chi2_df = chi2_df.replace(0, np.nan)
-    avg = chi2_df.mean(axis=1, skipna=True)
-    return avg
 
 def cut_clear_cosmic(df):
     return df[df.slc.is_clear_cosmic == 0]
