@@ -121,7 +121,7 @@ def Is1muNcpi(df): # definition
     return is_fv & is_1mu1p0pi
 
 
-def get_int_category(df):
+def get_int_category(df, ret_cuts=False):
     # cut_notnu = ~IsNu(df)
     # cut_nu_outfv = IsNu(df) & ~InFV(df.position, det="SBND_nohighyz")
     # cut_signal = IsSignal(df)
@@ -150,10 +150,15 @@ def get_int_category(df):
     nuint_categ[cut_nu_infv_numu_nc] = 4  # nu in FV, numu NC
     nuint_categ[cut_nu_infv_nu_other] = 5  # nu in FV, other
 
+    if ret_cuts:
+        cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
+                cut_nu_infv_numu_cc_other, cut_nu_infv_numu_cc_np0pi, cut_nu_infv_numu_cc_1p0pi]
+        return cuts
+
     return nuint_categ
 
 
-def get_genie_category(df):
+def get_genie_category(df, ret_cuts=False):
     cut_cosmic = IsCosmic(df)
     cut_nu_outfv = IsNuOutFV(df)
     cut_nu_infv_nu_other = IsNuInFV_NuOther(df)
@@ -179,8 +184,47 @@ def get_genie_category(df):
     genie_categ[cut_nu_infv_numu_nc] = 6  # nu in FV, numu NC
     genie_categ[cut_nu_infv_nu_other] = 7  # nu in FV, other
 
+    if ret_cuts:
+        cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
+                cut_nu_infv_numu_othermode, cut_nu_infv_numu_cc_dis, cut_nu_infv_numu_cc_res, 
+                cut_nu_infv_numu_cc_me, cut_nu_infv_numu_cc_qe]
+        return cuts
+
     return genie_categ
 
+def get_genie_sb_category(df, ret_cuts=False):
+    cut_cosmic = IsCosmic(df)
+    cut_nu_outfv = IsNuOutFV(df)
+    cut_nu_infv_nu_other = IsNuInFV_NuOther(df)
+    cut_nu_infv_numu_nc = IsNuInFV_NumuNC(df)
+    # cut_nu_infv_numu_coh = IsNuInFV_NumuCC_COH(df)
+    # break down numu modes into signal and background
+    cut_nu_infv_numu_othermode_s = IsNuInFV_NumuCC_OtherMode(df) & IsNuInFV_NumuCC_1p0pi(df)
+    cut_nu_infv_numu_othermode_b = IsNuInFV_NumuCC_OtherMode(df) & ~IsNuInFV_NumuCC_1p0pi(df)
+    cut_nu_infv_numu_cc_dis_s = IsNuInFV_NumuCC_DIS(df) & IsNuInFV_NumuCC_1p0pi(df)
+    cut_nu_infv_numu_cc_dis_b = IsNuInFV_NumuCC_DIS(df) & ~IsNuInFV_NumuCC_1p0pi(df)
+    cut_nu_infv_numu_cc_res_s = IsNuInFV_NumuCC_RES(df) & IsNuInFV_NumuCC_1p0pi(df)
+    cut_nu_infv_numu_cc_res_b = IsNuInFV_NumuCC_RES(df) & ~IsNuInFV_NumuCC_1p0pi(df)
+    cut_nu_infv_numu_cc_mec_s = IsNuInFV_NumuCC_MEC(df) & IsNuInFV_NumuCC_1p0pi(df)
+    cut_nu_infv_numu_cc_mec_b = IsNuInFV_NumuCC_MEC(df) & ~IsNuInFV_NumuCC_1p0pi(df)
+    cut_nu_infv_numu_cc_qe_s = IsNuInFV_NumuCC_QE(df) & IsNuInFV_NumuCC_1p0pi(df)
+    cut_nu_infv_numu_cc_qe_b = IsNuInFV_NumuCC_QE(df) & ~IsNuInFV_NumuCC_1p0pi(df)
+
+    assert (cut_cosmic & cut_nu_outfv & cut_nu_infv_nu_other & cut_nu_infv_numu_nc & cut_nu_infv_numu_othermode_s & cut_nu_infv_numu_othermode_b & cut_nu_infv_numu_cc_dis_s & cut_nu_infv_numu_cc_dis_b & cut_nu_infv_numu_cc_res_s & cut_nu_infv_numu_cc_res_b & cut_nu_infv_numu_cc_mec_s & cut_nu_infv_numu_cc_mec_b & cut_nu_infv_numu_cc_qe_s & cut_nu_infv_numu_cc_qe_b).sum() == 0
+    assert (cut_cosmic | cut_nu_outfv | cut_nu_infv_nu_other | cut_nu_infv_numu_nc | cut_nu_infv_numu_othermode_s | cut_nu_infv_numu_othermode_b | cut_nu_infv_numu_cc_dis_s | cut_nu_infv_numu_cc_dis_b | cut_nu_infv_numu_cc_res_s | cut_nu_infv_numu_cc_res_b | cut_nu_infv_numu_cc_mec_s | cut_nu_infv_numu_cc_mec_b | cut_nu_infv_numu_cc_qe_s | cut_nu_infv_numu_cc_qe_b).sum() == len(df)
+
+    cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
+            cut_nu_infv_numu_othermode_b, cut_nu_infv_numu_othermode_s,
+            cut_nu_infv_numu_cc_dis_b, cut_nu_infv_numu_cc_dis_s,
+            cut_nu_infv_numu_cc_res_b, cut_nu_infv_numu_cc_res_s,
+            cut_nu_infv_numu_cc_mec_b, cut_nu_infv_numu_cc_mec_s,
+            cut_nu_infv_numu_cc_qe_b, cut_nu_infv_numu_cc_qe_s]
+
+    if ret_cuts:
+        return cuts
+
+    # TODO: return category series
+    return cuts
 
 
 # --- for plotting ---
@@ -190,22 +234,61 @@ nu_cosmics_colors = ["gray", "C0", "C1"]
 
 # signal / backgroundtopology breakdown
 # the signal mode code MUST be the first item in the list for all the code below to work
-topology_list = [1, 2, 3, 4, 5, 0, -1]
-# mode_labels = [ r"FV other $\nu$", r"FV $\nu_{\mu}$ NC",
-#                 r"FV $\nu_{\mu}$ CC Other", r"FV $\nu_{\mu}$ CC Np0$\pi$", r"FV $\nu_{\mu}$ CC 1p0$\pi$",
-#                 r"Out-FV $\nu$", "Cosmic"]
-# mode_colors = ["crimson", "darkgreen", 
-#                 "coral", "darkslateblue", "mediumslateblue", "sienna", "gray"]
-topology_labels = [r"FV $\nu_{\mu}$ CC 1p0$\pi$", r"FV $\nu_{\mu}$ CC Np0$\pi$", r"FV $\nu_{\mu}$ CC Other", r"FV $\nu$ NC", r"FV other $\nu$", r"Out-FV $\nu$", "Cosmic"]
-topology_colors = ["mediumslateblue", "darkslateblue", "coral", "darkgreen", "crimson", "sienna", "gray"] 
+topology_list = [1, # signal
+                 2, 3, 4, 5, 
+                 0,
+                 -1 # cosmic
+                 ]
+topology_labels = [r"FV $\nu_{\mu}$ CC 1p0$\pi$", 
+                    r"FV $\nu_{\mu}$ CC Np0$\pi$", r"FV $\nu_{\mu}$ CC Other", r"FV $\nu$ NC", r"FV other $\nu$", 
+                    r"Out-FV $\nu$", 
+                    "Cosmic"]
+topology_colors = ["mediumslateblue", 
+                    "darkslateblue", "coral", 
+                    "darkgreen", 
+                    "crimson", 
+                    "sienna", 
+                    "gray"] 
 
 
 # --- GENIE interaction mode breakdown ---
-genie_mode_list = [1, 2, 3, 4, 5, 6, 7, 0, -1]
-genie_mode_labels = [r'$\nu_{\mu}$ CC QE', r'$\nu_{\mu}$ CC MEC', r'$\nu_{\mu}$ CC RES', r'$\nu_{\mu}$ CC SIS/DIS', r'$\nu_{\mu}$ CC COH', 
-                     r"$\nu$ NC", r"FV other $\nu$", r"Out-FV $\nu$", "Cosmic"]
+genie_mode_list = [1, # CCQE
+                   2, 3, 4, 5, 6, 7, 
+                   0,
+                   -1   # cosmic
+                   ]
+genie_mode_labels = [r'$\nu_{\mu}$ CC QE', r'$\nu_{\mu}$ CC MEC', r'$\nu_{\mu}$ CC RES', r'$\nu_{\mu}$ CC SIS/DIS', r'$\nu_{\mu}$ CC Other', 
+                     r"$\nu$ NC", 
+                     r"FV other $\nu$", 
+                     r"Out-FV $\nu$", 
+                     "Cosmic"]
 genie_mode_colors = ["#9b5580", "#390C1E", "#2c7c94", "#D88A3B", "#BFB17C", 
-                     "darkgreen", "crimson", "sienna","gray"] 
+                     "darkgreen", 
+                     "crimson", 
+                     "sienna",
+                     "gray"] 
+
+# --- GENIE SB interaction mode breakdown ---
+genie_sb_mode_labels = [r'$\nu_{\mu}$ CC QE', r'$\nu_{\mu}$ CC QE',
+                     r'$\nu_{\mu}$ CC MEC', r'$\nu_{\mu}$ CC MEC', 
+                     r'$\nu_{\mu}$ CC RES', r'$\nu_{\mu}$ CC RES', 
+                     r'$\nu_{\mu}$ CC SIS/DIS', r'$\nu_{\mu}$ CC SIS/DIS',
+                     r'$\nu_{\mu}$ CC Other', r'$\nu_{\mu}$ CC Other',
+                     r"$\nu$ NC", 
+                     r"FV other $\nu$", 
+                     r"Out-FV $\nu$", 
+                     "Cosmic"]
+
+genie_sb_mode_colors = ["#9b5580", "#9b5580",
+                        "#390C1E", "#390C1E",
+                        "#2c7c94", "#2c7c94",
+                        "#D88A3B", "#D88A3B",
+                        "#BFB17C", "#BFB17C",
+                        "darkgreen", 
+                        "crimson", 
+                        "sienna",
+                        "gray"] 
+
 
 # --- GiBUU interaction mode breakdown ---
 gibuu_mode_labels = [r'$\nu_{\mu}$ CC QE', r'$\nu_{\mu}$ CC QE (2p2h)', r'$\nu_{\mu}$ CC RES', r'$\nu_{\mu}$ CC DIS', r'$\nu_{\mu}$ CC Other', 
