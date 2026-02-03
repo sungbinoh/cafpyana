@@ -1,4 +1,5 @@
 import numpy as np
+import inspect
 
 # ===== References
 # MicroBooNE tki bins: https://arxiv.org/abs/2301.03700
@@ -186,3 +187,45 @@ class VariableConfig:
             var_nu_col=('mc', 'del_phi', ''),
             xsec_label=r"$\frac{d\sigma}{d\delta \phi_T}$ ($\mathrm{cm}^2$ / deg)"
         )
+
+
+    @classmethod
+    def opening_angle(cls):
+        return cls(
+            var_save_name="opening_angle",
+            var_plot_name="$\\theta_{\\mu, p}$",
+            var_labels=[r"$\mathrm{\theta_{\\mu, p}}$ (deg)", 
+            r"$\mathrm{\theta_{\\mu, p}^{reco.}}$ (deg)", 
+            r"$\mathrm{\theta_{\\mu, p}^{true}}$ (deg)"],
+            bins=np.linspace(0., np.pi, 21),
+            var_evt_reco_col=('theta_mu_p', '', '', '', '', '', ''),
+            var_evt_truth_col=('mc_theta_mu_p', '', '', '', '', '', ''),
+            var_nu_col=('mc', 'theta_mu_p', ''),
+            xsec_label=r"$\frac{d\sigma}{d\theta_{\\mu p}}$ ($\mathrm{cm}^2$ / deg)"
+        )
+
+    @classmethod
+    def list_all_configs(cls, print_summary=True):
+        members = inspect.getmembers(cls, predicate=inspect.isroutine)
+        config_methods = [name for name, func in members
+                          if getattr(func, "__self__", None) == cls
+                          and not name.startswith("_")
+                          and name not in ("list_all_configs")]
+        print("Available VariableConfig options:")
+        for name in config_methods:
+            config = getattr(cls, name)()
+            if print_summary:
+                print(f"  {name:20}")
+                print(f"    var_save_name   : {config.var_save_name}")
+                print(f"    var_plot_name   : {config.var_plot_name}")
+                print(f"    var_labels      : {config.var_labels}")
+                print(f"    bins            : {np.array2string(config.bins, separator=', ')}")
+                print(f"    bin_centers     : {np.array2string(config.bin_centers, separator=', ')}")
+                print(f"    var_evt_reco_col: {config.var_evt_reco_col}")
+                print(f"    var_evt_truth_col: {config.var_evt_truth_col}")
+                print(f"    var_nu_col      : {config.var_nu_col}")
+                print(f"    xsec_label      : {config.xsec_label}")
+                print()
+            else:
+                print(f"  {name:20}")
+        return config_methods
