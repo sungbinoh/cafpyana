@@ -16,5 +16,3 @@ DFS = [
     getattr(import_module('analysis_village.numuincl.makedf1muX'), 'make_custom_trkdf'),
 ]
 NAMES = ['hdr', 'mcnu', 'evt_pand', 'trk']
-if hasattr(_base, 'PREPROCESS'):
-    PREPROCESS = _base.PREPROCESS

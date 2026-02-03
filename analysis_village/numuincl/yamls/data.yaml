@@ -1,6 +1,6 @@
 input_dir: /exp/sbnd/data/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/pandora/data/v4
-#output_dir: /exp/sbnd/data/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/pandora/data/v4
-output_dir: /pnfs/sbnd/persistent/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/pandora/data/v4
+output_dir: /exp/sbnd/data/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/pandora/data/v5
+#output_dir: /pnfs/sbnd/persistent/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/pandora/data/v4
 
 jobs:
   - name: dataonbeam_nocuts
@@ -14,7 +14,7 @@ jobs:
       - analysis_village.numuincl.makedf1muX.make_custom_trkdf
     names: [hdr, mcnu, evt_pand, trk]
     input_list: dataonbeam.list
-    output: dataonbeam_nocuts
+    output: dataonbeam_nocuts3
     settings:
       INCLUDE_WEIGHTS: false
       SLIM: false
@@ -23,4 +23,4 @@ jobs:
     args:
       ngrid: 0
       ncpu: -1
-      #nfile: 1
+      #nfile: -1

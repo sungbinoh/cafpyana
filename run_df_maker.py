@@ -296,7 +296,7 @@ if __name__ == "__main__":
         if args.inputfilelist != "":
             lines = open(args.inputfilelist)
             for line in lines:
-                if "#" in line:
+                if line.strip().startswith("#"):
                     continue
                 line = line.strip('\n')
                 InputSamples.append(line)

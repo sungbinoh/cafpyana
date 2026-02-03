@@ -150,11 +150,13 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
         calo_params_recomb = SBND_CALO_PARAMS.copy()
         hdrdf = make_hdrdf(f)
         ismc = hdrdf.ismc.iloc[0]
+        idx = 0 if ismc else 1
         # Map uncertainty dict keys to actual SBND_CALO_PARAMS keys
         unc_dict = {
             "alpha_emb": 0.008,
             "beta_90": 0.008,  # Fixed: was "beta_emb"
-            "R_emb": 0.02  # Fixed: was "R_90"
+            "R_emb": 0.02,  # Fixed: was "R_90"
+            "c_cal_frac": 0.02, #Assign 2% uncertainty on c_cal_frac
         }
         sign_tag = {-1: "m", 0: "0", 1: "p"}  # Define sign_tag mapping
         recomb_keys = list(unc_dict.keys())
@@ -165,19 +167,26 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
                 hit_keys3 = hitdf.index.droplevel(-1)  # -1 since hitdf has an additional index
                 mask_match = hit_keys3.isin(trk_keys)
                 hitdf = hitdf[mask_match]
-                this_etau = calo_params_recomb["etau"][1]
-                if ismc:
-                    this_etau = calo_params_recomb["etau"][0]
+                this_etau = calo_params_recomb["etau"][idx]
 
                 for sig in [-1, 0, 1]:
+                    #Only keep alpha_emb00, no other null variations
+                    if sig == 0 and recomb_key != "alpha_emb":
+                        continue
                     # Select MC (idx=0) or data (idx=1) value, then add uncertainty
-                    idx = 0 if ismc else 1
-                    base_value = calo_params[recomb_key][idx]
-                    perturbed_value = base_value + sig * unc_dict[recomb_key]
-                    
+                    if recomb_key == "c_cal_frac":
+                        base_value = calo_params[recomb_key][plane]
+                        perturbed_value = base_value + sig * unc_dict[recomb_key]
+                    else:
+                        base_value = calo_params[recomb_key][idx]
+                        perturbed_value = base_value + sig * unc_dict[recomb_key]
+
                     # Update the parameter list (keep both MC and data, but use perturbed value for current idx)
                     calo_params_recomb[recomb_key] = calo_params[recomb_key].copy()
-                    calo_params_recomb[recomb_key][idx] = perturbed_value
+                    if recomb_key == "c_cal_frac":
+                        calo_params_recomb[recomb_key][plane] = perturbed_value
+                    else:
+                        calo_params_recomb[recomb_key][idx] = perturbed_value
                     
                     recomb_tag = "_{}{}{}".format(recomb_key, sign_tag[sig], np.abs(sig))
 

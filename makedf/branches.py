@@ -53,20 +53,20 @@ bnbpotbranches = [
 ]
 
 trueparticlenames = [
-    "start_process",
-    "end_process",
+    #"start_process",
+    #"end_process",
     "pdg",
-    "startE",
+    #"startE",
     "start.x", "start.y", "start.z",
     "end.x", "end.y", "end.z",
     "genp.x", "genp.y", "genp.z",
     "length",
-    "G4ID",
-    "parent",
+    #"G4ID",
+    #"parent",
     "cont_tpc",
     "contained",
     "genE",
-    "interaction_id"
+    #"interaction_id"
 ]
 
 trueparticlebranches = ["rec.true_particles.%s" % s for s in trueparticlenames]
@@ -105,17 +105,17 @@ pfpbranches = [
     pfpbranch + "parent_is_primary",
     pfpbranch + "slcID",
     pfpbranch + "trackScore",
-    pfpbranch + "parent",
+    #pfpbranch + "parent",
     pfpbranch + "id",
-    pfpbranch + "t0",
-] + pfobranches
+    #pfpbranch + "t0",
+]# + pfobranches
 
 pfp_daughter_branch = [
     pfpbranch + "daughters"
 ]
 
 trkbranches = [
-    trkbranch + "producer",
+    #trkbranch + "producer",
     trkbranch + "start.x", trkbranch + "start.y", trkbranch + "start.z",
     trkbranch + "end.x", trkbranch + "end.y", trkbranch + "end.z",
     trkbranch + "dir.x", trkbranch + "dir.y", trkbranch + "dir.z",
@@ -193,6 +193,7 @@ slcbranches = [
     "rec.slc.nu_score",
     "rec.slc.barycenterFM.flashTime",  
     "rec.slc.barycenterFM.score",  
+    "rec.slc.barycenterFM.flashPEs",
     "rec.slc.opt0.score",
     "rec.slc.opt0.time",
     "rec.slc.reco.npfp",

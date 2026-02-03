@@ -6,7 +6,7 @@ maker.INCLUDE_WEIGHTS = True
 maker.SLIM = False
 maker.set_update_recomb(False)
 maker.VERBOSE = False
-maker.ADD_STAT_UNC = True
+maker.ADD_STAT_UNC = False
 maker.apply_setting_dependencies()
 
 _base = import_module('analysis_village.numuincl.configs.base')

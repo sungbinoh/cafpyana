@@ -15,6 +15,8 @@ import sys
 sys.path.append('analysis_village/numuincl') #relative path to my stuff
 from sbnd.cafclasses.slice import CAFSlice
 from sbnd.cafclasses.nu import NU
+from sbnd.cafclasses.binning import Binning2D
+from sbnd.numu.numu_constants import *
 
 DEFAULT_INCLUDE_WEIGHTS = False
 DEFAULT_SLIM = False
@@ -29,12 +31,17 @@ def _resolve_flag(value, fallback):
     return fallback if value is None else value
 
 def _set_update_recomb(value):
-    global UPDATE_RECOMB, MU_KEY_SUFFIXES
+    global UPDATE_RECOMB, MU_KEY_SUFFIXES, CALO_KEEP_COLS
     UPDATE_RECOMB = bool(value)
     if UPDATE_RECOMB:
-        MU_KEY_SUFFIXES = ["_alpha_embm1", "_beta_90m1", "_R_embm1","_alpha_embp1", "_beta_90p1", "_R_embp1","_alpha_emb00"]
+        MU_KEY_SUFFIXES = ["_c_cal_fracm1","_c_cal_fracp1","_alpha_embm1", "_beta_90m1", "_R_embm1","_alpha_embp1", "_beta_90p1", "_R_embp1","_alpha_emb00"]
+        CALO_KEEP_COLS = CALO_KEEP_COLS = [('pfp', 'trackScore', '', '', '', ''),
+            ('pfp', 'trk', 'chi2pid', 'I2', 'chi2_muon', ''),
+            ('pfp', 'trk', 'chi2pid', 'I2', 'chi2_proton', ''),
+            ('pfp', 'trk', 'is_muon', '', '', '')]
     else:
         MU_KEY_SUFFIXES = [""]
+        CALO_KEEP_COLS = None
 
 def set_update_recomb(value):
     _set_update_recomb(_resolve_flag(value, DEFAULT_UPDATE_RECOMB))
@@ -173,7 +180,13 @@ def make_pandora_evtdf(f, include_weights=None, wgt_types=["bnb","genie","g4"], 
     trkdf = make_custom_trkdf(f, trkScoreCut=trkScoreCut, updaterecomb=updaterecomb, **trkArgs)
     slcdf = make_slcdf(f)
     hdr = make_hdrdf(f)
+    ismc = hdr.ismc.astype(bool).unique()
+    if len(ismc) > 1:
+        raise ValueError(f'Multiple ismc values: {ismc}')
+    else:
+        ismc = ismc[0]
     hdr = hdr.loc[:,["run","subrun","evt"]]
+
 
     # stubdf = make_stubs(f, det=DETECTOR)
     # load stubs
@@ -216,18 +229,24 @@ def make_pandora_evtdf(f, include_weights=None, wgt_types=["bnb","genie","g4"], 
     # costheta
     trkdf[("pfp", "trk", "costheta", "", "", "")] = trkdf.pfp.trk.dir.z
 
+    # truth totp and dirz
+    if ismc:
+        trkdf.loc[:, ("pfp","trk","truth","p","totp","")] = np.sqrt(trkdf.pfp.trk.truth.p.genp.x**2 + trkdf.pfp.trk.truth.p.genp.y**2 + trkdf.pfp.trk.truth.p.genp.z**2)
+        trkdf.loc[:, ("pfp","trk","truth","p","dir","x")] = trkdf.pfp.trk.truth.p.genp.x/trkdf.pfp.trk.truth.p.totp
+        trkdf.loc[:, ("pfp","trk","truth","p","dir","y")] = trkdf.pfp.trk.truth.p.genp.y/trkdf.pfp.trk.truth.p.totp
+        trkdf.loc[:, ("pfp","trk","truth","p","dir","z")] = trkdf.pfp.trk.truth.p.genp.z/trkdf.pfp.trk.truth.p.totp
 
     mudf_list = []
     for key_suffix in MU_KEY_SUFFIXES:
-        trkdf[("pfp", "trk", f"is_muon{key_suffix}", "", "", "")] = (trkdf[("pfp", "trk", "chi2pid", "I2", f"chi2_muon{key_suffix}","")] < 18) & (trkdf[("pfp", "trk", "chi2pid", "I2", f"chi2_proton{key_suffix}","")] > 87) & (trkdf.pfp.trk.len > 32)
-        trkdf.loc[:,("pfp", "trk", f"is_muon{key_suffix}", "", "", "")] = trkdf.loc[:,("pfp", "trk", f"is_muon{key_suffix}", "", "", "")].fillna(False) #fillna with False
+        trkdf[("pfp", "trk", "is_muon", "", "", "")] = (trkdf[("pfp", "trk", "chi2pid", "I2", f"chi2_muon{key_suffix}","")] < 20) & (trkdf[("pfp", "trk", "chi2pid", "I2", f"chi2_proton{key_suffix}","")] > 90) & (trkdf.pfp.trk.len > 32)
+        trkdf.loc[:,("pfp", "trk", "is_muon", "", "", "")] = trkdf.loc[:,("pfp", "trk", "is_muon", "", "", "")].fillna(False) #fillna with False
 
         # ----- loose PID for candidates ----
         trkdf[("pfp", "trk", "chi2pid", "I2", f"mu_over_p{key_suffix}", "")] = np.nan
         trkdf[("pfp", "trk", "chi2pid", "I2", f"mu_over_p{key_suffix}", "")] = trkdf[("pfp", "trk", "chi2pid", "I2", f"chi2_muon{key_suffix}","")]/trkdf[("pfp", "trk", "chi2pid", "I2", f"chi2_proton{key_suffix}","")]
 
         # mu candidate is track pfp with smallest chi2_mu/chi2_p
-        mudf = trkdf[(trkdf.pfp.trackScore > 0.6) & (trkdf[("pfp", "trk", f"is_muon{key_suffix}", "", "", "")] ) & ~(trkdf[("pfp", "trk", f"is_muon{key_suffix}", "", "", "")] .isna())].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid", "I2", f"mu_over_p{key_suffix}", "")]).groupby(level=[0,1]).head(1)
+        mudf = trkdf[(trkdf.pfp.trackScore > 0.6) & (trkdf[("pfp", "trk", "is_muon", "", "", "")] ) & ~(trkdf[("pfp", "trk", "is_muon", "", "", "")] .isna())].sort_values(trkdf.pfp.index.names[:-1] + [("pfp", "trk", "chi2pid", "I2", f"mu_over_p{key_suffix}", "")]).groupby(level=[0,1]).head(1)
         
         # Filter columns to only include those matching the current key_suffix or base columns (no variation suffix)
         # This prevents mixing variation suffixes (e.g., mu_R_embm1 containing chi2_proton_alpha_embp1)
@@ -235,29 +254,37 @@ def make_pandora_evtdf(f, include_weights=None, wgt_types=["bnb","genie","g4"], 
             # Get all variation suffixes
             all_suffixes = [s for s in MU_KEY_SUFFIXES if s]
             # Filter columns: keep base columns (no variation suffix) or columns with current key_suffix
-            def should_keep_col(col_tuple):
+            def should_keep_col(col_tuple, contains_keep=True):
                 col_str = str(col_tuple)
                 # Check if column contains any variation suffix
                 contains_any_suffix = any(suffix in col_str for suffix in all_suffixes)
-                if not contains_any_suffix:
+                # Check if the column is in the CALO_KEEP_COLS list
+                if (CALO_KEEP_COLS is not None) and contains_keep:
+                    contains_keep_key = False
+                    # for kk in CALO_KEEP_COLS:
+                    #     assert len(kk) == len(col_tuple), f'Column {col_tuple} has length {len(col_tuple[1:])} but CALO_KEEP_COLS has length {len(kk)}'
+                    if col_tuple in CALO_KEEP_COLS:
+                        contains_keep_key = True
+                else:
+                    contains_keep_key = True
+                
+                if not contains_any_suffix and contains_keep_key:
                     # Base column, keep it
                     return True
                 # Column has a variation suffix, only keep if it matches current key_suffix
-                return key_suffix in col_str
-            cols_to_keep = [c for c in mudf.columns if should_keep_col(c)]
+                return (key_suffix in col_str) and contains_keep_key
+            # Only apply contains keep for non-null variations
+            contains_keep = key_suffix != MU_KEY_SUFFIXES[-1]
+            cols_to_keep = [c for c in mudf.columns if should_keep_col(c, contains_keep=contains_keep)]
             mudf = mudf[cols_to_keep]
+            if contains_keep:
+                assert len(mudf.columns) == len(CALO_KEEP_COLS), f'Number of columns in mudf {len(mudf.columns)} does not match number of columns in CALO_KEEP_COLS {len(CALO_KEEP_COLS)}'
         
         mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu" + key_suffix] + list(c)) for c in mudf.columns])
         mudf_list.append(mudf)
 
     slcdf = multicol_merge(slcdf, pd.concat(mudf_list, axis=1).droplevel(-1), left_index=True, right_index=True, how="left", validate="one_to_one")
     slcdf = multicol_merge(slcdf, hdr, left_index=True, right_index=True, how="left", validate="one_to_one")
-
-    # truth
-    trkdf.loc[:, ("pfp","trk","truth","p","totp","")] = np.sqrt(trkdf.pfp.trk.truth.p.genp.x**2 + trkdf.pfp.trk.truth.p.genp.y**2 + trkdf.pfp.trk.truth.p.genp.z**2)
-    trkdf.loc[:, ("pfp","trk","truth","p","dir","x")] = trkdf.pfp.trk.truth.p.genp.x/trkdf.pfp.trk.truth.p.totp
-    trkdf.loc[:, ("pfp","trk","truth","p","dir","y")] = trkdf.pfp.trk.truth.p.genp.y/trkdf.pfp.trk.truth.p.totp
-    trkdf.loc[:, ("pfp","trk","truth","p","dir","z")] = trkdf.pfp.trk.truth.p.genp.z/trkdf.pfp.trk.truth.p.totp
 
     # ----- apply cuts for lightweight df -----
 #     if prelim_cuts:
@@ -271,7 +298,7 @@ def make_pandora_evtdf(f, include_weights=None, wgt_types=["bnb","genie","g4"], 
 #         if full_cuts:
 
 #             # require the muon
-#             mask = slcdf[(f'mu{key_suffix}', 'pfp', 'trk', f'is_muon{key_suffix}', '', '', '')].astype(bool)
+#             mask = slcdf[(f'mu{key_suffix}', 'pfp', 'trk', 'is_muon', '', '', '')].astype(bool)
 #             slcdf = slcdf[mask]
 
 #             # low z cut
@@ -317,7 +344,6 @@ def _process_mcnu(mcdf, slc, ismc):
     Returns the processed mcnu NU object, or None if not MC or empty.
     """
     if ismc and len(mcdf.index.values) != 0:
-        print(f'Adding event type to mcnu')
         mcnu = NU(mcdf)
         mcnu.scale_to_pot(nom_pot=1., sample_pot=1.)
 
@@ -325,12 +351,12 @@ def _process_mcnu(mcdf, slc, ismc):
         mcnu.add_fv()
         mcnu.add_av()
         
-        mcnu = slc.set_mcnu_containment(mcnu, suffix=MU_KEY_SUFFIXES[-1])
+        mcnu = slc.set_mcnu_containment(mcnu)
         mcnu.cut_muon(cut=False, min_ke=0.1)
         mcnu.cut_fv(cut=False)
         mcnu.cut_cosmic(cut=False)
         mcnu.cut_cont(cut=False)
-        mcnu.add_event_type('pandora', suffix=MU_KEY_SUFFIXES[-1])
+        mcnu.add_event_type('pandora',)
         
         return mcnu
     return None
@@ -354,6 +380,10 @@ def make_pandora_evtdf_processed(f, include_weights=None, wgt_types=["bnb","geni
     else:
         ismc = ismc[0]
     slc = CAFSlice(df) 
+    slc.remove_column_suffix(MU_KEY_SUFFIXES[-1]) #Fix null variation
+    # with open('/exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/slc_keys_inmaker.txt','w') as f:
+    #     for k in slc.data.keys():
+    #         f.write(f'{k}\n')
     #Scale to dummy pot
     slc.scale_to_pot(nom_pot=1.,sample_pot=1.)
     if VERBOSE:
@@ -367,43 +397,89 @@ def make_pandora_evtdf_processed(f, include_weights=None, wgt_types=["bnb","geni
     slc.clean(dummy_vals=[-9999,-999,999,9999,-5])
 
     # Need this for calo variations
-    for key_suffix in MU_KEY_SUFFIXES:
-        slc.add_has_muon(suffix=key_suffix)
+    for i,key_suffix in enumerate(MU_KEY_SUFFIXES):
+        if key_suffix != MU_KEY_SUFFIXES[-1]:
+            slc.add_has_muon(suffix=key_suffix)
+        else:
+            slc.add_has_muon()
     slc.add_in_av()
     slc.add_in_fv()
-    slc.add_event_type(suffix=key_suffix)
-    slc.add_track_flipping(suffix=key_suffix)
+    slc.add_event_type()
+    slc.add_track_flipping()
 
-    #Add totp and dirz for true muon
-    # totp = np.sqrt(slc.data.mu.pfp.trk.truth.p.genp.x**2 + slc.data.mu.pfp.trk.truth.p.genp.y**2 + slc.data.mu.pfp.trk.truth.p.genp.z**2)
-    # slc.add_cols('mu.pfp.trk.truth.p.totp',totp)
-    # dirz = slc.data.mu.pfp.trk.truth.p.genp.z/totp
-    # slc.add_cols('mu.pfp.trk.truth.p.dir.z',dirz)
+    if ismc:
+        # Fix the costheta and momentum for slices that don't have a true muon
+        mask = (slc.data.truth.mu.dir.z == -1) | (np.isnan(slc.data.truth.mu.dir.z))
+        dir_col = slc.get_key([f'mu.pfp.trk.truth.p.dir.z'])[0]
+        slc.data.truth.mu.dir.z[mask] = slc.data.loc[:,dir_col][mask]
+
+        mask = (slc.data.truth.mu.totp == -1) | (np.isnan(slc.data.truth.mu.totp))
+        totp_col = slc.get_key([f'mu.pfp.trk.truth.p.totp'])[0]
+        slc.data.truth.mu.totp[mask] = slc.data.loc[:,totp_col][mask]
+
+        #Assign binning
+        slc.assign_bins(DIFF_COSTHETA_BINS,'truth.mu.dir.z',assign_key='true_bin.costheta')
+        slc.assign_bins(DIFF_MOMENTUM_BINS,'truth.mu.totp',assign_key='true_bin.momentum')
+
+        # Differential bins
+        mask = slc.data.true_bin.values.astype(float) >= 0
+        mask = np.all(mask,axis=1)
+        differential_bins = slc.data.true_bin.costheta.values.astype(float) + slc.data.true_bin.momentum.values.astype(float)*np.max(slc.data.true_bin.costheta.values.astype(float))
+        slc.add_cols('true_bin.differential',differential_bins[mask],conditions=mask,fill=-1.)
+        if VERBOSE:
+            print(f'{np.sum(mask==False)}/{len(slc.data)} slices have no true differential bin')
+    #Reco binnings
+    slc.assign_bins(DIFF_COSTHETA_BINS,f'mu.pfp.trk.costheta',assign_key='bin.costheta')
+    slc.assign_bins(DIFF_MOMENTUM_BINS,f'mu.pfp.trk.P.p_muon',assign_key='bin.momentum')
+
+
+    # Differential bins
+    mask = slc.data.bin.values.astype(float) >= 0
+    mask = np.all(mask,axis=1)
+    differential_bins = slc.data.bin.costheta.values.astype(float) + slc.data.bin.momentum.values.astype(float)*np.max(slc.data.bin.costheta.values.astype(float))
+    slc.add_cols('bin.differential',differential_bins[mask],conditions=mask,fill=-1.)
+
+    mask = slc.data.bin.values.astype(float) >= 0
+    mask = np.all(mask,axis=1)
+    differential_bins = slc.data.bin.costheta.values.astype(float) + slc.data.bin.momentum.values.astype(float)*np.max(slc.data.bin.costheta.values.astype(float))
+    slc.add_cols('bin.differential',differential_bins[mask],conditions=mask,fill=-1.)
+    if VERBOSE:
+        print(f'{np.sum(mask==False)}/{len(slc.data)} slices have no reco differential bin')
+
 
     #Opt0 cuts
     #slc.cut_flashmatch(cut=False)
     #slc.cut_cosmic(cut=False,fmatch_score=320,nu_score=0.5,use_opt0=True,use_isclearcosmic=False)
     #Barycenter FM cuts
-    slc.cut_cosmic(cut=False,fmatch_score=0.06,use_opt0='barycenterFM',nu_score=0.5,use_isclearcosmic=False)
-    slc.cut_flashmatch(cut=False,method='barycenterFM',use_isclearcosmic=True)
+    #Prescale flash PE
+    if ismc:
+        pe_col = slc.get_key([f'slc.barycenterFM.flashPEs'])[0]
+        slc.data.loc[:,pe_col] = slc.data.loc[:,pe_col]*0.66 #prescale to match the data
+    #Add cuts
+    slc.cut_flashpe(cut=False,min_flashpe=2000,prescale=1.)
+    slc.cut_cosmic(cut=False,fmatch_score=0.06,use_opt0='barycenterFM',nu_score=None,use_isclearcosmic=False)
+    slc.cut_flashmatch(cut=False,method='barycenterFM',use_isclearcosmic=False)
     slc.cut_fv(cut=False)
-    slc.cut_muon(cut=False,min_ke=0.1,suffix=MU_KEY_SUFFIXES[-1])
-    slc.cut_lowz(cut=False,z_max=6,include_start=True,suffix=MU_KEY_SUFFIXES[-1])
-    slc.cut_is_cont(cut=False,suffix=MU_KEY_SUFFIXES[-1]) #Don't apply containment cut
+    slc.cut_muon(cut=False,min_ke=0.1)
+    slc.cut_lowz(cut=False,z_max=6,include_start=True)
+    slc.cut_is_cont(cut=False) #Don't apply containment cut
     slc.cut_all(cut=False) #Add the all cut column
 
     if add_stat_unc:
         slc.add_stat_unc()
+    
 
     if VERBOSE:
-        from naming import PAND_CUTS_CONT, PAND_CUTS
+        from naming import PAND_CUTS
         if mcnu is not None:
-            pur,eff,f1,_,_,_ = slc.get_pur_eff_f1(mcnu,PAND_CUTS_CONT,categories=[0,1])
+            pur,eff,f1,_,_,_ = slc.get_pur_eff_f1(mcnu,PAND_CUTS,categories=[0,1])
             print('Pandora cuts:')
-            print(PAND_CUTS_CONT)
+            print(PAND_CUTS)
             print('Pandora pur, eff, f1:')
             print(pur,eff,f1)
-    
+    # with open('/exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/slc_keys_inmaker.txt','w') as f:
+    #     for k in slc.data.keys():
+    #         f.write(f'{k}\n')
     return slc.data
 
 def make_mcnu_processed(f, include_weights=None, wgt_types=["bnb","genie","g4"], slim=None, 
@@ -433,6 +509,10 @@ def make_mcnu_processed(f, include_weights=None, wgt_types=["bnb","genie","g4"],
     df = make_pandora_evtdf(f, include_weights=include_weights, wgt_types=wgt_types, slim=slim, 
                                trkScoreCut=trkScoreCut, updaterecomb=updaterecomb, return_mcdf=False, **trkArgs)
     slc = CAFSlice(df)
+    slc.remove_column_suffix(MU_KEY_SUFFIXES[-1]) #Fix null variation
+    # with open('/exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/slc_keys_inmaker.txt','w') as f:
+    #     for k in slc.data.keys():
+    #         f.write(f'{k}\n')
     slc.scale_to_pot(nom_pot=1., sample_pot=1.)
     
     # Process mcnu using the same helper function
@@ -461,11 +541,12 @@ def make_pandora_evtdf_processed_signal_cut(f, include_weights=None, wgt_types=[
         print(f'slim: {slim}')
         print(f'updaterecomb: {updaterecomb}')
     slc = CAFSlice(df)
+    slc.remove_column_suffix(MU_KEY_SUFFIXES[-1]) #Fix null variation
     is_signal = np.isin(slc.data.truth.event_type,[0,1])
     slc.data = slc.data[is_signal]
 
     #Apply the cut all for both the reco and truth dataframes (only cut if requested)
-    slc.cut_all(cut=True,mode='truth',categories=[0,1])
+    slc.cut_all(cut=True,mode='truth',cont=False)
 
     return slc.data #return just the df
 
@@ -486,5 +567,6 @@ def make_pandora_evtdf_processed_selected_cut(f, include_weights=None, wgt_types
         print(f'slim: {slim}')
         print(f'updaterecomb: {updaterecomb}')
     slc = CAFSlice(df)
-    slc.cut_all(cut=True,mode='reco',categories=[0,1])
+    slc.remove_column_suffix(MU_KEY_SUFFIXES[-1]) #Fix null variation
+    slc.cut_all(cut=True,mode='reco',cont=False)
     return slc.data #return just the df

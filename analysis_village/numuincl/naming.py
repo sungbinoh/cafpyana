@@ -16,11 +16,11 @@ SPINE_QUALIFIER_PRELIM_LABEL = SPINE_QUALIFIER + PRELIM_LABEL
 SPINE_QUALIFIER_INTERNAL_LABEL = SPINE_QUALIFIER + INTERNAL_LABEL
 SPINE_QUALIFIER_INTERNAL_LABEL = SPINE_QUALIFIER + INTERNAL_LABEL
 # Cut lists
-PAND_CUTS = ['flashmatch','fv','muon','cosmic','lowz']
-PAND_CUT_LABELS = ['Flash Match\n(best BCFM)','Fiducial','Has Muon','Flash Score\n(score cut)','Low Z']
+PAND_CUTS = ['flashpe','flashmatch','fv','muon','cosmic','lowz']
+PAND_CUT_LABELS = ['Flash PE > 2000','Flash Match\n(best BCFM)','Fiducial','Has Muon','Flash Score\n(score cut)','Low Z']
 
-PAND_CUTS_CONT = ['flashmatch','fv','muon','cont','cosmic']
-PAND_CUT_LABELS_CONT = ['Flash Match (by TPC)','Fiducial','Has Muon','Muon Contained','Flash Score']
+PAND_CUTS_CONT = ['flashpe','flashmatch','fv','muon','cont','cosmic']
+PAND_CUT_LABELS_CONT = ['Flash PE > 2000','Flash Match (by TPC)','Fiducial','Has Muon','Muon Contained','Flash Score']
 
 SPINE_CUTS = ['time_contained','cosmic','fv','muon','cosmic_score','lowz','start_dedx']
 SPINE_CUT_LABELS = ['Time Contained','Flash Match\n(best match, whole detector)','Fiducial','Has Muon','Flash Score','Low Z','Start dE/dx']

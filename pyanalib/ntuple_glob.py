@@ -207,7 +207,7 @@ class NTupleGlob(object):
 
         try:
             with Pool(processes=nproc) as pool:
-                for i, dfs in enumerate(tqdm(pool.imap_unordered(partial(_loaddf, fs, preprocess), enumerate(thisglob)), total=len(thisglob), unit="file", delay=5, smoothing=0.2)):
+                for i, dfs in enumerate(tqdm(pool.imap(partial(_loaddf, fs, preprocess), enumerate(thisglob)), total=len(thisglob), unit="file", delay=5, smoothing=0.2)):
                     if dfs is not None:
                         ret.append(dfs)
         # Ctrl-C handling
