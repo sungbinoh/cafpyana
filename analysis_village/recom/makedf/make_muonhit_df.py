@@ -47,29 +47,44 @@ def pass_slc_with_n_pfps(df, n = 2):
 def select_topology(df, nprong=2, max_len_cut=25, min_len_cut=25, contained=True):
 
     npfps = df.groupby(level=[0,1]).count().slc.producer
+    #print("npfps.value_counts()")
+    #print(npfps.value_counts())
 
     ## exact number of pfps
     twopfps_idx = npfps[npfps == nprong].index
     twopfps = df.reset_index(level=[2]).loc[twopfps_idx]
     twopfps = twopfps.reset_index().set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index"])
+    #print("twopfps")
 
     ## exact number of pfps passing trk score cut in contained cut
     twopfps["is_track"] = (twopfps.pfp.trackScore > 0.5)
     twopfps["is_contained_track"] = (twopfps.pfp.trackScore > 0.5) & (InFV_nohiyz_trk(twopfps.pfp.trk.start) & InFV_nohiyz_trk(twopfps.pfp.trk.end))
+    #print(twopfps.pfp.trackScore)
+    #print(twopfps.pfp.trackScore.value_counts())
+    #print(twopfps.pfp.trk.start)
+    #print(twopfps.pfp.trk.end)
+    #print(twopfps)
     if contained:
         ntrks = twopfps.groupby(level=[0,1]).is_contained_track.sum()
     else:
         ntrks = twopfps.groupby(level=[0,1]).is_track.sum()
 
+    #print("ntrks.value_counts()") ### mostly 0...
+    #print(ntrks.value_counts())
+
     ## exact number of pfpfs passing len cut
     nprong_slc_idx = ntrks[(ntrks == nprong)].index
     nprong_df = df.reset_index().set_index(["entry", "rec.slc..index"]).loc[nprong_slc_idx]
     nprong_df = nprong_df.reset_index().set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index"])
+    #print("nprong_df") ## empty...
+    #print(nprong_df)
 
     nprong_df['is_len'] = nprong_df.pfp.trk.len > 10. ## default len cut value based on 1-prong selection
     if nprong == 2:
         nprong_df['is_len'] = nprong_df.pfp.trk.len > 25.
     ntrks_len = nprong_df.groupby(level=[0,1]).is_len.sum()
+    #print("ntrks_len.value_counts()")
+    #print(ntrks_len.value_counts())
 
     nprong_len_slc_idx = ntrks_len[(ntrks_len == nprong)].index
     nprong_len_df = df.reset_index().set_index(["entry", "rec.slc..index"]).loc[nprong_len_slc_idx]
@@ -244,23 +259,42 @@ def make_muonhit_df(f):
     mchdrdf = make_mchdrdf(f)
     ismc = hdrdf.ismc.iloc[0]
 
-    #pandoradf = make_pandora_df(f)
-    pandoradf = make_pandora_df_calo_update(f)
+    pandoradf = make_pandora_df(f)
+    #pandoradf = make_pandora_df_calo_update(f)
     pandoradf = pandoradf[InFV_nohiyz(pandoradf.slc.vertex)]
     pandoradf = pandoradf[(pandoradf.pfp.trk.len > 4.) & (pandoradf.pfp.dist_to_vertex < 6.)]
+
+    #print(hdrdf)
+    potdf = make_potdf_bnb(f)
+    #print(potdf)
+    #print(pandoradf.head(20))
+    #print(pandoradf.pfp.trackScore)
+    #print(pandoradf.pfp.trackScore.value_counts())
 
     trkhitdf = make_trkhitdf_plane2(f)
     trktruehitdf = make_trktruehitdf_plane2(f)
     trkhitdf = trkhitdf.join(trktruehitdf)
     trkhitdf = trkhitdf.join(subrun)
     trkhitdf = trkhitdf.join(evt)
-    
+    #print(pandoradf)
+    #print(trkhitdf)
+
     # 2 prong
     longer_data, shorter_data = select_topology(pandoradf, nprong=2, max_len_cut=25, min_len_cut=25, contained=True)
+    #print("longer_data")
+    #print(longer_data)
+    #print("shorter_data")
+    #print(shorter_data)
     proton_candidate = select_calorimetry(shorter_data, muscore_cut_val=20, pscore_cut_val=80)
     proton_candidate = thetazx_cut(proton_candidate)
 
     muon_candidate = select_calorimetry(longer_data, muscore_cut_val=20, pscore_cut_val=80, pid=13)
+    #print("muon_candidate") ## empty...
+    #print(muon_candidate)
+    #print("proton_candidate") ## empty...
+    #print(proton_candidate)
+    #print("pandoradf.pfp.trk.chi2pid.I2.chi2_muon")
+    #print(pandoradf.pfp.trk.chi2pid.I2.chi2_muon)
     muon_candidate = thetazx_cut(muon_candidate)
     muscore_cut = (muon_candidate.pfp.trk.chi2pid.I2.chi2_muon < 6.)
     pscore_cut = (muon_candidate.pfp.trk.chi2pid.I2.chi2_proton > 90) & (muon_candidate.pfp.trk.chi2pid.I2.chi2_proton < 150)
@@ -280,6 +314,9 @@ def make_muonhit_df(f):
     muon_hits['trk_coszx'] = muon_candidate_coszx
     muon_hits['trk_coszy'] = muon_candidate_coszy
     muon_hits['true_pdg'] = muon_candidate_true_pdg
+
+    #print("muon_hits")
+    #print(muon_hits)
 
     if len(muon_hits) == 0:
         return None ### FIXME
