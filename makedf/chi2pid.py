@@ -106,7 +106,7 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
         tdrift = dqdxdf.t*tick_period - t0 - tanode*tick_period
 
         dqdx = dqdx * tpc_scale * np.exp(tdrift / etau) / yz_scale
-    elif calibrate == "SBND": # TODO: add calibrations?
+    elif "SBND" in calibrate: # TODO: add calibrations?
         # get raw dqdx
         dqdx  = dqdxdf.integral / dqdxdf.pitch
 
@@ -155,26 +155,26 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
         gain_perhit = pd.Series(1.0, dqdxdf.index)
         for iplane, g in enumerate(gains):
             gain_perhit[dqdxdf.plane == iplane] = 1.0/g
-    elif gain == "SBND": # TODO
+    elif "SBND" in gain: # TODO
         gains = SBND_CALO_PARAMS["gains"][0] if isMC else SBND_CALO_PARAMS["gains"][1]
         gain_perhit = pd.Series(1.0, dqdxdf.index)
         for iplane, g in enumerate(gains):
             gain_perhit[dqdxdf.plane == iplane] = 1.0/g
     else:
         gain_perhit = 1
-
+    # print("gain_perhit", list(gain_perhit.head()))
     return dqdx*gain_perhit
 
 def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False, smear=-1, scale=1):
     dqdx_v = dqdx(dqdxdf, gain=gain, calibrate=calibrate, isMC=isMC)
     if gain == "ICARUS":
         scalegain = ICARUS_CALO_PARAMS['c_cal_frac'][plane]
-    elif gain == "SBND":
+    elif "SBND" in gain:
         scalegain = SBND_CALO_PARAMS['c_cal_frac'][plane]
     else:
         scalegain = 1.
 
-    if gain == "SBND":
+    if "SBND" in gain:
         this_alpha_emb = SBND_CALO_PARAMS["alpha_emb"][0] if isMC else SBND_CALO_PARAMS["alpha_emb"][1]
         this_beta_90 = SBND_CALO_PARAMS["beta_90"][0] if isMC else SBND_CALO_PARAMS["beta_90"][1]
         this_R_emb = SBND_CALO_PARAMS["R_emb"][0] if isMC else SBND_CALO_PARAMS["R_emb"][1]
