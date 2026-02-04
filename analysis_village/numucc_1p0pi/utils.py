@@ -11,23 +11,17 @@ from makedf.constants import *
 from analysis_village.unfolding.unfolding_inputs import *
 from analysis_village.unfolding.wienersvd import *
 from analysis_village.numucc_1p0pi.categories import *
+from analysis_village.numucc_1p0pi.constants import *
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 plt.style.use("presentation.mplstyle")
 
 
-# TODO: relocate these
-DETECTOR = "SBND_nohighyz"
-eps = 1e-6 # for clipping distributions at bin ranges
-XSEC_UNIT = 1e-38 # TODO: this is a placeholder for the norm factor
-
-
 #  ====== calculation functions ======
 def get_clipped_evts(df, var_col, bins):
-    eps = 1e-8
     var = df[var_col]
-    var = np.clip(var, bins[0], bins[-1] - eps)
+    var = np.clip(var, bins[0], bins[-1] - EPSILON)
 
     if 'pot_weight' in df.columns:
         # print(f"pot scale: {df.pot_weight.unique()[0]}")
