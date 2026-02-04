@@ -8,7 +8,8 @@ from makedf.util import *
 DETECTOR = "SBND_nohighyz"
 # DETECTOR = "SBND"
 
-# === event breakdown ===
+# ==== definitions for event categories ===-
+
 def IsNu(df):
     return (np.abs(df.mc.pdg) == 14) | (np.abs(df.mc.pdg) == 12)
 
@@ -121,13 +122,9 @@ def Is1muNcpi(df): # definition
     return is_fv & is_1mu1p0pi
 
 
-def get_int_category(df, ret_cuts=False):
-    # cut_notnu = ~IsNu(df)
-    # cut_nu_outfv = IsNu(df) & ~InFV(df.position, det="SBND_nohighyz")
-    # cut_signal = IsSignal(df)
-    # cut_1muNp0pi = Is1muNp0pi(df)
-    # cut_1muNcpi = Is1muNcpi(df)
+# ==== functions to get breadkdowns of event categories ====
 
+def get_int_category(df, ret_cuts=False, print_summary=False):
     cut_cosmic = IsCosmic(df)
     cut_nu_outfv = IsNuOutFV(df)
     cut_nu_infv_nu_other = IsNuInFV_NuOther(df)
@@ -150,6 +147,9 @@ def get_int_category(df, ret_cuts=False):
     nuint_categ[cut_nu_infv_numu_nc] = 4  # nu in FV, numu NC
     nuint_categ[cut_nu_infv_nu_other] = 5  # nu in FV, other
 
+    if print_summary:
+        print(nuint_categ.value_counts())
+
     if ret_cuts:
         cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
                 cut_nu_infv_numu_cc_other, cut_nu_infv_numu_cc_np0pi, cut_nu_infv_numu_cc_1p0pi]
@@ -158,7 +158,7 @@ def get_int_category(df, ret_cuts=False):
     return nuint_categ
 
 
-def get_genie_category(df, ret_cuts=False):
+def get_genie_category(df, ret_cuts=False, print_summary=False):
     cut_cosmic = IsCosmic(df)
     cut_nu_outfv = IsNuOutFV(df)
     cut_nu_infv_nu_other = IsNuInFV_NuOther(df)
@@ -184,6 +184,9 @@ def get_genie_category(df, ret_cuts=False):
     genie_categ[cut_nu_infv_numu_nc] = 6  # nu in FV, numu NC
     genie_categ[cut_nu_infv_nu_other] = 7  # nu in FV, other
 
+    if print_summary:
+        print(genie_categ.value_counts())
+
     if ret_cuts:
         cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
                 cut_nu_infv_numu_othermode, cut_nu_infv_numu_cc_dis, cut_nu_infv_numu_cc_res, 
@@ -192,12 +195,11 @@ def get_genie_category(df, ret_cuts=False):
 
     return genie_categ
 
-def get_genie_sb_category(df, ret_cuts=False):
+def get_genie_sb_category(df, ret_cuts=False, print_summary=False):
     cut_cosmic = IsCosmic(df)
     cut_nu_outfv = IsNuOutFV(df)
     cut_nu_infv_nu_other = IsNuInFV_NuOther(df)
     cut_nu_infv_numu_nc = IsNuInFV_NumuNC(df)
-    # cut_nu_infv_numu_coh = IsNuInFV_NumuCC_COH(df)
     # break down numu modes into signal and background
     cut_nu_infv_numu_othermode_s = IsNuInFV_NumuCC_OtherMode(df) & IsNuInFV_NumuCC_1p0pi(df)
     cut_nu_infv_numu_othermode_b = IsNuInFV_NumuCC_OtherMode(df) & ~IsNuInFV_NumuCC_1p0pi(df)
@@ -220,6 +222,9 @@ def get_genie_sb_category(df, ret_cuts=False):
             cut_nu_infv_numu_cc_mec_b, cut_nu_infv_numu_cc_mec_s,
             cut_nu_infv_numu_cc_qe_b, cut_nu_infv_numu_cc_qe_s]
 
+    # if print_summary:
+    #     print(genie_sb_categ.value_counts())
+
     if ret_cuts:
         return cuts
 
@@ -227,7 +232,7 @@ def get_genie_sb_category(df, ret_cuts=False):
     return cuts
 
 
-# --- for plotting ---
+# --- colors & labelsfor plotting ---
 # nu / cosmic breakdown
 nu_cosmics_labels = ["Cosmic", r"Out-FV $\nu$", r"FV $\nu$"]
 nu_cosmics_colors = ["gray", "C0", "C1"]
@@ -249,7 +254,6 @@ topology_colors = ["mediumslateblue",
                     "crimson", 
                     "sienna", 
                     "gray"] 
-
 
 # --- GENIE interaction mode breakdown ---
 genie_mode_list = [1, # CCQE
