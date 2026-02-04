@@ -856,6 +856,8 @@ def plot_unfolded_result(unfold,
                          measured, 
                          models,
                          var_config, 
+                        textloc=[0.05, 0.55],
+                        approval="internal",
                          save_fig=False, 
                          save_name=None,
                          closure_test=False):
@@ -913,28 +915,12 @@ def plot_unfolded_result(unfold,
     p_values = []
     model_handles = []
     model_labels = []
-    # for midx, model in enumerate(models):
     for midx, mkey in enumerate(models.keys()):
-
         model_smeared = unfold['AddSmear'] @ models[mkey]
-        # chi2_val = chi2(Unfolded, model_smeared, UnfoldCov_syst)
-        # chi2_vals.append(chi2_val)
-        # p_val = 0
 
         chi2_val, p_val = get_chi2(Unfolded, model_smeared, UnfoldCov_syst)
         chi2_vals.append(chi2_val)
         p_values.append(p_val)
-
-        # # calculated the p-value for the chi2 test
-        # import scipy.stats as stats
-        # dof = len(bins) - 1
-        # p_value = 1 - stats.chi2.cdf(chi2_val, dof)
-        # p_values.append(p_value)
-
-        # Example histograms
-        # statistic, p_value = chisquare(Unfolded, f_exp=model_smeared)
-        # chi2_vals.append(statistic)
-        # p_values.append(p_value)
 
         model_smeared_perwidth = model_smeared / bin_widths
         model_handle, = plt.step(bins, np.append(model_smeared_perwidth, model_smeared_perwidth[-1]), where='post')
@@ -951,29 +937,10 @@ def plot_unfolded_result(unfold,
     plt.legend(handles, labels, 
                loc='upper left', fontsize=12, frameon=False, ncol=1, bbox_to_anchor=(0.02, 0.98))
 
-    n_firsthalf = np.sum(Unfolded_perwidth[:len(bins)//2])
-    n_secondhalf = np.sum(Unfolded_perwidth[len(bins)//2:])
-    if n_firsthalf > n_secondhalf:
-        textloc_x = 0.95
-        ha = 'right'
-    else:
-        textloc_x = 0.05
-        ha = 'left'
+    textloc_x, textloc_ha = get_textloc_x(Unfolded_perwidth, var_config.bins, textloc)
+    textloc_y = textloc[1]
+    add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
 
-    ax.text(textloc_x, 0.65, r"$\mathbf{SBND}$ Preliminary", 
-            transform=ax.transAxes, 
-            fontsize=16, 
-            color='gray',
-            ha=ha, 
-            va='top')
-    # ax.text(textloc_x, 0.58, r"Work in Progress", 
-    #         transform=ax.transAxes, 
-    #         fontsize=16, 
-    #         color='gray',
-    #         ha=ha, 
-    #         va='top')
-
-    # leave space for legend
     plt.xlabel(var_config.var_labels[0])
     plt.ylabel(var_config.xsec_label)
     plt.xlim(bins[0], bins[-1])
@@ -1013,8 +980,6 @@ def plot_unfolded_data(unfold, bins, measured, models,
             else:
                 UnfoldCov_stat_frac[i, j] = 0.0
     UnfoldCov_stat_frac = UnfoldCov_stat_frac * XSEC_UNIT**2
-    # print(UnfoldCov_stat_frac)
-
 
     # --- syst uncertainties
     UnfoldCov_syst = unfold['SystUnfoldCov']
@@ -1217,7 +1182,8 @@ def signal_hists(evtdf=None,  # df with selected & reco'ed events
                  var_config=None,
                  return_data=False,
                  plot=True,
-                 save_fig=False, save_name=None):
+                 save_fig=False, 
+                 save_name=None):
     """
     plot generate / selected / reco'ed signal events
 
