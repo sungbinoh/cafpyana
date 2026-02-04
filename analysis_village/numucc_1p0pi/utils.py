@@ -24,129 +24,6 @@ XSEC_UNIT = 1e-38 # TODO: this is a placeholder for the norm factor
 
 
 #  ====== calculation functions ======
-
-def cov_from_fraccov(cov_frac, cv_vals):
-    cov = np.zeros_like(cov_frac)
-    for i in range(cov_frac.shape[0]):
-        for j in range(cov_frac.shape[1]):
-            cov[i, j] = cov_frac[i, j] * (cv_vals[i] * cv_vals[j])
-    return cov
-
-def corr_from_fraccov(cov_frac):
-    corr = np.zeros_like(cov_frac)
-    for i in range(cov_frac.shape[0]):
-        for j in range(cov_frac.shape[1]):
-            corr[i, j] = cov_frac[i, j] / np.sqrt(cov_frac[i, i] * cov_frac[j, j])
-    return corr
-
-def get_chi2(data, model, cov):
-    chi2_value = (data - model) @ np.linalg.inv(cov) @ (data - model)
-    ndof = len(data)
-    p_value = 1 - chi2.cdf(chi2_value, df=ndof)
-    return chi2_value, p_value
-
-def get_MCstat_unc(evt_df, hdr_df, n_universes=100):
-    # Create a unique seed based on event metadata
-    # Using a hash function that's deterministic
-    meta_seeds = []
-    for i in tqdm(range(len(evt_df))):
-        this_hdr_df = hdr_df.loc[evt_df.reset_index(level=[2]).index[i]]
-        runno = this_hdr_df.run
-        subrunno = this_hdr_df.subrun
-        evtno = this_hdr_df.evt
-        slcid = evt_df.loc[evt_df.index[i]].slc.self
-        unique_seed = hash(f"run_{runno}_subrun_{subrunno}_evt_{evtno}_slcid_{slcid}") % (2**32)  # Ensure it's a 32-bit integer
-        if unique_seed in meta_seeds:
-            print("duplicate seed found", unique_seed)
-            break
-        meta_seeds.append(unique_seed)
-
-    # make sure the seeds are unique!
-    assert len(meta_seeds) == len(set(meta_seeds))
-
-    # generate universes
-    n_universes = 100
-    MCstat_univ_events = np.zeros((n_universes, len(evt_df)))
-    poisson_mean = 1.0
-
-    # get Poisson weights and save to "MCstat.univ_"
-    # dummy df to hold the weights -- iterative inserting causes PerformanceWarning
-    mcstat_univ_cols = pd.MultiIndex.from_product(
-        [["MCstat"], [f"univ_{i}" for i in range(n_universes)], [""], [""], [""], [""], [""]],
-    )
-    mcstat_univ_wgt = pd.DataFrame(
-        1.0,
-        index=evt_df.index,
-        columns=mcstat_univ_cols,
-    )
-
-    for uidx in range(n_universes):
-        universe_seed = hash(f"universe_{uidx}") % (2**32)
-        
-        poisson_weights = []
-        for sidx, meta_seed in enumerate(meta_seeds):
-            # Combine universe seed with event seed for unique randomness -- per event, per universe
-            combined_seed = (universe_seed + meta_seed) % (2**32)
-            np.random.seed(combined_seed)
-            
-            poisson_val = np.random.poisson(poisson_mean)
-            poisson_weights.append(poisson_val)
-        
-        mcstat_univ_wgt[("MCstat", "univ_{}".format(uidx), "", "", "", "", "")] = np.array(poisson_weights)
-        MCstat_univ_events[uidx, :] = np.array(poisson_weights)
-
-    evt_df = evt_df.join(mcstat_univ_wgt)
-    return evt_df, MCstat_univ_events
-
-
-def get_covariance_matrix(univ_events, 
-                          cv_events):
-    n_univ, n_bins = univ_events.shape
-
-    cov_frac = np.zeros((n_bins, n_bins))
-    cov = np.zeros((n_bins, n_bins))
-
-    # looping & calculating with the CV value for clarity, 
-    # but techincally np.cov should also be fine under the assumption of gaussian universes that we're using
-    for uidx in range(n_univ):
-        for i in range(univ_events.shape[1]):
-            for j in range(univ_events.shape[1]):
-                nom_i = cv_events[i] 
-                nom_j = cv_events[j] 
-
-                univ_i = univ_events[uidx, i] 
-                univ_j = univ_events[uidx, j] 
-
-                cov_entry = (univ_i - nom_i) * (univ_j - nom_j)
-                frac_cov_entry = ((univ_i - nom_i) / nom_i) * ( (univ_j - nom_j) / nom_j)
-
-                # TODO: uboone code has clipping that I'm not sure why.. investigate later
-                # if cov_entry > 0:
-                #     this_cov = max( cov_entry, eps * scale_factor)
-                # else:
-                #     this_cov = min( cov_entry, eps * scale_factor)
-
-                # if frac_cov_entry > 0:
-                #     this_frac_cov = max( frac_cov_entry, eps * scale_factor)
-                # else:
-                #     this_frac_cov = min( frac_cov_entry, eps * scale_factor)
-
-                cov[i, j] += cov_entry
-                cov_frac[i, j] += frac_cov_entry
-
-    cov = cov / n_univ
-    cov_frac = cov_frac / n_univ
-    corr = np.zeros_like(cov)
-    for i in range(len(cv_events)):
-        for j in range(len(cv_events)):
-            corr[i, j] = cov[i, j] / (np.sqrt(cov[i, i]) * np.sqrt(cov[j, j]))
-
-    return {"cov_frac": cov_frac, 
-            "cov": cov,
-            "corr": corr,
-            }
-
-
 def get_clipped_evts(df, var_col, bins):
     eps = 1e-8
     var = df[var_col]
@@ -176,18 +53,25 @@ def get_univ_rates(evtdf,
     return univ_events, cv_events
 
 
-def get_genie_univs(cov_type, evtdf, nudf, var_config, syst_name, n_univ=100, plot=False):
+def get_genie_univs(cov_type="rate", 
+                    evtdf=None, 
+                    nudf=None, 
+                    var_config=None, 
+                    syst_name="", 
+                    n_univ=100, 
+                    plot=False):
     """
     for the GENIE uncertainty on the xsec measurement
     """
 
     if cov_type == "xsec":
-        print("generating covariance for xsec, using scale factor: {}".format(XSEC_UNIT))
+        print("getting {} universes for {} uncertainty on the xsec".format(n_univ, syst_name))
         scale_factor = XSEC_UNIT
     elif cov_type == "rate":
+        print("getting {} universes for {} uncertainty on the event rate".format(n_univ, syst_name))
         scale_factor = 1.0
     else:
-        raise ValueError("Invalid covariance type: {}, choose xsec or rate".format(cov_type))
+        raise ValueError("Invalid covariance type: {}, choose in [xsec, rate]".format(cov_type))
 
     bins = var_config.bins
 

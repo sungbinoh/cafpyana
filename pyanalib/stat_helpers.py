@@ -13,3 +13,10 @@ def return_data_stat_err(data_array):
     yerr_high = np.where(data_array == 0, 1.8, U - data_array)
 
     return yerr_low, yerr_high
+
+
+def get_chi2(data, model, cov):
+    chi2_value = (data - model) @ np.linalg.inv(cov) @ (data - model)
+    ndof = len(data)
+    p_value = 1 - chi2.cdf(chi2_value, df=ndof)
+    return chi2_value, p_value
