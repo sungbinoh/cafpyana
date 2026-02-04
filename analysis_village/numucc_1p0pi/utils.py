@@ -10,20 +10,18 @@ from pyanalib.stat_helpers import *
 from makedf.constants import *
 from analysis_village.unfolding.unfolding_inputs import *
 from analysis_village.unfolding.wienersvd import *
-from analysis_village.numucc_1p0pi.selection_definitions import *
-# from analysis_village.numucc_1p0pi.utils import *
+from analysis_village.numucc_1p0pi.categories import *
 
 import matplotlib.pyplot as plt
-# from matplotlib.offsetbox import AnchoredText, AnchoredOffsetbox, DrawingArea, HPacker, VPacker, TextArea
 from matplotlib.patches import Patch
-# from matplotlib.lines import Line2D
-# from matplotlib.legend import Legend
 plt.style.use("presentation.mplstyle")
 
 
+# TODO: relocate these
 DETECTOR = "SBND_nohighyz"
-
 eps = 1e-6 # for clipping distributions at bin ranges
+XSEC_UNIT = 1e-38 # TODO: this is a placeholder for the norm factor
+
 
 #  ====== calculation functions ======
 
@@ -182,7 +180,6 @@ def get_genie_univs(cov_type, evtdf, nudf, var_config, syst_name, n_univ=100, pl
     """
     for the GENIE uncertainty on the xsec measurement
     """
-    XSEC_UNIT = 1e-38 # TODO: this is a placeholder for the norm factor
 
     if cov_type == "xsec":
         print("generating covariance for xsec, using scale factor: {}".format(XSEC_UNIT))
@@ -691,28 +688,6 @@ def overlay_hists(breakdown_type="topology",
             "total_data": total_data}
 
 
-# def hist_plot_pdg_breakdown(
-#               trkdf, vardf, 
-#               vardf_data, 
-#               bins,
-#               plot_labels=["", "", ""],
-#               ratio = True,
-#               vline = None,
-#               save_fig=False, save_name=None): 
-
-#     labels = ["Muon", "Pion", "Proton", "Electron", "Photon", "Other"]
-#     colors = ["blue", "green", "red", "purple", "orange", "gray"]
-
-#     cut_muon = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 13)
-#     cut_pion = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 211)
-#     cut_proton = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 2212)
-#     cut_electron = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 11)
-#     cut_photon = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 22)
-#     cut_other = ~cut_muon & ~cut_pion & ~cut_proton & ~cut_electron & ~cut_photon
-
-#     cuts = [cut_muon, cut_pion, cut_proton, cut_electron, cut_photon, cut_other]
-
-
 def plot_univ_hists(
                 univ_events, 
                 cv_events,
@@ -856,8 +831,8 @@ def plot_unfolded_result(unfold,
                          measured, 
                          models,
                          var_config, 
-                        textloc=[0.05, 0.55],
-                        approval="internal",
+                         textloc=[0.05, 0.55],
+                         approval="internal",
                          save_fig=False, 
                          save_name=None,
                          closure_test=False):
@@ -866,36 +841,34 @@ def plot_unfolded_result(unfold,
     bin_centers = var_config.bin_centers
     bin_widths = np.diff(bins)
 
-    fig, ax = plt.subplots(figsize=(8.5, 7))
-
-    # --- stat uncertainties
-    UnfoldCov_stat = unfold['StatUnfoldCov']
-    Unfold_uncert_stat = np.diag(UnfoldCov_stat)
-
-    # --- syst uncertainties
-    UnfoldCov_syst = unfold['SystUnfoldCov']
-    Unfold_uncert_syst = np.diag(UnfoldCov_syst)
-
-    # decomose into norm and shape components
-    # TODO: the first item in models is the true model
-    SystUnfoldCov_norm, SystUnfoldCov_shape = Matrix_Decomp(models[list(models.keys())[0]], UnfoldCov_syst)
-    print(np.diag(SystUnfoldCov_norm))
-    Unfold_uncert_norm = np.sqrt(np.abs(np.diag(SystUnfoldCov_norm)))
-    Unfold_uncert_shape = np.sqrt(np.abs(np.diag(SystUnfoldCov_shape)))
-
-    # --- plot
     # unfolded result
     Unfolded = unfold['unfold']
     UnfoldedCov = unfold["UnfoldCov"]
     Unfolded_perwidth = Unfolded / bin_widths
 
+    # --- stat uncertainties
+    UnfoldCov_stat = unfold['StatUnfoldCov']
+    Unfold_uncert_stat = np.diag(UnfoldCov_stat)
+    # --- syst uncertainties
+    UnfoldCov_syst = unfold['SystUnfoldCov']
+    Unfold_uncert_syst = np.diag(UnfoldCov_syst)
+
+    # --- decompose into norm and shape components
+    # the first item in models dict is the nominal input model
+    norm_model = list(models.keys())[0]
+    SystUnfoldCov_norm, SystUnfoldCov_shape = Matrix_Decomp(models[norm_model], UnfoldCov_syst)
+    Unfold_uncert_norm = np.sqrt(np.abs(np.diag(SystUnfoldCov_norm)))
+    Unfold_uncert_shape = np.sqrt(np.abs(np.diag(SystUnfoldCov_shape)))
+
+    # --- plot
+    fig, ax = plt.subplots(figsize=(8.5, 7))
     # set err to 0 for closure test
     if closure_test:
         dummy_err = np.zeros_like(Unfolded_perwidth)
         bar_handle = plt.errorbar(bin_centers, Unfolded_perwidth, yerr=dummy_err, fmt='o', color='black')
 
     else:
-        # plot shape syst and stat as error bars
+        # plot shape uncertainty as error bars
         Unfold_uncert_stat_perwidth = Unfold_uncert_stat / bin_widths
         Unfold_uncert_shape_perwidth = Unfold_uncert_shape / bin_widths
         # Unfold_uncert_stat_shape_perwidth = Unfold_uncert_stat_perwidth + Unfold_uncert_shape_perwidth
@@ -906,7 +879,7 @@ def plot_unfolded_result(unfold,
         Unfold_uncert_norm_perwidth = Unfold_uncert_norm / bin_widths
         norm_handle = plt.bar(bin_centers, Unfold_uncert_norm_perwidth, width=bin_widths, label='Syst. error (norm)', alpha=0.5, color='gray')
 
-    # Also divide measured & model by bin width
+    # divide measured & model by bin width
     measured_perwidth = measured / bin_widths
     reco_handle, = plt.step(bins, np.append(measured_perwidth, measured_perwidth[-1]), where='post', label='Meausred Signal (Input)')
 
@@ -950,140 +923,6 @@ def plot_unfolded_result(unfold,
         plt.savefig(save_name, bbox_inches='tight')
     plt.show()
 
-def plot_unfolded_data(unfold, bins, measured, models,
-                         plot_labels, model_names,
-                         save_fig=False, save_name=None):
-
-    # need to divide by bin width for differential xsec
-    bin_widths = np.diff(bins)
-    bin_centers = 0.5 * (bins[:-1] + bins[1:])
-
-    fig, ax = plt.subplots(figsize=(6, 5))
-
-    Unfolded = unfold['unfold']
-
-    # --- stat uncertainties
-    UnfoldCov_stat = unfold['StatUnfoldCov'] 
-    # print(UnfoldCov_stat)
-    UnfoldCov_stat = np.diag(measured/XSEC_UNIT)
-    # print(UnfoldCov_stat)
-    Unfold_uncert_stat = np.diag(UnfoldCov_stat)  * XSEC_UNIT
-    # print(Unfold_uncert_stat)
-    # print(UnfoldCov_stat)
-
-    # mask = Unfolded != 0
-    UnfoldCov_stat_frac = np.zeros_like(UnfoldCov_stat)
-    for i in range(len(Unfolded)):
-        for j in range(len(Unfolded)):
-            if Unfolded[i] != 0 and Unfolded[j] != 0:
-                UnfoldCov_stat_frac[i, j] = UnfoldCov_stat[i, j] / (Unfolded[i] * Unfolded[j])
-            else:
-                UnfoldCov_stat_frac[i, j] = 0.0
-    UnfoldCov_stat_frac = UnfoldCov_stat_frac * XSEC_UNIT**2
-
-    # --- syst uncertainties
-    UnfoldCov_syst = unfold['SystUnfoldCov']
-    Unfold_uncert_syst = np.diag(UnfoldCov_syst)
-
-    UnfoldCov_syst_frac = np.zeros_like(UnfoldCov_syst)
-    for i in range(len(Unfolded)):
-        for j in range(len(Unfolded)):
-            if Unfolded[i] != 0 and Unfolded[j] != 0:
-                UnfoldCov_syst_frac[i, j] = UnfoldCov_syst[i, j] / (Unfolded[i] * Unfolded[j])
-            else:
-                UnfoldCov_syst_frac[i, j] = 0.0
-    # print(UnfoldCov_syst_frac)
-
-    UnfoldedCov_frac = UnfoldCov_stat_frac + UnfoldCov_syst_frac
-    UnfoldedCov = np.zeros_like(UnfoldedCov_frac)
-    for i in range(len(Unfolded)):
-        for j in range(len(Unfolded)):
-            UnfoldedCov[i, j] = Unfolded[i] * Unfolded[j] * UnfoldedCov_frac[i, j]
-
-
-    # decomose into norm and shape components
-    # TODO: the first item in models is the true model
-    SystUnfoldCov_norm, SystUnfoldCov_shape = Matrix_Decomp(models[0], UnfoldCov_syst)
-    Unfold_uncert_norm = np.sqrt(np.abs(np.diag(SystUnfoldCov_norm)))
-    Unfold_uncert_shape = np.sqrt(np.abs(np.diag(SystUnfoldCov_shape)))
-    # print(Unfold_uncert_stat)
-    # print(Unfold_uncert_shape)
-
-    # --- plot
-    # unfolded result
-    Unfolded_perwidth = Unfolded / bin_widths
-
-    # set err to 0 for closure test
-    # plot shape syst and stat as error bars
-    Unfold_uncert_stat_perwidth = Unfold_uncert_stat / bin_widths
-    Unfold_uncert_shape_perwidth = Unfold_uncert_shape / bin_widths
-    # Plot errorbars so that inner cap is stat, outer cap is syst
-    # First, plot stat-only errorbars with smaller capsize (inner)
-    bar_handle_stat = plt.errorbar(
-        bin_centers, Unfolded_perwidth, 
-        yerr=Unfold_uncert_stat_perwidth, 
-        fmt='o', color='black', linewidth=1.5, 
-        capsize=3, elinewidth=1.5, markeredgewidth=1.5
-    )
-    # Then, plot total (stat+syst) errorbars with larger capsize (outer), but no marker
-    Unfold_uncert_total = np.sqrt(Unfold_uncert_stat_perwidth**2 + Unfold_uncert_shape_perwidth**2)
-    bar_handle = plt.errorbar(
-        bin_centers, Unfolded_perwidth, 
-        yerr=Unfold_uncert_total, 
-        fmt='none', ecolor='black', elinewidth=1, capsize=7
-    )
-
-    # plot syst norm component as histogram at the bottom
-    Unfold_uncert_norm_perwidth = Unfold_uncert_norm / bin_widths
-    norm_handle = plt.bar(bin_centers, Unfold_uncert_norm_perwidth, width=bin_widths, label='Syst. error (norm)', alpha=0.5, color='gray')
-
-    # Also divide measured & model by bin width
-    measured_perwidth = measured / bin_widths
-
-    # --- get chi2 values for each model to compare
-    chi2_vals = []
-    model_handles = []
-    model_labels = []
-    for midx, model in enumerate(models):
-
-        model_smeared = unfold['AddSmear'] @ model
-        chi2_val = chi2(Unfolded, model_smeared, UnfoldedCov)
-        # chi2_val = chi2(Unfolded, model_smeared, UnfoldCov)
-        chi2_vals.append(chi2_val)
-
-        model_smeared_perwidth = model_smeared / bin_widths
-        model_handle, = plt.step(bins, np.append(model_smeared_perwidth, model_smeared_perwidth[-1]), where='post', linewidth=2)
-        model_handles.append(model_handle)
-        model_labels.append(f'$A_c \\otimes$ {model_names[midx]} ($\chi^2$ = {chi2_vals[midx]:.0f}/{len(bins)-1})')
-
-    # legend
-    # Show both inner and outer cap in legend, and write legend accordingly
-    # Only unfolded result and models
-    # For errorbars, show both stat and syst errorbar handles in legend
-    # Plot main legend for unfolded result
-    handles = [bar_handle_stat, bar_handle]
-    labels = [
-        'Stat. Unc.',
-        'Stat. $\oplus$ Shape Syst. Unc.'
-    ]
-    valign = 0.6
-    main_legend = plt.legend(handles, labels, 
-                                loc='upper left', fontsize=10, frameon=False, ncol=1, bbox_to_anchor=(valign, 0.88),
-                                title="Unfolded Data", title_fontproperties={'weight': 'bold'})
-
-    plt.gca().add_artist(main_legend)
-    model_legend = plt.legend(model_handles, model_labels, 
-                                loc='upper left', fontsize=10, frameon=False, ncol=1, bbox_to_anchor=(valign, 0.98))
-
-    # leave space for legend
-    plt.xlabel(plot_labels[0])
-    plt.ylabel(plot_labels[1])
-    plt.xlim(bins[0], bins[-1])
-    plt.ylim(0., np.max(Unfolded_perwidth)*1.3)
-
-    if save_fig:
-        plt.savefig(save_name, bbox_inches='tight')
-    plt.show()
 
 # Plotters for detector variation analysis
 def variation_hists(evtdfs, 

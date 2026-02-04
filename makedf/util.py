@@ -94,6 +94,7 @@ def match_trkdf_to_slcdf(trkdf, slcdf):
     matched_trkdf = trkdf.reset_index(level=[nlevels-1]).loc[common_idx].reset_index().set_index(trkdf.index.names)
     return matched_trkdf
 
+
 def avg_chi2(df, var_name):
     planes = ['I0', 'I1', 'I2']
     chi2_vals = []
@@ -105,3 +106,12 @@ def avg_chi2(df, var_name):
     chi2_df = chi2_df.replace(0, np.nan)
     avg = chi2_df.mean(axis=1, skipna=True)
     return avg
+
+
+def p_to_KE(p, mass):
+    return np.sqrt(p**2 + mass**2) - mass
+
+
+def KE_to_p(KE, mass):
+    E = KE + mass
+    return np.sqrt(E**2 - mass**2)
