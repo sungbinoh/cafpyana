@@ -1,301 +1,306 @@
 import numpy as np
-from makedf.constants import *
-import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
-from matplotlib.lines import Line2D
-from matplotlib.offsetbox import AnchoredText
-from matplotlib.offsetbox import AnchoredOffsetbox, DrawingArea, HPacker, VPacker, TextArea
-from matplotlib.legend import Legend
-
+import pandas as pd
 from scipy.stats import chi2
+from tqdm import tqdm
 
 import sys
 sys.path.append('../../')
-from analysis_village.numucc_1p0pi.selection_definitions import *
-from analysis_village.numucc_1p0pi.variable_configs import VariableConfig
-from analysis_village.numucc_1p0pi.utils import *
 from pyanalib.split_df_helpers import *
 from pyanalib.stat_helpers import *
-from pyanalib.variable_calculator import get_cc1p0pi_tki
-from pyanalib.pandas_helpers import pad_column_name
-from analysis_village.unfolding.wienersvd import *
+from makedf.constants import *
 from analysis_village.unfolding.unfolding_inputs import *
 from analysis_village.unfolding.wienersvd import *
+from analysis_village.numucc_1p0pi.selection_definitions import *
+# from analysis_village.numucc_1p0pi.utils import *
+
+import matplotlib.pyplot as plt
+# from matplotlib.offsetbox import AnchoredText, AnchoredOffsetbox, DrawingArea, HPacker, VPacker, TextArea
+from matplotlib.patches import Patch
+# from matplotlib.lines import Line2D
+# from matplotlib.legend import Legend
+plt.style.use("presentation.mplstyle")
+
 
 DETECTOR = "SBND_nohighyz"
-# DETECTOR = "SBND"
 
-eps = 1e-6
+eps = 1e-6 # for clipping distributions at bin ranges
 
+#  ====== calculation functions ======
 
-# import pickle
-# with open("/exp/sbnd/app/users/munjung/xsec/cafpyana/analysis_village/numucc1p0pi/NuINT_uncs/tot_uncert_dict.pkl", "rb") as f:
-#     syst_uncert_dict = pickle.load(f)
-# syst_uncert_dict.keys()
+def cov_from_fraccov(cov_frac, cv_vals):
+    cov = np.zeros_like(cov_frac)
+    for i in range(cov_frac.shape[0]):
+        for j in range(cov_frac.shape[1]):
+            cov[i, j] = cov_frac[i, j] * (cv_vals[i] * cv_vals[j])
+    return cov
 
+def corr_from_fraccov(cov_frac):
+    corr = np.zeros_like(cov_frac)
+    for i in range(cov_frac.shape[0]):
+        for j in range(cov_frac.shape[1]):
+            corr[i, j] = cov_frac[i, j] / np.sqrt(cov_frac[i, i] * cov_frac[j, j])
+    return corr
 
-# KE <-> p conversion for providing the sig threshold in terms of KE in technote
-def p_to_KE(p, mass):
-    return np.sqrt(p**2 + mass**2) - mass
+def get_chi2(data, model, cov):
+    chi2_value = (data - model) @ np.linalg.inv(cov) @ (data - model)
+    ndof = len(data)
+    p_value = 1 - chi2.cdf(chi2_value, df=ndof)
+    return chi2_value, p_value
 
-def KE_to_p(KE, mass):
-    E = KE + mass
-    return np.sqrt(E**2 - mass**2)
+def get_MCstat_unc(evt_df, hdr_df, n_universes=100):
+    # Create a unique seed based on event metadata
+    # Using a hash function that's deterministic
+    meta_seeds = []
+    for i in tqdm(range(len(evt_df))):
+        this_hdr_df = hdr_df.loc[evt_df.reset_index(level=[2]).index[i]]
+        runno = this_hdr_df.run
+        subrunno = this_hdr_df.subrun
+        evtno = this_hdr_df.evt
+        slcid = evt_df.loc[evt_df.index[i]].slc.self
+        unique_seed = hash(f"run_{runno}_subrun_{subrunno}_evt_{evtno}_slcid_{slcid}") % (2**32)  # Ensure it's a 32-bit integer
+        if unique_seed in meta_seeds:
+            print("duplicate seed found", unique_seed)
+            break
+        meta_seeds.append(unique_seed)
 
+    # make sure the seeds are unique!
+    assert len(meta_seeds) == len(set(meta_seeds))
 
-### Plotters
+    # generate universes
+    n_universes = 100
+    MCstat_univ_events = np.zeros((n_universes, len(evt_df)))
+    poisson_mean = 1.0
 
-# def hist_plot(plot_type,
-#               evtdf, vardf, 
-#               vardf_data, var_intime,
-#               bins,
-#               generator="GENIE",
-#               plot_labels=["", "", ""],
-#               ratio = True,
-#               vline = None,
-#               save_fig=False, save_name=None): 
+    # get Poisson weights and save to "MCstat.univ_"
+    # dummy df to hold the weights -- iterative inserting causes PerformanceWarning
+    mcstat_univ_cols = pd.MultiIndex.from_product(
+        [["MCstat"], [f"univ_{i}" for i in range(n_universes)], [""], [""], [""], [""], [""]],
+    )
+    mcstat_univ_wgt = pd.DataFrame(
+        1.0,
+        index=evt_df.index,
+        columns=mcstat_univ_cols,
+    )
 
-#     assert len(evtdf) == len(vardf)
-
-#     if plot_type == "nu_cosmics":
-#         labels = nu_cosmics_labels
-#         colors = nu_cosmics_colors
-
-#         cut_cosmic = IsCosmic(evtdf)
-#         cut_nu_outfv = IsNuOutFV(evtdf)
-#         cut_nu_infv = IsNuInFV(evtdf)
-#         cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv]
-
-#     elif plot_type == "topology":
-#         labels = topology_labels[::-1]
-#         colors = topology_colors[::-1]
-
-#         cut_cosmic = IsCosmic(evtdf)
-#         cut_nu_outfv = IsNuOutFV(evtdf)
-#         cut_nu_infv_nu_other = IsNuInFV_NuOther(evtdf)
-#         cut_nu_infv_numu_nc = IsNuInFV_NumuNC(evtdf)
-#         cut_nu_infv_numu_cc_other = IsNuInFV_NumuCC_Other(evtdf)
-#         cut_nu_infv_numu_cc_np0pi = IsNuInFV_NumuCC_Np0pi(evtdf)
-#         cut_nu_infv_numu_cc_1p0pi = IsNuInFV_NumuCC_1p0pi(evtdf)
-#         cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
-#                 cut_nu_infv_numu_cc_other, cut_nu_infv_numu_cc_np0pi, cut_nu_infv_numu_cc_1p0pi]
-
-#     elif plot_type == "genie" and generator == "GENIE":
-#         labels = genie_mode_labels[::-1]
-#         colors = genie_mode_colors[::-1]
-
-#         cut_cosmic = IsCosmic(evtdf)
-#         cut_nu_outfv = IsNuOutFV(evtdf)
-#         cut_nu_infv_nu_other = IsNuInFV_NuOther(evtdf)
-#         cut_nu_infv_numu_nc = IsNuInFV_NumuNC(evtdf)
-#         # print("numu NC", cut_nu_infv_numu_nc.sum())
-#         # cut_nu_infv_numu_coh = IsNuInFV_NumuCC_COH(evtdf)
-#         cut_nu_infv_numu_othermode = IsNuInFV_NumuCC_OtherMode(evtdf)
-#         cut_nu_infv_numu_cc_dis = IsNuInFV_NumuCC_DIS(evtdf)
-#         cut_nu_infv_numu_cc_res = IsNuInFV_NumuCC_RES(evtdf)
-#         cut_nu_infv_numu_cc_me = IsNuInFV_NumuCC_MEC(evtdf)
-#         cut_nu_infv_numu_cc_qe = IsNuInFV_NumuCC_QE(evtdf)
-#         cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
-#                 cut_nu_infv_numu_othermode, cut_nu_infv_numu_cc_dis, cut_nu_infv_numu_cc_res, 
-#                 cut_nu_infv_numu_cc_me, cut_nu_infv_numu_cc_qe]
-
-#     elif plot_type == "genie" and generator == "GiBUU":
-#         labels = gibuu_mode_labels[::-1]
-#         colors = gibuu_mode_colors[::-1]
-
-#         cut_cosmic = IsCosmic(evtdf)
-#         cut_nu_outfv = IsNuOutFV(evtdf)
-#         cut_nu_infv_nu_other = IsNuInFV_NuOther(evtdf)
-#         cut_nu_infv_numu_nc = IsNuInFV_NumuNC(evtdf)
-#         print("numu NC", cut_nu_infv_numu_nc.sum())
-#         # cut_nu_infv_numu_coh = IsNuInFV_NumuCC_COH(evtdf)
-#         cut_nu_infv_numu_othermode = IsNuInFV_NumuCC_OtherMode_GiBUU(evtdf)
-#         cut_nu_infv_numu_cc_dis = IsNuInFV_NumuCC_DIS_GiBUU(evtdf)
-#         cut_nu_infv_numu_cc_res = IsNuInFV_NumuCC_RES_GiBUU(evtdf)
-#         cut_nu_infv_numu_cc_me = IsNuInFV_NumuCC_MEC_GiBUU(evtdf)
-#         cut_nu_infv_numu_cc_qe = IsNuInFV_NumuCC_QE_GiBUU(evtdf)
-#         cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
-#                 cut_nu_infv_numu_othermode, cut_nu_infv_numu_cc_dis, cut_nu_infv_numu_cc_res, 
-#                 cut_nu_infv_numu_cc_me, cut_nu_infv_numu_cc_qe]
+    for uidx in range(n_universes):
+        universe_seed = hash(f"universe_{uidx}") % (2**32)
         
-
-#     else:
-#         raise ValueError("Invalid plot_type: %s, please choose between [nu_cosmics, topolgy, or genie]" % plot_type)
-
-#     # --- Plot template
-#     if ratio:
-#         fig, axs = plt.subplots(2, 1, figsize=(8.5, 8), 
-#                                sharex=True, gridspec_kw={'height_ratios': [3, 1]})
-#         fig.subplots_adjust(hspace=0.05)
-#         ax = axs[0]
-#         ax_r = axs[1]
-#     else:
-#         fig, ax = plt.subplots()
-
-#     bin_centers = 0.5 * (bins[:-1] + bins[1:])
-
-#     # --- Data
-#     total_data, bins = np.histogram(vardf_data, bins=bins)
-#     data_eylow, data_eyhigh = return_data_stat_err(total_data)
-#     ax.errorbar(bin_centers, total_data, yerr=np.vstack((data_eylow, data_eyhigh)), 
-#                 fmt='o', color='black')
-
-#     # --- MC
-#     # collect all MC + intime
-#     var_categ = [var_intime] + [vardf[i] for i in cuts]
-#     scale_mc = evtdf.pot_weight.unique()[0]
-#     # TODO:
-#     scale_intime_to_lightdata = 0.073
-#     scale_intime = scale_intime_to_lightdata
-#     weights_categ = [scale_intime*np.ones_like(var_intime)] + [scale_mc*np.ones_like(vardf[i]) for i in cuts] 
-#     if generator == "GiBUU":
-#         # TODO: GiBUU
-#         weights_categ = [scale_intime*np.ones_like(var_intime)] + [np.nan_to_num(scale_mc*evtdf[i].genweight, nan=1.) for i in cuts] 
-#         weights_categ = [scale_intime*np.ones_like(var_intime)] + [scale_mc*np.ones_like(vardf[i]) for i in [cuts[0]]] + [np.nan_to_num(scale_mc*evtdf[i].genweight, nan=1.) for i in cuts[1:]] 
-#     colors = ["black"] + colors
-#     labels = ["Cosmic\n(In-time)"] + labels
-
-#     mc_stack, _, _ = ax.hist(var_categ,
-#                                 bins=bins,
-#                                 weights=weights_categ,
-#                                 stacked=True,
-#                                 color=colors,
-#                                 label=labels,
-#                                 edgecolor='none',
-#                                 linewidth=0,
-#                                 density=False,
-#                                 histtype='stepfilled')
-
-
-#     # ---- MC stat err
-#     each_mc_hist_data = []
-#     each_mc_hist_err2 = []  # sum of squared weights for error
-
-#     for data, w in zip(var_categ, weights_categ):
-#         hist_vals, _ = np.histogram(data, bins=bins, weights=w)
-#         hist_err2, _ = np.histogram(data, bins=bins, weights=np.square(w))
-#         each_mc_hist_data.append(hist_vals)
-#         each_mc_hist_err2.append(hist_err2)
-
-#     total_mc = np.sum(each_mc_hist_data, axis=0)
-#     total_mc_err2 = np.sum(each_mc_hist_err2, axis=0)
-#     mc_stat_err = np.sqrt(total_mc_err2)
-
-#     ax.bar(
-#        bin_centers,
-#         2 * mc_stat_err,
-#         width=np.diff(bins),
-#         bottom=total_mc - mc_stat_err,
-#         facecolor='none',             # transparent fill
-#         edgecolor='dimgray',            # outline color of the hatching
-#         hatch='xxxx',                 # hatch pattern similar to ROOT's 3004
-#         linewidth=0.0,
-#         label='MC Stat. Unc.'
-#     )
-
-#     # ax.errorbar(bin_centers, total_mc, yerr=np.sqrt(total_mc), fmt='o', color='red')
-
-#     ax.set_xlim(bins[0], bins[-1])
-#     if ratio == False: # only plot xlabel if we're not plotting the ratio panel
-#         ax_r.set_xlabel(plot_labels[0])
-#     ax.set_ylabel(plot_labels[1])
-
-#     if vline is not None:
-#         ax.axvline(x=vline, color='red', linestyle='--')
-
-
-#     if ratio:
-#         # MC stat err
-#         mc_stat_err_ratio = mc_stat_err / total_mc
-#         mc_content_ratio = total_mc / total_mc
-#         mc_stat_err_ratio = np.nan_to_num(mc_stat_err_ratio, nan=0.)
-#         mc_content_ratio = np.nan_to_num(mc_content_ratio, nan=-999.)
-#         ax_r.bar(
-#             bin_centers,
-#             2*mc_stat_err_ratio,
-#             width=np.diff(bins),
-#             bottom=mc_content_ratio - mc_stat_err_ratio,
-#             facecolor='none',             # transparent fill
-#             edgecolor='dimgray',          # outline color of the hatching
-#             hatch='xxxx',                 # hatch pattern similar to ROOT's 3004
-#             linewidth=0.0,
-#             label='MC Stat. Unc.'
-#         )
-
-#         # data/MC ratio err
-#         data_ratio = total_data / total_mc
-#         data_ratio_eylow = data_eylow / total_mc
-#         data_ratio_eyhigh = data_eyhigh / total_mc
-#         data_ratio = np.nan_to_num(data_ratio, nan=-999.)
-#         data_ratio_eylow = np.nan_to_num(data_ratio_eylow, nan=0.)
-#         data_ratio_eyhigh = np.nan_to_num(data_ratio_eyhigh, nan=0.)
+        poisson_weights = []
+        for sidx, meta_seed in enumerate(meta_seeds):
+            # Combine universe seed with event seed for unique randomness -- per event, per universe
+            combined_seed = (universe_seed + meta_seed) % (2**32)
+            np.random.seed(combined_seed)
+            
+            poisson_val = np.random.poisson(poisson_mean)
+            poisson_weights.append(poisson_val)
         
-#         #data_ratio_errors = data_ratio_eylow + data_ratio_eyhigh
-#         #ax_ratio.errorbar(bin_centers, data_ratio, yerr=data_ratio_errors,
-#         #                 fmt='o', color='black', label='Data',
-#         #                 markersize=5, capsize=3, linewidth=1.5)
+        mcstat_univ_wgt[("MCstat", "univ_{}".format(uidx), "", "", "", "", "")] = np.array(poisson_weights)
+        MCstat_univ_events[uidx, :] = np.array(poisson_weights)
 
-#         ax_r.errorbar(bin_centers, data_ratio,
-#                   yerr=np.vstack((data_ratio_eylow, data_ratio_eyhigh)),
-#                   fmt='o', color='black')
-#                 #   , label='Data')
-#                 #   markersize=5, capsize=3, linewidth=1.5)
-        
-#         # if highest value is greater than 2.0, set ylim to 2.0
-#         # if np.max(data_ratio) > 2.0:
-#         ax_r.set_ylim(0.5, 1.5)
-
-#         ax_r.axhline(1.0, color='red', linestyle='--', linewidth=1)
-        
-#         ax_r.grid(True)
-#         ax_r.minorticks_on()
-#         ax_r.grid(which='minor', linestyle=':', linewidth=0.5, color='gray', alpha=0.5)
-
-#         ax_r.set_xlabel(plot_labels[0])
-#         ax_r.set_ylabel("Data/MC")
-
-#     # --- Legend
-#     accum_sum = [np.sum(data) for data in mc_stack]
-#     accum_sum = [0.] + accum_sum
-#     total_sum = accum_sum[-1]
-#     individual_sums = [accum_sum[i + 1] - accum_sum[i] for i in range(len(accum_sum) - 1)]
-#     fractions = [(count / total_sum) * 100 for count in individual_sums]
-#     legend_labels = [f"{label} ({frac:.1f}%)" for label, frac in zip(labels[::-1], fractions[::-1])]
-#     legend_labels += ["Data", "MC Stat. Unc."]
-#     leg = ax.legend(legend_labels, 
-#                     loc='upper left', 
-#                     fontsize=10, 
-#                     frameon=False, 
-#                     ncol=3, 
-#                     bbox_to_anchor=(0.02, 0.98))
-#     leg_height = leg.get_bbox_to_anchor().height
-#     max_data_with_err = np.max(total_data + data_eyhigh)
-#     # ax.set_ylim(0., 1.05 * max_data_with_err + leg_height)
-#     ax.set_ylim(0., 1.4 * max_data_with_err)
-
-#     # textbox
-#     # textbox = ax.text(0.95, 0.7, "GiBUU", transform=ax.transAxes, fontsize=20,
-#     #                   verticalalignment='top', horizontalalignment='right',
-#     #                   bbox=dict(facecolor='white', alpha=0.5))
-
-#     if save_fig:
-#         plt.savefig(save_name, bbox_inches='tight') #, dpi=300)
-#     plt.show()
-
-#     # bolder figure lines?
-#     # ax.tick_params(width=2, length=10)
-#     # for spine in ax.spines.values():
-#     #     spine.set_linewidth(2)
-    
-#     ret_dict = {"cuts": cuts}
-#     return ret_dict
+    evt_df = evt_df.join(mcstat_univ_wgt)
+    return evt_df, MCstat_univ_events
 
 
+def get_covariance_matrix(univ_events, 
+                          cv_events):
+    n_univ, n_bins = univ_events.shape
 
-def bar_plot(breakdown_type, generator,
-             evtdf,
-             show_plot=True, plot_labels=["", "", ""],
-             save_fig=False, save_name=None): #, scale, stage):
+    cov_frac = np.zeros((n_bins, n_bins))
+    cov = np.zeros((n_bins, n_bins))
+
+    # looping & calculating with the CV value for clarity, 
+    # but techincally np.cov should also be fine under the assumption of gaussian universes that we're using
+    for uidx in range(n_univ):
+        for i in range(univ_events.shape[1]):
+            for j in range(univ_events.shape[1]):
+                nom_i = cv_events[i] 
+                nom_j = cv_events[j] 
+
+                univ_i = univ_events[uidx, i] 
+                univ_j = univ_events[uidx, j] 
+
+                cov_entry = (univ_i - nom_i) * (univ_j - nom_j)
+                frac_cov_entry = ((univ_i - nom_i) / nom_i) * ( (univ_j - nom_j) / nom_j)
+
+                # TODO: uboone code has clipping that I'm not sure why.. investigate later
+                # if cov_entry > 0:
+                #     this_cov = max( cov_entry, eps * scale_factor)
+                # else:
+                #     this_cov = min( cov_entry, eps * scale_factor)
+
+                # if frac_cov_entry > 0:
+                #     this_frac_cov = max( frac_cov_entry, eps * scale_factor)
+                # else:
+                #     this_frac_cov = min( frac_cov_entry, eps * scale_factor)
+
+                cov[i, j] += cov_entry
+                cov_frac[i, j] += frac_cov_entry
+
+    cov = cov / n_univ
+    cov_frac = cov_frac / n_univ
+    corr = np.zeros_like(cov)
+    for i in range(len(cv_events)):
+        for j in range(len(cv_events)):
+            corr[i, j] = cov[i, j] / (np.sqrt(cov[i, i]) * np.sqrt(cov[j, j]))
+
+    return {"cov_frac": cov_frac, 
+            "cov": cov,
+            "corr": corr,
+            }
+
+
+def get_clipped_evts(df, var_col, bins):
+    eps = 1e-8
+    var = df[var_col]
+    var = np.clip(var, bins[0], bins[-1] - eps)
+
+    if 'pot_weight' in df.columns:
+        # print(f"pot scale: {df.pot_weight.unique()[0]}")
+        weights = df.loc[:, 'pot_weight']
+    else:
+        print("No pot_weight column found, return 1 as pot scale (expected for data)")
+        weights = np.ones_like(var)
+    return var, weights
+
+
+def get_univ_rates(evtdf, 
+                   var_config, 
+                   syst_name):
+    var = evtdf[var_config.var_evt_reco_col]
+    n_univ = len(evtdf[syst_name].columns)
+    univ_events = np.zeros((n_univ, len(var_config.bin_centers)))
+    for uidx in range(n_univ):
+        weights = evtdf[syst_name]["univ_{}".format(uidx)]
+        weights = np.where(np.isnan(weights), 1, weights) # nan are non-neutrino events
+        n_univ, _ = np.histogram(var, bins=var_config.bins, weights=weights)
+        univ_events[uidx, :] = n_univ
+    cv_events, _ = np.histogram(var, bins=var_config.bins)
+    return univ_events, cv_events
+
+
+def get_genie_univs(cov_type, evtdf, nudf, var_config, syst_name, n_univ=100, plot=False):
+    """
+    for the GENIE uncertainty on the xsec measurement
+    """
+    XSEC_UNIT = 1e-38 # TODO: this is a placeholder for the norm factor
+
+    if cov_type == "xsec":
+        print("generating covariance for xsec, using scale factor: {}".format(XSEC_UNIT))
+        scale_factor = XSEC_UNIT
+    elif cov_type == "rate":
+        scale_factor = 1.0
+    else:
+        raise ValueError("Invalid covariance type: {}, choose xsec or rate".format(cov_type))
+
+    bins = var_config.bins
+
+    ret = signal_hists(evtdf, nudf, var_config, return_data=True, plot=plot)
+    signal_allmc_cv = ret["nevts_allmc"]
+    nevts_signal_sel_truth = ret["nevts_sel_truth"]
+    signal_sel_reco_cv = ret["nevts_sel_reco"]
+    signal_sel_reco_cv *= scale_factor # = Response @ true_signal
+
+    evtdf_signal = evtdf[evtdf.nuint_categ == 1]
+    nudf_signal = nudf[nudf.nuint_categ == 1]
+
+    # reco variable histogram, topology breakdown
+    evtdf_div_topo = [evtdf[evtdf.nuint_categ == mode]for mode in topology_list]
+
+    univ_events = []
+    univ_effs   = []
+    univ_smears = []
+    for uidx in range(n_univ):
+        univ_col = syst_name + ("univ_{}".format(uidx),)
+
+        # ---- uncertainty on the signal rate ----
+        # only consider effect on the response matrix for the signal channel
+        if cov_type == "xsec":
+            signal_allmc_univ, _ = np.histogram(ret["var_allmc"],
+                                               weights=ret["wgt_allmc"]*nudf_signal[univ_col],
+                                               bins=bins)
+            
+            reco_vs_true = get_smear_matrix(ret["var_sel_truth"], 
+                                            ret["var_sel_reco"], 
+                                            weights=evtdf_signal[univ_col],
+                                            bins_2d=[bins, bins],
+                                            plot=plot)
+            univ_smears.append(reco_vs_true)
+
+            eff = get_eff(reco_vs_true, signal_allmc_univ) 
+            univ_effs.append(eff)
+
+            response_univ = get_response_matrix(reco_vs_true, eff, bins, plot=plot)
+            signal_univ = response_univ @ signal_allmc_cv # note that we multiply the CV signal rate!
+            # signal_univ = signal_cv
+
+        elif cov_type == "rate":
+            signal_univ, _ = np.histogram(ret["var_sel_reco"], 
+                                          weights=evtdf_signal[univ_col],
+                                          bins=bins)
+
+        else:
+            raise ValueError("Invalid covariance type: {}, choose xsec or rate".format(cov_type))
+
+        # ---- uncertainty on the background rate ----
+        # loop over background categories
+        # + univ background - cv background
+        # note: cv background subtraction cancels out with the cv background subtraction for the cv event rate. 
+        #       doing it anyways for the plot of universes on background subtracted event rate.
+        for this_evtdf in evtdf_div_topo[1:]:
+            var, wgt = get_clipped_evts(this_evtdf, var_config.var_evt_reco_col, bins)
+            univ_wgt = this_evtdf[univ_col].copy()
+            univ_wgt[np.isnan(univ_wgt)] = 1 ## IMPORTANT: make nan univ_wgt to 1. to ignore them
+            wgt *= univ_wgt
+            background_cv, _   = np.histogram(var, bins=bins)
+            background_univ, _ = np.histogram(var, bins=bins, weights=wgt)
+            signal_univ += background_univ - background_cv
+
+        signal_univ *= scale_factor
+        univ_events.append(signal_univ)
+
+    univ_events = np.array(univ_events)
+    return univ_events, signal_sel_reco_cv
+
+
+# ====== plotting functions ======
+
+def get_textloc_x(values, bins, textloc=[0.05, 0.55]):
+    textloc_x, _ = textloc
+    n_firsthalf = np.sum(values[:len(bins)//2])
+    n_secondhalf = np.sum(values[len(bins)//2:])
+    if n_firsthalf < n_secondhalf:
+        textloc_x, textloc_ha = textloc_x, 'left'
+    else:
+        textloc_x, textloc_ha = 1-textloc_x, 'right'
+    return textloc_x, textloc_ha
+
+def add_approval_text(approval, textloc_x, textloc_y, textloc_ha):
+    # SBND approval rank
+    if approval == "internal":
+        approval_text = r"$\mathbf{SBND}$ Internal"
+        textcolor = 'rosybrown'
+    elif approval == "preliminary":
+        approval_text = r"$\mathbf{SBND}$ Preliminary"
+        textcolor = 'gray'
+    else:
+        return  # no approval or unknown: do not add
+
+    plt.text(
+        textloc_x, textloc_y, 
+        approval_text, 
+        transform=plt.gca().transAxes, 
+        ha=textloc_ha, va='top',
+        fontsize=20, color=textcolor
+    )
+
+
+def bar_plot(breakdown_type="topology", 
+             generator=None,
+             evtdf=None,
+             show_plot=True, 
+             plot_labels=["", "", ""],
+             save_fig=False, 
+             save_name=None): 
 
     if breakdown_type == "nu_cosmics":
         ncateg = 3
@@ -307,67 +312,18 @@ def bar_plot(breakdown_type, generator,
         cut_nu_intfv = IsNu(evtdf) & InFV(evtdf.slc.truth.position, det=DETECTOR)
         cuts = [cut_cosmic, cut_nu_outfv, cut_nu_intfv]
 
-    elif breakdown_type == "topology":
-        ncateg = 7
-        labels = topology_labels[::-1]
-        colors = topology_colors[::-1]
+        if breakdown_type == "topology":
+            labels = topology_labels
+            colors = topology_colors
+            cuts = get_int_category(evtdf, ret_cuts=True)
 
-        cut_cosmic = IsCosmic(evtdf)
-        cut_nu_outfv = IsNuOutFV(evtdf)
-        cut_nu_infv_nu_other = IsNuInFV_NuOther(evtdf)
-        cut_nu_infv_numu_nc = IsNuInFV_NumuNC(evtdf)
-        cut_nu_infv_numu_cc_other = IsNuInFV_NumuCC_Other(evtdf)
-        cut_nu_infv_numu_cc_np0pi = IsNuInFV_NumuCC_Np0pi(evtdf)
-        cut_nu_infv_numu_cc_1p0pi = IsNuInFV_NumuCC_1p0pi(evtdf)
+        elif breakdown_type == "genie":
+            labels = genie_mode_labels
+            colors = genie_mode_colors
+            cuts = get_genie_category(evtdf, ret_cuts=True)
 
-        cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
-                cut_nu_infv_numu_cc_other, cut_nu_infv_numu_cc_np0pi, cut_nu_infv_numu_cc_1p0pi]
-
-    elif breakdown_type == "genie":
-        ncateg = 9
-
-        if generator == "GENIE":
-            labels = genie_mode_labels[::-1]
-            colors = genie_mode_colors[::-1]
-
-            cut_cosmic = IsCosmic(evtdf)
-            cut_nu_outfv = IsNuOutFV(evtdf)
-            cut_nu_infv_nu_other = IsNuInFV_NuOther(evtdf)
-            cut_nu_infv_numu_nc = IsNuInFV_NumuNC(evtdf)
-            # cut_nu_infv_numu_coh = IsNuInFV_NumuCC_COH(evtdf)
-            cut_nu_infv_numu_othermode = IsNuInFV_NumuCC_OtherMode(evtdf)
-            cut_nu_infv_numu_cc_dis = IsNuInFV_NumuCC_DIS(evtdf)
-            cut_nu_infv_numu_cc_res = IsNuInFV_NumuCC_RES(evtdf)
-            cut_nu_infv_numu_cc_me = IsNuInFV_NumuCC_MEC(evtdf)
-            cut_nu_infv_numu_cc_qe = IsNuInFV_NumuCC_QE(evtdf)
-            cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
-                    cut_nu_infv_numu_othermode, cut_nu_infv_numu_cc_dis, cut_nu_infv_numu_cc_res, 
-                    cut_nu_infv_numu_cc_me, cut_nu_infv_numu_cc_qe]
-
-        elif generator == "GiBUU":
-            labels = gibuu_mode_labels[::-1]
-            colors = gibuu_mode_colors[::-1]
-
-            cut_cosmic = IsCosmic(evtdf)
-            cut_nu_outfv = IsNuOutFV(evtdf)
-            cut_nu_infv_nu_other = IsNuInFV_NuOther(evtdf)
-            cut_nu_infv_numu_nc = IsNuInFV_NumuNC(evtdf)
-            print("numu NC", cut_nu_infv_numu_nc.sum())
-            # cut_nu_infv_numu_coh = IsNuInFV_NumuCC_COH(evtdf)
-            cut_nu_infv_numu_othermode = IsNuInFV_NumuCC_OtherMode_GiBUU(evtdf)
-            cut_nu_infv_numu_cc_dis = IsNuInFV_NumuCC_DIS_GiBUU(evtdf)
-            cut_nu_infv_numu_cc_res = IsNuInFV_NumuCC_RES_GiBUU(evtdf)
-            cut_nu_infv_numu_cc_me = IsNuInFV_NumuCC_MEC_GiBUU(evtdf)
-            cut_nu_infv_numu_cc_qe = IsNuInFV_NumuCC_QE_GiBUU(evtdf)
-            cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv_nu_other, cut_nu_infv_numu_nc, 
-                    cut_nu_infv_numu_othermode, cut_nu_infv_numu_cc_dis, cut_nu_infv_numu_cc_res, 
-                    cut_nu_infv_numu_cc_me, cut_nu_infv_numu_cc_qe]
         else:
-            raise ValueError("Invalid generator: %s, please choose between [GENIE, GiBUU]" % generator)
-
-    else:
-        raise ValueError("Invalid breakdown_type: %s, please choose between [nu_cosmics, topolgy, or genie]" % breakdown_type)
-
+            raise ValueError("Invalid breakdown_type: %s, please choose between [topology, genie, or genie_sb]" % breakdown_type)
 
     fig, ax = plt.subplots(figsize = (6, ncateg*0.6))
 
@@ -381,17 +337,6 @@ def bar_plot(breakdown_type, generator,
         size = [scale*len(evtdf[i])*wgt_mean for i, wgt_mean in zip(cuts, wgt_means)]
     else:
         size = [scale*len(evtdf[i]) for i in cuts]
-
-    # # make sure that the categories don't overlap
-    # for i in range(len(cuts)):
-    #     for j in range(i+1, len(cuts)):
-    #         if (cuts[i] & cuts[j]).sum() > 0:
-    #             print("Categories overlap:", labels[i], labels[j])
-    # # and check if the categories cover all events
-    # if not np.array(size).sum() == len(evtdf):
-    #     print("Categories do not cover all events")
-    #     print("Total events:", len(evtdf))
-    #     print("Sum of categories:", np.array(size).sum())
 
     bars = plt.barh(labels, size, align='center', color = colors)
     tot_count = np.array(size).sum()
@@ -425,40 +370,20 @@ def bar_plot(breakdown_type, generator,
     return ret_dict
 
 
-#TODO: move to selection_definitions.py
-# nu_cosmics_labels = ["Cosmic", r"Out-FV $\nu$", r"FV $\nu$"]
-# # nu_cosmics_colors = ["#ED5564", "#FFCE54", "#A0D568"]
-# nu_cosmics_colors = ["gray", "C0", "C1"]
-
-# topology_labels = ["Cosmic", r"Out-FV $\nu$", r"Other $\nu$", r"$\nu$ NC",  
-#                   r"$\nu_{\mu}$ CC Other", r"$\nu_{\mu}$ CC Np0$\pi$", r"$\nu_{\mu}$ CC 1p0$\pi$"]
-# topology_colors = ["gray", "sienna", "crimson", "darkgreen", 
-#                   "coral", "darkslateblue", "mediumslateblue"]
-
-# genie_labels = ["Cosmic", r"Out-FV $\nu$", r"Other $\nu$", r"$\nu$ NC",
-#                 r"$\nu_{\mu}$ CC Other", r"$\nu_{\mu}$ CCDIS",
-#                 r"$\nu_{\mu}$ CCRES", r"$\nu_{\mu}$ CCMEC",
-#                 r"$\nu_{\mu}$ CCQE"]
-# genie_colors = ["gray", "sienna", "crimson", "darkgreen",
-#                 "#BFB17C", "#D88A3B", "#2c7c94",
-#                 "#390C1E", "#9b5580"]
-
-
-# TODO: combine with "plot_topology_breakdown" and "plot_genie_breakdown" functions below
-def hist_plot(breakdown_type="topology",
-              mc_df=None,
-              data_df=None,
-              intime_df=None,
-              var_config="",
-              plot_labels=["", "", ""],
-              ax_ylim_ratio=1.5,
-              ratio = False,
-              syst = False,
-              vline = None,
-              textloc=[0.05, 0.55],
-              approval="internal",
-              save_fig=False, 
-              save_name=None): 
+def overlay_hists(breakdown_type="topology",
+                  mc_df=None,
+                  data_df=None,
+                  intime_df=None,
+                  var_config="",
+                  plot_labels=["", "", ""],
+                  ax_ylim_ratio=1.5,
+                  ratio = False,
+                  syst = False,
+                  vline = None,
+                  textloc=[0.05, 0.55],
+                  approval="internal",
+                  save_fig=False, 
+                  save_name=None): 
 
     # ==== prepare dfs for plotting ====
 
@@ -502,6 +427,12 @@ def hist_plot(breakdown_type="topology",
         total_mc_err2 = np.sum(each_mc_hist_err2, axis=0)
         mc_stat_err = np.sqrt(total_mc_err2)
 
+        # if topology breakdown, add background CV
+        if breakdown_type == "topology":
+            total_mc_bkgd = total_mc - each_mc_hist_data[-1]
+        else:
+            total_mc_bkgd = None
+
     else:
         vardf = None
         var_categ = None
@@ -511,7 +442,7 @@ def hist_plot(breakdown_type="topology",
     # Data
     if data_df is not None:
         vardf_data, _   = get_clipped_evts(data_df, var_config.var_evt_reco_col, var_config.bins)
-        total_data, _ = np.histogram(vardf_data, bins=var_config.bins)
+        total_data, _ = np.histogram(vardf_data, bins=var_config.bins, weights=data_df.pot_weight)
         data_eylow, data_eyhigh = return_data_stat_err(total_data)
 
         # data/MC
@@ -737,29 +668,9 @@ def hist_plot(breakdown_type="topology",
             ymax = ax.get_ylim()[1]
             ax.vlines(x=v, ymin=0, ymax=ymax*0.75, color='red', linestyle='--')
 
-    # == textboxes to add approval rank and GENIE version ==
-    # decide text location based on the distribution
-    textloc_x, textloc_y = textloc
-    n_firsthalf = np.sum(total_mc[:len(var_config.bins)//2])
-    n_secondhalf = np.sum(total_mc[len(var_config.bins)//2:])
-    if n_firsthalf < n_secondhalf:
-        textloc_x, textloc_ha = textloc_x, 'left'
-    else:
-        textloc_x, textloc_ha = 1-textloc_x, 'right'
-
-    # SBND approval rank
-    if approval == "internal":
-        approval_text = r"$\mathbf{SBND}$ Internal"
-        textcolor = 'rosybrown'
-    elif approval == "preliminary":
-        approval_text = r"$\mathbf{SBND}$ Preliminary"
-        textcolor = 'gray'
-
-    ax.text(textloc_x, textloc_y, 
-            approval_text, 
-            transform=ax.transAxes, 
-            ha=textloc_ha, va='top',
-            fontsize=20, color=textcolor)
+    textloc_x, textloc_ha = get_textloc_x(total_mc, var_config.bins, textloc)
+    textloc_y = textloc[1]
+    add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
 
     # GEINE version
     ax.text(textloc_x, textloc_y-0.08, r"GENIE v3.4.0 AR23_00i_00_000", transform=ax.transAxes, 
@@ -776,226 +687,45 @@ def hist_plot(breakdown_type="topology",
 
     return {"cuts": cuts, 
             "total_mc": total_mc, 
+            "total_mc_bkgd": total_mc_bkgd,
             "total_data": total_data}
 
 
-def hist_plot_pdg_breakdown(
-              trkdf, vardf, 
-              vardf_data, 
-              bins,
-              plot_labels=["", "", ""],
-              ratio = True,
-              vline = None,
-              save_fig=False, save_name=None): 
+# def hist_plot_pdg_breakdown(
+#               trkdf, vardf, 
+#               vardf_data, 
+#               bins,
+#               plot_labels=["", "", ""],
+#               ratio = True,
+#               vline = None,
+#               save_fig=False, save_name=None): 
 
-    assert len(trkdf) == len(vardf)
+#     labels = ["Muon", "Pion", "Proton", "Electron", "Photon", "Other"]
+#     colors = ["blue", "green", "red", "purple", "orange", "gray"]
 
-    tot_mc_count = len(trkdf)
-    tot_data_count = len(vardf_data)
+#     cut_muon = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 13)
+#     cut_pion = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 211)
+#     cut_proton = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 2212)
+#     cut_electron = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 11)
+#     cut_photon = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 22)
+#     cut_other = ~cut_muon & ~cut_pion & ~cut_proton & ~cut_electron & ~cut_photon
 
-    labels = ["Muon", "Pion", "Proton", "Electron", "Photon", "Other"]
-    colors = ["blue", "green", "red", "purple", "orange", "gray"]
-
-    cut_muon = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 13)
-    cut_pion = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 211)
-    cut_proton = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 2212)
-    cut_electron = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 11)
-    cut_photon = (np.abs(trkdf.pfp.trk.truth.p.pdg) == 22)
-    cut_other = ~cut_muon & ~cut_pion & ~cut_proton & ~cut_electron & ~cut_photon
-
-    cuts = [cut_muon, cut_pion, cut_proton, cut_electron, cut_photon, cut_other]
-
-    # --- Plot template
-    if ratio:
-        fig, axs = plt.subplots(2, 1, figsize=(8.5, 8), 
-                               sharex=True, gridspec_kw={'height_ratios': [4, 1]})
-        fig.subplots_adjust(hspace=0.05)
-        ax = axs[0]
-        ax_r = axs[1]
-    else:
-        fig, ax = plt.subplots()
-
-    bin_centers = 0.5 * (bins[:-1] + bins[1:])
-
-    # --- Data
-    total_data, bins = np.histogram(vardf_data, bins=bins)
-    data_err = np.sqrt(total_data)
-    ax.errorbar(bin_centers, total_data, yerr=data_err, 
-                fmt='o', color='black')  # error bars
-
-    # --- MC
-    # collect all MC + intime
-    var_categ = [vardf[i] for i in cuts]
-    scale_mc = trkdf.pot_weight.unique()[0]
-    # TODO:
-    weights_categ = [scale_mc*np.ones_like(vardf[i]) for i in cuts] 
-    colors = colors
-    labels = labels
-
-    mc_stack, _, _ = ax.hist(var_categ,
-                                bins=bins,
-                                weights=weights_categ,
-                                stacked=True,
-                                color=colors,
-                                label=labels,
-                                edgecolor='none',
-                                linewidth=0,
-                                density=False,
-                                histtype='stepfilled')
+#     cuts = [cut_muon, cut_pion, cut_proton, cut_electron, cut_photon, cut_other]
 
 
-    # ---- MC stat err
-    each_mc_hist_data = []
-    each_mc_hist_err2 = []  # sum of squared weights for error
+def plot_univ_hists(
+                univ_events, 
+                cv_events,
+                syst_name, 
+                var_config, 
+                approval="internal",
+                textloc=[0.05, 0.55],
+                save_fig=False, 
+                save_name=None): 
 
-    for data, w in zip(var_categ, weights_categ):
-        hist_vals, _ = np.histogram(data, bins=bins, weights=w)
-        hist_err2, _ = np.histogram(data, bins=bins, weights=np.square(w))
-        each_mc_hist_data.append(hist_vals)
-        each_mc_hist_err2.append(hist_err2)
-
-    total_mc = np.sum(each_mc_hist_data, axis=0)
-    total_mc_err2 = np.sum(each_mc_hist_err2, axis=0)
-    mc_stat_err = np.sqrt(total_mc_err2)
-
-    ax.bar(
-       bin_centers,
-        2 * mc_stat_err,
-        width=np.diff(bins),
-        bottom=total_mc - mc_stat_err,
-        facecolor='none',             # transparent fill
-        edgecolor='dimgray',            # outline color of the hatching
-        hatch='xxxx',                 # hatch pattern similar to ROOT's 3004
-        linewidth=0.0,
-        label='MC Stat. Unc.'
-    )
-
-
-    ax.set_xlim(bins[0], bins[-1])
-    if ratio == False: # only plot xlabel if we're not plotting the ratio panel
-        ax_r.set_xlabel(plot_labels[0])
-    ax.set_ylabel(plot_labels[1])
-    ax.set_title(plot_labels[2])
-
-    if ratio:
-        # MC stat err
-        mc_stat_err_ratio = mc_stat_err / total_mc
-        mc_content_ratio = total_mc / total_mc
-        mc_stat_err_ratio = np.nan_to_num(mc_stat_err_ratio, nan=0.)
-        mc_content_ratio = np.nan_to_num(mc_content_ratio, nan=-999.)
-        ax_r.bar(
-            bin_centers,
-            2*mc_stat_err_ratio,
-            width=np.diff(bins),
-            bottom=mc_content_ratio - mc_stat_err_ratio,
-            facecolor='none',             # transparent fill
-            edgecolor='dimgray',          # outline color of the hatching
-            hatch='xxxx',                 # hatch pattern similar to ROOT's 3004
-            linewidth=0.0,
-            label='MC Stat. Unc.'
-        )
-
-        # data/MC ratio err
-        data_eylow, data_eyhigh = return_data_stat_err(total_data)
-
-        data_ratio = total_data / total_mc
-        data_ratio_eylow = data_eylow / total_mc
-        data_ratio_eyhigh = data_eyhigh / total_mc
-        data_ratio = np.nan_to_num(data_ratio, nan=-999.)
-        data_ratio_eylow = np.nan_to_num(data_ratio_eylow, nan=0.)
-        data_ratio_eyhigh = np.nan_to_num(data_ratio_eyhigh, nan=0.)
-        
-        #data_ratio_errors = data_ratio_eylow + data_ratio_eyhigh
-        #ax_ratio.errorbar(bin_centers, data_ratio, yerr=data_ratio_errors,
-        #                 fmt='o', color='black', label='Data',
-        #                 markersize=5, capsize=3, linewidth=1.5)
-
-        ax_r.errorbar(bin_centers, data_ratio,
-                  yerr=np.vstack((data_ratio_eylow, data_ratio_eyhigh)),
-                  fmt='o', color='black')
-                #   , label='Data')
-                #   markersize=5, capsize=3, linewidth=1.5)
-        
-        # if highest value is greater than 2.0, set ylim to 2.0
-        ax_r.axhline(1.0, color='red', linestyle='--', linewidth=1)
-        
-        ax_r.grid(True)
-        ax_r.minorticks_on()
-        ax_r.grid(which='minor', linestyle=':', linewidth=0.5, color='gray', alpha=0.5)
-
-        ax_r.set_xlabel(plot_labels[0])
-        ax_r.set_ylabel("Data/MC")
-
-        if np.max(data_ratio + data_ratio_eyhigh) > 2.0:
-            ax_r.set_ylim(0., 2.0)
-
-    # --- Legend
-    accum_sum = [np.sum(data) for data in mc_stack]
-    accum_sum = [0.] + accum_sum
-    total_sum = accum_sum[-1]
-    individual_sums = [accum_sum[i + 1] - accum_sum[i] for i in range(len(accum_sum) - 1)]
-    fractions = [(count / total_sum) * 100 for count in individual_sums]
-    legend_labels = [f"{label} ({frac:.1f}%)" for label, frac in zip(labels[::-1], fractions[::-1])]
-    legend_labels += ["Data ({})".format(tot_data_count), "MC Stat. Unc."]
-    leg = ax.legend(legend_labels, 
-                    loc='upper left', 
-                    fontsize=10, 
-                    frameon=False, 
-                    ncol=3, 
-                    bbox_to_anchor=(0.015, 0.985))
-    leg_height = leg.get_bbox_to_anchor().height
-    max_data_with_err = np.max(total_data + data_eyhigh)
-    # ax.set_ylim(0., 1.05 * max_data_with_err + leg_height)
-    ax.set_ylim(0., 1.4 * max_data_with_err)
-
-    if vline is not None:
-        # Draw a vertical line from y=0 up to the max value of the histogram
-        for v in vline:
-            ymax = ax.get_ylim()[1]
-            ax.vlines(x=v, ymin=0, ymax=ymax*0.75, color='red', linestyle='--')
-
-    # --- "SBND Preliminary" textbox
-    # decide if the distribution is tilted to the right or left
-    n_firsthalf = np.sum(total_data[:len(bins)//2])
-    n_secondhalf = np.sum(total_data[len(bins)//2:])
-    if n_firsthalf > n_secondhalf:
-        textloc_x = 0.95
-        textloc_ha = 'right'
-    else:
-        textloc_x = 0.05
-        textloc_ha = 'left'
-
-    ax.text(textloc_x, 0.65, "SBND Preliminary", 
-            transform=ax.transAxes, 
-            fontsize=12, 
-            # fontweight='bold', 
-            color='gray',
-            ha=textloc_ha, 
-            va='top')
-
-
-    if save_fig:
-        plt.savefig(save_name, bbox_inches='tight', dpi=300)
-    plt.show()
-
-    # bolder figure lines?
-    # ax.tick_params(width=2, length=10)
-    # for spine in ax.spines.values():
-    #     spine.set_linewidth(2)
-    
-    ret_dict = {"cuts": cuts}
-    return ret_dict
-
-def match_trkdf_to_slcdf(trkdf, slcdf):
-    # trkdf: df to match
-    # slcdf: df to match to
-    matched_trkdf = trkdf.reset_index(level=[3]).loc[slcdf.index].reset_index().set_index(trkdf.index.names)
-    return matched_trkdf
-
-
-def plot_univ_hist(evtdf, var_config, syst_name, univ_events, cv_events):
-    # n_univ = len(evtdf[syst_name].columns)
+    assert univ_events.shape[1] == len(cv_events) 
     n_univ = univ_events.shape[0]
+
     if (n_univ > 10):
         colors = ["C0", "C1", "C2"]
 
@@ -1029,12 +759,10 @@ def plot_univ_hist(evtdf, var_config, syst_name, univ_events, cv_events):
     # if too few universes, just plot all of them in gray
     else:
         for i in range(n_univ):
-            if i == 0:
-                plt.hist(var_config.bin_centers, bins=var_config.bins, weights=univ_events[i], histtype="step", color="gray", label="Universe")
-            else:
-                plt.hist(var_config.bin_centers, bins=var_config.bins, weights=univ_events[i], histtype="step", color="gray")
+            show_label = "Universe" if i == 0 else None
+            plt.hist(var_config.bin_centers, bins=var_config.bins, weights=univ_events[i], histtype="step", color="gray", label=show_label)
 
-    # CV universe
+    # plot CV last so that it is on top of the universes
     plt.hist(var_config.bin_centers, bins=var_config.bins, weights=cv_events, histtype="step", color="k", label="Central Value")
 
     plt.xlim(var_config.bins[0], var_config.bins[-1])
@@ -1042,83 +770,66 @@ def plot_univ_hist(evtdf, var_config, syst_name, univ_events, cv_events):
     plt.ylabel("Events / Bin")
     plt.title(syst_name)
 
-    # plt.text(0.05, 0.05, "SBND Internal", fontsize=12, color="rosybrown", ha="left", va="bottom", transform=ax.transAxes)
-    # plt.legend(reverse=True, frameon=False)
     plt.legend(frameon=False)
+
+    # == textbox to add approval rank ==
+    # decide text location based on the distribution
+    textloc_x, textloc_ha = get_textloc_x(cv_events, var_config.bins, textloc)
+    textloc_y = textloc[1]
+    add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
+
+
+    if save_fig:
+        plt.savefig(save_name+".pdf", bbox_inches='tight')
+
     plt.show();
 
-def get_covariance(univ_events, cv_events):
-    n_univ = univ_events.shape[0]
-    n_bins = univ_events.shape[1]
 
-    Covariance_Frac = np.zeros((n_bins, n_bins))
-    Covariance = np.zeros((n_bins, n_bins))
+def plot_frac_unc(frac_unc, 
+                  var_config, 
+                  plot_labels=["", "", ""],
+                  textloc=[0.05, 0.55],
+                  approval="internal",
+                  save_fig=False, 
+                  save_name=None):
 
-    # I'm looping & calculating with the CV value for clarity, 
-    # but techincally np.cov should also be fine under the assumption of gaussian universes that we're using
-    for uidx in range(n_univ):
-        for i in range(univ_events.shape[1]):
-            for j in range(univ_events.shape[1]):
-                nom_i = cv_events[i] 
-                nom_j = cv_events[j] 
+    plt.hist(var_config.bin_centers, bins=var_config.bins, weights=frac_unc, histtype="step", color="black")
 
-                univ_i = univ_events[uidx, i] 
-                univ_j = univ_events[uidx, j] 
+    plt.xlim(var_config.bins[0], var_config.bins[-1])
+    plt.xlabel(var_config.var_labels[0])
+    plt.ylabel("Fractional Uncertainty")
+    plt.title(plot_labels[2])
+    plt.grid(True)
 
-                cov_entry = (univ_i - nom_i) * (univ_j - nom_j)
-                frac_cov_entry = ((univ_i - nom_i) / nom_i) * ( (univ_j - nom_j) / nom_j)
+    textloc_x, textloc_ha = get_textloc_x(frac_unc, var_config.bins, textloc)
+    textloc_y = textloc[1]
+    add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
 
-                # TODO: this clipping exists in the uboone code, but I'm not sure why..?
-                # if cov_entry > 0:
-                #     this_cov = max( cov_entry, eps * scale_factor)
-                # else:
-                #     this_cov = min( cov_entry, eps * scale_factor)
-
-                # if frac_cov_entry > 0:
-                #     this_frac_cov = max( frac_cov_entry, eps * scale_factor)
-                # else:
-                #     this_frac_cov = min( frac_cov_entry, eps * scale_factor)
-
-                Covariance[i, j] += cov_entry
-                Covariance_Frac[i, j] += frac_cov_entry
-
-    Covariance = Covariance / n_univ
-    Covariance_Frac = Covariance_Frac / n_univ
-    Correlation = np.zeros_like(Covariance)
-    for i in range(len(cv_events)):
-        for j in range(len(cv_events)):
-            Correlation[i, j] = Covariance[i, j] / (np.sqrt(Covariance[i, i]) * np.sqrt(Covariance[j, j]))
-
-    return {"Covariance_Frac": Covariance_Frac, 
-            "Covariance": Covariance,
-            "Correlation": Correlation,
-            }
+    if save_fig:
+        plt.savefig(save_name+".pdf", bbox_inches='tight')
+    plt.show();
 
 
-def plot_heatmap(matrix, var_config, title="", save_fig=False, save_fig_name=None):
+def plot_heatmap(matrix, 
+                 var_config, 
+                 title="", 
+                 save_fig=False, 
+                 save_fig_name=None):
 
-    unif_bin = np.linspace(0., float(len(var_config.bins) - 1), len(var_config.bins))
+    nbins = len(var_config.bins)
+    assert nbins-1 == matrix.shape[0] == matrix.shape[1]
+    unif_bin = np.linspace(0., float(nbins - 1), nbins)
     extent = [unif_bin[0], unif_bin[-1], unif_bin[0], unif_bin[-1]]
 
-    x_edges = np.array(var_config.bins)
-    y_edges = np.array(var_config.bins)
-    x_tick_positions = (unif_bin[:-1] + unif_bin[1:]) / 2
-    y_tick_positions = (unif_bin[:-1] + unif_bin[1:]) / 2
-
-    x_labels = bin_range_labels(x_edges)
-    y_labels = bin_range_labels(y_edges)
+    x_edges, y_edges = np.array(var_config.bins), np.array(var_config.bins)
+    x_tick_positions, y_tick_positions = (unif_bin[:-1] + unif_bin[1:]) / 2, (unif_bin[:-1] + unif_bin[1:]) / 2
+    x_labels, y_labels = bin_range_labels(x_edges), bin_range_labels(y_edges)
 
     fig, ax = plt.subplots(figsize=(10, 10))
     plt.imshow(matrix, extent=extent, origin="lower")
-    plt.colorbar(shrink=0.7)
-    plt.xticks(x_tick_positions, x_labels, rotation=45, ha="right")
-    plt.yticks(y_tick_positions, y_labels)
 
-    plot_labels = var_config.var_labels
-    plt.xlabel(plot_labels[0], fontsize=20)
-    plt.ylabel(plot_labels[1], fontsize=20)
-    for i in range(matrix.shape[0]):      # rows (y)
-        for j in range(matrix.shape[1]):  # columns (x)
+    for i in range(nbins-1):      # rows (y)
+        for j in range(nbins-1):  # columns (x)
             value = matrix[i, j]
             if not np.isnan(value):  # skip NaNs
                 plt.text(
@@ -1128,188 +839,30 @@ def plot_heatmap(matrix, var_config, title="", save_fig=False, save_fig_name=Non
                     color=get_text_color(value),
                     fontsize=10
                 )
+
+    plt.colorbar(shrink=0.7)
+    plt.xticks(x_tick_positions, x_labels, rotation=45, ha="right")
+    plt.yticks(y_tick_positions, y_labels)
+    plt.xlabel(var_config.var_labels[0], fontsize=20)
+    plt.ylabel(var_config.var_labels[1], fontsize=20)
     plt.title(title, fontsize=20)
+
     if save_fig:
         plt.savefig("{}.png".format(save_fig_name), bbox_inches='tight', dpi=300)
     plt.show();
 
 
-def get_univ_rates(evtdf, var_config, syst_name):
-    var = evtdf[var_config.var_evt_reco_col]
-    cv_events, _ = np.histogram(var, bins=var_config.bins)
-
-    univ_events = []
-    for uidx in range(len(evtdf[syst_name].columns)):
-        weights = evtdf[syst_name]["univ_{}".format(uidx)]
-        # fill nan (these are non-neutrino events) with 1
-        weights = np.where(np.isnan(weights), 1, weights)
-        n, bins = np.histogram(var, bins=var_config.bins, weights=weights)
-        univ_events.append(n)
-    univ_events = np.array(univ_events)
-    return univ_events, cv_events
-
-def get_clipped_evts(df, var_col, bins):
-    eps = 1e-8
-    var = df[var_col]
-    var = np.clip(var, bins[0], bins[-1] - eps)
-
-    if 'pot_weight' in df.columns:
-        # print(f"pot scale: {df.pot_weight.unique()[0]}")
-        weights = df.loc[:, 'pot_weight']
-    else:
-        print("No pot_weight column found, return 1 as pot scale (expected for data)")
-        weights = np.ones_like(var)
-    return var, weights
-
-def get_distributions(mc_evt_df, mc_nu_df, var_config):
-    # Total MC reco muon momentum: for fake data
-    var_total_mc, weights_total_mc = get_clipped_evts(mc_evt_df, var_config.var_evt_reco_col, var_config.bins)
-
-    # --- all events, selected ---
-    # mc_evt_df divided into topology modes for subtraction from data in future
-    # first item in list is the signal topology
-    mc_evt_df_divided = [mc_evt_df[mc_evt_df.nuint_categ == mode]for mode in topology_list]
-
-    # Reco variable distribution for each 'nuint_categ' for stack plot and subtraction from the fake data
-    var_per_nuint_categ_mc, weights_per_categ = [], []
-    for mode in topology_list:
-        var, weights = get_clipped_evts(mc_evt_df[mc_evt_df.nuint_categ == mode], var_config.var_evt_reco_col, var_config.bins)
-        var_per_nuint_categ_mc.append(var)
-        weights_per_categ.append(weights)
-
-    # Reco variable distribution for each genie mode
-    var_per_genie_mode_mc, weights_per_genie_mode = [], []
-    for mode in genie_mode_list:
-        var, weights = get_clipped_evts(mc_evt_df[mc_evt_df.genie_categ == mode], var_config.var_evt_reco_col, var_config.bins)
-        var_per_genie_mode_mc.append(var)
-        weights_per_genie_mode.append(weights)
-
-    # --- signal events ---
-    # selected, for response matrix
-    # Signal event's reco muon momentum after the event selection
-    var_signal_sel_reco, weight_signal = get_clipped_evts(mc_evt_df[mc_evt_df.nuint_categ == 1], var_config.var_evt_reco_col, var_config.bins)
-
-    # Signal event's true muon momentum after the event selection
-    var_signal_sel_truth, weight_true_signal = get_clipped_evts(mc_evt_df[mc_evt_df.nuint_categ == 1], var_config.var_evt_truth_col, var_config.bins)
-
-    # total generated, for efficiency vector
-    # Signal event's true muon momentum without event selection
-    var_truth_signal, weight_truth_signal = get_clipped_evts(mc_nu_df[mc_nu_df.nuint_categ == 1], var_config.var_nu_col, var_config.bins)
-
-    return {
-        "var_total_mc": var_total_mc,
-        "weights_total_mc": weights_total_mc,
-        "mc_evt_df_divided": mc_evt_df_divided,
-        "var_per_nuint_categ_mc": var_per_nuint_categ_mc,
-        "weights_per_categ": weights_per_categ,
-        "var_per_genie_mode_mc": var_per_genie_mode_mc,
-        "weights_per_genie_mode": weights_per_genie_mode,
-        "var_signal_sel_reco": var_signal_sel_reco,
-        "weight_signal": weight_signal,
-        "var_signal_sel_truth": var_signal_sel_truth,
-        "weight_true_signal": weight_true_signal,
-        "var_truth_signal": var_truth_signal,
-        "weight_truth_signal": weight_truth_signal,
-    }
-
-
-# TODO: load xsec unit factor as a global variable, instead of calculating it every time
-def get_genie_univs(cov_type, mc_evt_df, mc_nu_df, var_config, syst_name, n_univ=100, plot=False):
-    """
-    for the GENIE uncertainty on the xsec measurement
-    """
-    XSEC_UNIT = 1e-38
-
-    if cov_type == "xsec":
-        print("generating covariance for xsec, using scale factor: {}".format(XSEC_UNIT))
-        scale_factor = XSEC_UNIT
-    elif cov_type == "rate":
-        scale_factor = 1.0
-    else:
-        raise ValueError("Invalid covariance type: {}, choose xsec or rate".format(cov_type))
-
-    ret_dists = get_distributions(mc_evt_df, mc_nu_df, var_config)
-    nevts_signal_truth, _     = np.histogram(ret_dists["var_truth_signal"],     bins=var_config.bins, weights=ret_dists["weight_truth_signal"])
-    nevts_signal_sel_truth, _ = np.histogram(ret_dists["var_signal_sel_truth"], bins=var_config.bins, weights=ret_dists["weight_signal"])
-    nevts_signal_sel_reco, _  = np.histogram(ret_dists["var_signal_sel_reco"],  bins=var_config.bins, weights=ret_dists["weight_signal"])
-
-    signal_cv = nevts_signal_sel_reco * scale_factor # = Response @ true_signal
-
-    univ_events = []
-    univ_effs   = []
-    univ_smears = []
-    for uidx in range(n_univ):
-        # univ_col_evt = ("mc", syst_name, "univ_{}".format(uidx)) #, "", "", "", "") #, "", "")
-        # univ_col_mc = ("mc", syst_name, "univ_{}".format(uidx), "")
-        univ_col = ("mc", syst_name, "univ_{}".format(uidx))
-
-        # ---- uncertainty on the signal rate ----
-        # only consider effect on the response matrix for the signal channel
-        if cov_type == "xsec":
-            true_signal_univ, _ = np.histogram(ret_dists["var_truth_signal"], bins=var_config.bins, 
-                                               weights=ret_dists["weight_truth_signal"]*mc_nu_df[mc_nu_df.nuint_categ == 1][univ_col])
-            
-            reco_vs_true = get_smear_matrix(ret_dists["var_signal_sel_truth"], ret_dists["var_signal_sel_reco"], [var_config.bins, var_config.bins],
-                                            weights=mc_evt_df[mc_evt_df.nuint_categ == 1][univ_col], plot=plot)
-            univ_smears.append(reco_vs_true)
-
-            eff = get_eff(reco_vs_true, true_signal_univ) 
-            univ_effs.append(eff)
-
-            Response_univ = get_response_matrix(reco_vs_true, eff, var_config.bins, plot=plot)
-            signal_univ = Response_univ @ nevts_signal_truth # note that we multiply the CV signal rate!
-            # signal_univ = signal_cv
-
-        elif cov_type == "rate":
-            signal_univ, _ = np.histogram(ret_dists["var_signal_sel_reco"], bins=var_config.bins, 
-                                          weights=mc_evt_df[mc_evt_df.nuint_categ == 1][univ_col])
-
-        else:
-            raise ValueError("Invalid covariance type: {}, choose xsec or rate".format(cov_type))
-
-        # ---- uncertainty on the background rate ----
-        # loop over background categories
-        # + univ background - cv background
-        # note: cv background subtraction cancels out with the cv background subtraction for the cv event rate. 
-        #       doing it anyways for the plot of universes on background subtracted event rate.
-        for this_mc_evt_df in ret_dists["mc_evt_df_divided"][1:]:
-            weights = this_mc_evt_df[univ_col].copy()
-            weights[np.isnan(weights)] = 1 ## IMPORTANT: make nan weights to 1. to ignore them
-            this_var = this_mc_evt_df[var_config.var_evt_reco_col]
-            this_var = np.clip(this_var, var_config.bins[0], var_config.bins[-1] - eps)
-            background_univ, _ = np.histogram(this_var, bins=var_config.bins, weights=weights)
-            background_cv, _   = np.histogram(this_var, bins=var_config.bins)
-            signal_univ += background_univ - background_cv
-
-        signal_univ *= scale_factor
-        univ_events.append(signal_univ)
-
-    univ_events = np.array(univ_events)
-    return univ_events, signal_cv
-
-def cov_from_fraccov(cov_frac, cv_vals):
-    cov = np.zeros_like(cov_frac)
-    for i in range(cov_frac.shape[0]):
-        for j in range(cov_frac.shape[1]):
-            cov[i, j] = cov_frac[i, j] * (cv_vals[i] * cv_vals[j])
-    return cov
-
-def corr_from_fraccov(cov_frac):
-    corr = np.zeros_like(cov_frac)
-    for i in range(cov_frac.shape[0]):
-        for j in range(cov_frac.shape[1]):
-            corr[i, j] = cov_frac[i, j] / np.sqrt(cov_frac[i, i] * cov_frac[j, j])
-    return corr
-
-
-def plot_unfolded_result(unfold, bins, measured, models,
-                         plot_labels, model_names, 
-                         save_fig=False, save_name=None,
+def plot_unfolded_result(unfold, 
+                         measured, 
+                         models,
+                         var_config, 
+                         save_fig=False, 
+                         save_name=None,
                          closure_test=False):
 
-    # need to divide by bin width for differential xsec
+    bins = var_config.bins
+    bin_centers = var_config.bin_centers
     bin_widths = np.diff(bins)
-    bin_centers = 0.5 * (bins[:-1] + bins[1:])
 
     fig, ax = plt.subplots(figsize=(8.5, 7))
 
@@ -1323,7 +876,7 @@ def plot_unfolded_result(unfold, bins, measured, models,
 
     # decomose into norm and shape components
     # TODO: the first item in models is the true model
-    SystUnfoldCov_norm, SystUnfoldCov_shape = Matrix_Decomp(models[0], UnfoldCov_syst)
+    SystUnfoldCov_norm, SystUnfoldCov_shape = Matrix_Decomp(models[list(models.keys())[0]], UnfoldCov_syst)
     print(np.diag(SystUnfoldCov_norm))
     Unfold_uncert_norm = np.sqrt(np.abs(np.diag(SystUnfoldCov_norm)))
     Unfold_uncert_shape = np.sqrt(np.abs(np.diag(SystUnfoldCov_shape)))
@@ -1360,9 +913,10 @@ def plot_unfolded_result(unfold, bins, measured, models,
     p_values = []
     model_handles = []
     model_labels = []
-    for midx, model in enumerate(models):
+    # for midx, model in enumerate(models):
+    for midx, mkey in enumerate(models.keys()):
 
-        model_smeared = unfold['AddSmear'] @ model
+        model_smeared = unfold['AddSmear'] @ models[mkey]
         # chi2_val = chi2(Unfolded, model_smeared, UnfoldCov_syst)
         # chi2_vals.append(chi2_val)
         # p_val = 0
@@ -1385,7 +939,7 @@ def plot_unfolded_result(unfold, bins, measured, models,
         model_smeared_perwidth = model_smeared / bin_widths
         model_handle, = plt.step(bins, np.append(model_smeared_perwidth, model_smeared_perwidth[-1]), where='post')
         model_handles.append(model_handle)
-        model_labels.append(f'$A_c \\otimes$ {model_names[midx]} ($\chi^2$ = {chi2_vals[midx]:.2f}/{len(bins)-1}), p-value = {p_values[midx]:.3f}')
+        model_labels.append(f'$A_c \\otimes$ {mkey} ($\chi^2$ = {chi2_vals[midx]:.2f}/{len(bins)-1}), p-value = {p_values[midx]:.3f}')
 
     # legend
     if closure_test:
@@ -1420,8 +974,8 @@ def plot_unfolded_result(unfold, bins, measured, models,
     #         va='top')
 
     # leave space for legend
-    plt.xlabel(plot_labels[0])
-    plt.ylabel(plot_labels[1])
+    plt.xlabel(var_config.var_labels[0])
+    plt.ylabel(var_config.xsec_label)
     plt.xlim(bins[0], bins[-1])
     plt.ylim(0., np.max(Unfolded_perwidth)*1.7)
 
@@ -1566,174 +1120,23 @@ def plot_unfolded_data(unfold, bins, measured, models,
         plt.savefig(save_name, bbox_inches='tight')
     plt.show()
 
-def get_chi2(data, model, cov):
-    chi2_value = (data - model) @ np.linalg.inv(cov) @ (data - model)
-    ndof = len(data)
-    p_value = 1 - chi2.cdf(chi2_value, df=ndof)
-    return chi2_value, p_value
-
-
-
-def plot_topology_breakdown(var_categ, weights_categ, var_total, weights_total, bins,
-                            plot_labels, 
-                            colors, labels, 
-                            save_fig=False, save_name=None):
-
-    bin_centers = 0.5 * (bins[:-1] + bins[1:])
-
-    plt.figure(figsize=(8.5, 6))
-
-    # TODO: make this more general?
-    # our categroy breakdown list have signal at the front
-    # stack in reverse order so that signal is on top
-    var_categ = var_categ[::-1]
-    weights_categ = weights_categ[::-1]
-    colors = colors[::-1]
-    labels = labels[::-1]
-    mc_stack, _, _ = plt.hist(var_categ,
-                              bins=bins,
-                              weights=weights_categ,
-                              stacked=True,
-                              color=colors,
-                              edgecolor='none',
-                              linewidth=0,
-                              density=False,
-                              histtype='stepfilled')
-
-    # background_cv = mc_stack[-1] - mc_stack[0]
-    background_cv = mc_stack[-2]
-
-    # use MC as fake data for closure test
-    totmc, _ = np.histogram(var_total, bins=bins, weights=weights_total)
-    fake_data     = totmc
-    fake_data_err = np.sqrt(totmc)
-    plt.errorbar(bin_centers, fake_data, yerr=fake_data_err, 
-                 fmt='o', color='black')
-
-    # note the % breakdown in the legend
-    accum_sum = [0.] + [np.sum(data) for data in mc_stack]
-    total_sum = accum_sum[-1]
-    individual_sums = [accum_sum[i + 1] - accum_sum[i] for i in range(len(accum_sum) - 1)]
-    fractions = [(count / total_sum) * 100 for count in individual_sums]
-    legend_labels = [f"{label} ({frac:.1f}%)" for label, frac in zip(labels[::-1], fractions[::-1])]
-    legend_labels.append("Fake Data")
-    plt.legend(legend_labels, 
-                loc='upper left', 
-                fontsize=10, 
-                frameon=False, 
-                ncol=3, 
-                bbox_to_anchor=(0.02, 0.98))
-
-    n_firsthalf = np.sum(totmc[:len(bins)//2])
-    n_secondhalf = np.sum(totmc[len(bins)//2:])
-    if n_firsthalf > n_secondhalf:
-        textloc_x = 0.95
-        ha = 'right'
-    else:
-        textloc_x = 0.05
-        ha = 'left'
-
-    plt.text(textloc_x, 0.5, "SBND Simulation\nSBND Preliminary", 
-            transform=plt.gca().transAxes, 
-            fontsize=12, 
-            color='gray',
-            ha=ha, 
-            va='top')
-
-    # leave whitespace at the top for the legend
-    plt.xlabel(plot_labels[0])
-    plt.ylabel(plot_labels[1])
-    plt.xlim(bins[0], bins[-1])
-    plt.ylim(0., 1.45 * fake_data.max())
-
-    if save_fig:
-        plt.savefig(save_name, bbox_inches='tight', dpi=300)
-    plt.show()
-    
-    return fake_data, background_cv
-
-
-def plot_genie_breakdown(var_categ, weights_categ, var_total, weights_total, bins,
-                         plot_labels, 
-                         colors, labels, 
-                         save_fig=False, save_name=None):
-
-    bin_centers = 0.5 * (bins[:-1] + bins[1:])
-
-    plt.figure(figsize=(8.5, 6))
-
-    # stack in reverse order so that signal is on top 
-    var_categ = var_categ[::-1]
-    weights_categ = weights_categ[::-1]
-    colors = colors[::-1]
-    labels = labels[::-1]
-
-    mc_stack, _, _ = plt.hist(var_categ,
-                                bins=bins,
-                                weights=weights_categ,
-                                stacked=True,
-                                color=colors,
-                                edgecolor='none',
-                                linewidth=0,
-                                density=False,
-                                histtype='stepfilled')
-
-    # use MC as fake data for closure test
-    totmc, bins = np.histogram(var_total, bins=bins, weights=weights_total)
-    fake_data     = totmc
-    fake_data_err = np.sqrt(totmc)
-    plt.errorbar(bin_centers, fake_data, yerr=fake_data_err, 
-                 fmt='o', color='black')
-
-    # note the % breakdown in the legend
-    accum_sum = [np.sum(data) for data in mc_stack]
-    accum_sum = [0.] + accum_sum
-    total_sum = accum_sum[-1]
-    individual_sums = [accum_sum[i + 1] - accum_sum[i] for i in range(len(accum_sum) - 1)]
-    fractions = [(count / total_sum) * 100 for count in individual_sums]
-    legend_labels = [f"{label} ({frac:.1f}%)" for label, frac in zip(labels[::-1], fractions[::-1])]
-    legend_labels.append("Fake Data")
-    plt.legend(legend_labels, 
-                loc='upper left', 
-                fontsize=10, 
-                frameon=False, 
-                ncol=3, 
-                bbox_to_anchor=(0.02, 0.98))
-
-    n_firsthalf = np.sum(totmc[:len(bins)//2])
-    n_secondhalf = np.sum(totmc[len(bins)//2:])
-    if n_firsthalf > n_secondhalf:
-        textloc_x = 0.95
-        ha = 'right'
-    else:
-        textloc_x = 0.05
-        ha = 'left'
-
-    plt.text(textloc_x, 0.5, "SBND Simulation\nSBND Preliminary", 
-            transform=plt.gca().transAxes, 
-            fontsize=12, 
-            color='gray',
-            ha=ha, 
-            va='top')
-
-    # leave whitespace at the top for the legend
-    plt.xlabel(plot_labels[0])
-    plt.ylabel(plot_labels[1])
-    plt.xlim(bins[0], bins[-1])
-    plt.ylim(0., 1.45 * fake_data.max())
-
-    if save_fig:
-        plt.savefig(save_name, bbox_inches='tight', dpi=300)
-    plt.show()
-
-
 # Plotters for detector variation analysis
-def overlay_hists(evtdfs, vardfs, bins,
-              colors, labels,
-              plot_labels=["", "", ""],
-              vline = None,
-              approval="internal",
-              save_fig=False, save_name=None): 
+def variation_hists(evtdfs, 
+                    var_name, 
+                    bins,
+                    var_colors, 
+                    var_labels,
+                    plot_labels=["", "", ""],
+                    vline = None,
+                    textloc=[0.05, 3],
+                    approval="internal",
+                    save_fig=False, save_name=None): 
+
+    vardfs, wgtdfs = [], []
+    for df in evtdfs:
+        vardf, wgtf = get_clipped_evts(df, var_name, bins)
+        vardfs.append(vardf)
+        wgtdfs.append(wgtf)
 
     bin_centers = 0.5 * (bins[:-1] + bins[1:])
 
@@ -1745,26 +1148,39 @@ def overlay_hists(evtdfs, vardfs, bins,
 
     total_mc_list = []
     mc_stat_err_list = []
-    for i, (evtdf, vardf) in enumerate(zip(evtdfs, vardfs)):
-        # scale_mc = evtdf.pot_weight.unique()[0]
-        total_mc, _ = np.histogram(vardf, bins=bins)
-        total_mc_err2, _ = np.histogram(vardf, bins=bins)
+    for sidx in range(len(vardfs)):
+        total_mc, _ = np.histogram(vardfs[sidx], bins=bins, weights=wgtdfs[sidx])
+        total_mc_err2, _ = np.histogram(vardfs[sidx], bins=bins, weights=wgtdfs[sidx]**2)
         mc_stat_err = np.sqrt(total_mc_err2)
         total_mc_list.append(total_mc)
         mc_stat_err_list.append(mc_stat_err)
 
-        ax.hist(vardf, bins=bins, histtype="step", 
-                 color=colors[i], label=labels[i])
+        ax.hist(vardfs[sidx], 
+                weights=wgtdfs[sidx],
+                bins=bins, 
+                histtype="step" , 
+                color=var_colors[sidx], 
+                label=var_labels[sidx])
 
-    # ax.set_xlabel(plot_labels[0])
     ax.set_ylabel(plot_labels[1])
     ax.set_title(plot_labels[2])
     ax.set_xlim(bins[0], bins[-1])
     ax.legend()
 
-    # ratio plot -- divide by the first df (CV)
+    # == option to plot vertical lines ==
+    if vline is not None:
+        for v in vline:
+            ymax = ax.get_ylim()[1]
+            ax.vlines(x=v, ymin=0, ymax=ymax*0.75, color='red', linestyle='--')
 
-    for i, (evtdf, vardf) in enumerate(zip(evtdfs, vardfs)):
+    textloc_x, textloc_ha = get_textloc_x(total_mc, bins, textloc)
+    textloc_y = textloc[1]
+    add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
+
+
+    # ==== var/CV ratio panel
+
+    for i, (vardf, wgtf) in enumerate(zip(vardfs, wgtdfs)):
         if i == 0:
             continue
         # Avoid division by zero: ignore bins where denominator is 0
@@ -1780,44 +1196,88 @@ def overlay_hists(evtdfs, vardfs, bins,
         ax_r.hist(bin_centers[valid_mask], bins=bins, weights=ratio[valid_mask], linewidth=1, histtype="step")
 
     ax_r.axhline(1.0, color='red', linestyle='--', linewidth=1)
-    
+    ax_r.set_xlim(bins[0], bins[-1])
+    ax_r.set_ylim(0.9, 1.1)
+    ax_r.set_xlabel(plot_labels[0])
+    ax_r.set_ylabel("Variation / CV")
     ax_r.grid(True)
     ax_r.minorticks_on()
     ax_r.grid(which='minor', linestyle=':', linewidth=0.5, color='gray', alpha=0.5)
 
-    ax_r.set_xlabel(plot_labels[0])
-    ax_r.set_ylabel("Variation / CV")
-    ax_r.set_xlim(bins[0], bins[-1])
-    ax_r.set_ylim(0.9, 1.1)
 
-    if vline is not None:
-        for v in vline:
-            ax.axvline(x=v, color='red', linestyle='--')
-            ax_r.axvline(x=v, color='red', linestyle='--')
-
-    # --- approval textbox
-    # decide if the distribution is tilted to the right or left
-    n_firsthalf = np.sum(total_mc[:len(bins)//2])
-    n_secondhalf = np.sum(total_mc[len(bins)//2:])
-    if n_firsthalf > n_secondhalf:
-        textloc_x = 0.95
-        textloc_ha = 'right'
-    else:
-        textloc_x = 0.05
-        textloc_ha = 'left'
-
-    if approval == "internal":
-        ax.text(textloc_x, 0.65, "SBND Internal", transform=ax.transAxes, 
-                fontsize=14, color='rosybrown',
-                ha=textloc_ha, va='top')
-
-    elif approval == "preliminary":
-        ax.text(textloc_x, 0.65, "SBND Preliminary", transform=ax.transAxes, 
-                fontsize=14, color='gray',
-                ha=textloc_ha, va='top')
-
+    # == save figure ==
     if save_fig:
-        plt.savefig(save_name, bbox_inches='tight', dpi=300)
+        plt.savefig(save_name+".pdf", bbox_inches='tight')
     plt.show()
 
     return total_mc_list
+
+def signal_hists(evtdf=None,  # df with selected & reco'ed events
+                 nudf=None,   # df with all MC truth
+                 var_config=None,
+                 return_data=False,
+                 plot=True,
+                 save_fig=False, save_name=None):
+    """
+    plot generate / selected / reco'ed signal events
+
+    nuint_categ == 1 : signal
+    topology_list has "1" as the first item, corresponding to the signal topology
+    """
+
+    bins = var_config.bins
+    reco_col = var_config.var_evt_reco_col
+    truth_col = var_config.var_evt_truth_col
+    nu_col = var_config.var_nu_col
+
+    # ===== all selected events =====
+    # reco'ed
+    var_allsel_reco, wgt_allsel_reco = get_clipped_evts(evtdf, reco_col, bins)
+    var_allsel_truth, wgt_allsel_truth = get_clipped_evts(evtdf, truth_col, bins)
+
+    # ===== true signal events =====
+    evtdf_signal = evtdf[evtdf.nuint_categ == 1]
+    # selected, reco'ed 
+    var_sel_reco, wgt_sel_reco = get_clipped_evts(evtdf_signal, reco_col, bins)
+    # selected, truth (for response matrix)
+    var_sel_truth, wgt_sel_truth = get_clipped_evts(evtdf_signal, truth_col, bins)
+    # all MC, truth (for efficiency vector)
+    nudf_signal = nudf[nudf.nuint_categ == 1]
+    var_allmc, wgt_allmc = get_clipped_evts(nudf_signal, nu_col, bins)
+
+    nevts_allmc, _, _ = plt.hist(var_allmc,     weights=wgt_allmc,     bins=bins, histtype="step", label="All Signal in MC")
+    nevts_allsel_truth, _, _ = plt.hist(var_allsel_truth, weights=wgt_allsel_truth, bins=bins, histtype="step", label="All Selected Signal, True")
+    nevts_allsel_reco, _, _ = plt.hist(var_allsel_reco,  weights=wgt_allsel_reco,  bins=bins, histtype="step", label="All Selected Signal, Reco", color="k")
+    nevts_sel_truth, _, _ = plt.hist(var_sel_truth, weights=wgt_sel_truth, bins=bins, histtype="step", label="Selected Signal, True")
+    nevts_sel_reco, _, _ = plt.hist(var_sel_reco,  weights=wgt_sel_reco,  bins=bins, histtype="step", label="Selected Signal, Reco", color="k")
+
+    plt.legend()
+    plt.xlabel(var_config.var_labels[0])
+    plt.ylabel("Events / Bin")
+    plt.xlim(bins[0], bins[-1])
+
+    if save_fig:
+        plt.savefig(save_name, bbox_inches='tight')
+    plt.show()
+
+    if plot == False:
+        plt.close()
+
+    if return_data:
+        return {
+            "var_allmc": var_allmc,
+            "var_sel_truth": var_sel_truth,
+            "var_sel_reco": var_sel_reco,
+            "var_allsel_truth": var_allsel_truth,
+            "var_allsel_reco": var_allsel_reco,
+            "wgt_allmc": wgt_allmc,
+            "wgt_sel_truth": wgt_sel_truth,
+            "wgt_sel_reco": wgt_sel_reco,
+            "wgt_allsel_truth": wgt_allsel_truth,
+            "wgt_allsel_reco": wgt_allsel_reco,
+            "nevts_allmc": nevts_allmc,
+            "nevts_sel_truth": nevts_sel_truth,
+            "nevts_sel_reco": nevts_sel_reco,
+            "nevts_allsel_truth": nevts_allsel_truth,
+            "nevts_allsel_reco": nevts_allsel_reco,
+        }
