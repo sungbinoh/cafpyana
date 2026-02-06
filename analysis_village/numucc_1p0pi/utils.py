@@ -70,32 +70,26 @@ def get_univ_rates(cov_type="rate",
 
     bins = var_config.bins
 
-    ret = signal_hists(evtdf, nudf, var_config, return_data=True, plot=plot)
-    signal_allmc_cv = ret["nevts_allmc"]
-    nevts_signal_sel_truth = ret["nevts_sel_truth"]
-
     evtdf_signal = evtdf[evtdf.nuint_categ == 1]
+    # reco variable histogram, topology breakdown
+    evtdf_div_topo = [evtdf[evtdf.nuint_categ == mode]for mode in topology_list]
+
     if nudf is not None:
         nudf_signal = nudf[nudf.nuint_categ == 1]
 
-    # reco variable histogram, topology breakdown
-    evtdf_div_topo = [evtdf[evtdf.nuint_categ == mode]for mode in topology_list]
+    ret = signal_hists(evtdf, nudf, var_config, return_data=True, plot=plot)
 
     univ_events = []
     univ_effs   = []
     univ_smears = []
 
     for uidx in range(n_univ):
-        # univ_col = syst_name + ("univ_{}".format(uidx),)
         univ_col = "univ_{}".format(uidx)
 
         # ---- uncertainty on the signal rate ----
         # only consider effect on the response matrix for the signal channel
         if cov_type == "xsec":
-            signal_allmc_univ, _ = np.histogram(ret["var_allmc"],
-                                               weights=ret["wgt_allmc"]*nudf_signal[syst_name][univ_col],
-                                               bins=bins)
-            
+            # smearing matrix
             reco_vs_true = get_smear_matrix(ret["var_sel_truth"], 
                                             ret["var_sel_reco"], 
                                             weights=ret["wgt_sel_truth"]*evtdf_signal[syst_name][univ_col],
@@ -103,11 +97,18 @@ def get_univ_rates(cov_type="rate",
                                             plot=plot)
             univ_smears.append(reco_vs_true)
 
-            eff = get_eff(reco_vs_true, signal_allmc_univ) 
+            # efficiency
+            signal_allmc_univ, _ = np.histogram(ret["var_allmc"],
+                                               weights=ret["wgt_allmc"]*nudf_signal[syst_name][univ_col],
+                                               bins=bins)
+            signal_sel_univ, _ = np.histogram(ret["var_sel_truth"],
+                                               weights=ret["wgt_sel_truth"]*evtdf_signal[syst_name][univ_col],
+                                               bins=bins)
+            eff = signal_sel_univ / signal_allmc_univ
             univ_effs.append(eff)
 
             response_univ = get_response_matrix(reco_vs_true, eff, bins, plot=plot)
-            signal_univ = response_univ @ signal_allmc_cv # note that we multiply the CV signal rate!
+            signal_univ = response_univ @ ret["nevts_allmc"] # note that we multiply the CV signal rate!
             # signal_univ = signal_cv
 
         elif cov_type == "rate":
@@ -165,15 +166,16 @@ def get_textloc_x(values, bins, textloc=[0.05, 0.55]):
 
 
 def add_approval_text(approval, textloc_x, textloc_y, textloc_ha):
-    # SBND approval rank
     if approval == "internal":
         approval_text = r"$\mathbf{SBND}$ Internal"
         textcolor = 'rosybrown'
+
     elif approval == "preliminary":
         approval_text = r"$\mathbf{SBND}$ Preliminary"
         textcolor = 'gray'
+
     else:
-        return  # no approval or unknown: do not add
+        return # don't add anything
 
     ax = plt.gcf().axes[0]  # get the first axes of the current figure
     ax.text(
