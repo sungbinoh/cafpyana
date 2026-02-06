@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import chi2
 from tqdm import tqdm
+import string
 
 import sys
 sys.path.append('../../')
@@ -19,7 +20,20 @@ plt.style.use("presentation.mplstyle")
 
 
 #  ====== calculation functions ======
-def get_clipped_evts(df, var_col, bins):
+def generate_tags(end_tag=""):
+    tags = []
+    for first in string.ascii_lowercase:
+        for second in string.ascii_lowercase:
+            tag = first + second
+            if tag == end_tag:
+                break
+            tags.append(tag)
+        if tag == end_tag:
+            break
+    return tags
+
+
+def get_clipped_evts(df, var_col, bins, verbose=False):
     var = df[var_col]
     var = np.clip(var, bins[0], bins[-1] - EPSILON)
 
@@ -27,32 +41,19 @@ def get_clipped_evts(df, var_col, bins):
         # print(f"pot scale: {df.pot_weight.unique()[0]}")
         weights = df.loc[:, 'pot_weight']
     else:
-        print("No pot_weight column found, return 1 as pot scale (expected for data)")
+        if verbose:
+            print("No pot_weight column found, return 1 as pot scale (expected for data)")
         weights = np.ones_like(var)
     return var, weights
 
 
-def get_univ_rates(evtdf, 
-                   var_config, 
-                   syst_name):
-    var = evtdf[var_config.var_evt_reco_col]
-    n_univ = len(evtdf[syst_name].columns)
-    univ_events = np.zeros((n_univ, len(var_config.bin_centers)))
-    for uidx in range(n_univ):
-        weights = evtdf[syst_name]["univ_{}".format(uidx)]
-        weights = np.where(np.isnan(weights), 1, weights) # nan are non-neutrino events
-        n_univ, _ = np.histogram(var, bins=var_config.bins, weights=weights)
-        univ_events[uidx, :] = n_univ
-    cv_events, _ = np.histogram(var, bins=var_config.bins)
-    return univ_events, cv_events
-
-
-def get_genie_univs(cov_type="rate", 
+def get_univ_rates(cov_type="rate", 
                     evtdf=None, 
                     nudf=None, 
                     var_config=None, 
                     syst_name="", 
                     n_univ=100, 
+                    bkgd_subtract=True,
                     plot=False):
     """
     for the GENIE uncertainty on the xsec measurement
@@ -72,11 +73,10 @@ def get_genie_univs(cov_type="rate",
     ret = signal_hists(evtdf, nudf, var_config, return_data=True, plot=plot)
     signal_allmc_cv = ret["nevts_allmc"]
     nevts_signal_sel_truth = ret["nevts_sel_truth"]
-    signal_sel_reco_cv = ret["nevts_sel_reco"]
-    signal_sel_reco_cv *= scale_factor # = Response @ true_signal
 
     evtdf_signal = evtdf[evtdf.nuint_categ == 1]
-    nudf_signal = nudf[nudf.nuint_categ == 1]
+    if nudf is not None:
+        nudf_signal = nudf[nudf.nuint_categ == 1]
 
     # reco variable histogram, topology breakdown
     evtdf_div_topo = [evtdf[evtdf.nuint_categ == mode]for mode in topology_list]
@@ -84,19 +84,21 @@ def get_genie_univs(cov_type="rate",
     univ_events = []
     univ_effs   = []
     univ_smears = []
+
     for uidx in range(n_univ):
-        univ_col = syst_name + ("univ_{}".format(uidx),)
+        # univ_col = syst_name + ("univ_{}".format(uidx),)
+        univ_col = "univ_{}".format(uidx)
 
         # ---- uncertainty on the signal rate ----
         # only consider effect on the response matrix for the signal channel
         if cov_type == "xsec":
             signal_allmc_univ, _ = np.histogram(ret["var_allmc"],
-                                               weights=ret["wgt_allmc"]*nudf_signal[univ_col],
+                                               weights=ret["wgt_allmc"]*nudf_signal[syst_name][univ_col],
                                                bins=bins)
             
             reco_vs_true = get_smear_matrix(ret["var_sel_truth"], 
                                             ret["var_sel_reco"], 
-                                            weights=evtdf_signal[univ_col],
+                                            weights=ret["wgt_sel_truth"]*evtdf_signal[syst_name][univ_col],
                                             bins_2d=[bins, bins],
                                             plot=plot)
             univ_smears.append(reco_vs_true)
@@ -110,12 +112,13 @@ def get_genie_univs(cov_type="rate",
 
         elif cov_type == "rate":
             signal_univ, _ = np.histogram(ret["var_sel_reco"], 
-                                          weights=evtdf_signal[univ_col],
+                                          weights=ret["wgt_sel_reco"]*evtdf_signal[syst_name][univ_col],
                                           bins=bins)
 
         else:
             raise ValueError("Invalid covariance type: {}, choose xsec or rate".format(cov_type))
 
+        # TODO: this isn't computationally efficient, but it's useful for debugging
         # ---- uncertainty on the background rate ----
         # loop over background categories
         # + univ background - cv background
@@ -123,18 +126,29 @@ def get_genie_univs(cov_type="rate",
         #       doing it anyways for the plot of universes on background subtracted event rate.
         for this_evtdf in evtdf_div_topo[1:]:
             var, wgt = get_clipped_evts(this_evtdf, var_config.var_evt_reco_col, bins)
-            univ_wgt = this_evtdf[univ_col].copy()
+            univ_wgt = this_evtdf[syst_name][univ_col].copy()
             univ_wgt[np.isnan(univ_wgt)] = 1 ## IMPORTANT: make nan univ_wgt to 1. to ignore them
-            wgt *= univ_wgt
-            background_cv, _   = np.histogram(var, bins=bins)
-            background_univ, _ = np.histogram(var, bins=bins, weights=wgt)
-            signal_univ += background_univ - background_cv
+            background_cv, _   = np.histogram(var, bins=bins, weights=wgt)
+            background_univ, _ = np.histogram(var, bins=bins, weights=wgt*univ_wgt)
+
+            if bkgd_subtract:
+                signal_univ += background_univ - background_cv
+            else:
+                signal_univ += background_univ
 
         signal_univ *= scale_factor
         univ_events.append(signal_univ)
 
     univ_events = np.array(univ_events)
-    return univ_events, signal_sel_reco_cv
+
+    if bkgd_subtract:
+        cv_events = ret["nevts_sel_reco"]
+        cv_events *= scale_factor # = Response @ true_signal
+    else:
+        cv_events = ret["nevts_allsel_reco"]
+        cv_events *= scale_factor # = Response @ true_signal
+
+    return univ_events, cv_events
 
 
 # ====== plotting functions ======
@@ -148,6 +162,7 @@ def get_textloc_x(values, bins, textloc=[0.05, 0.55]):
     else:
         textloc_x, textloc_ha = 1-textloc_x, 'right'
     return textloc_x, textloc_ha
+
 
 def add_approval_text(approval, textloc_x, textloc_y, textloc_ha):
     # SBND approval rank
@@ -168,6 +183,15 @@ def add_approval_text(approval, textloc_x, textloc_y, textloc_ha):
         ha=textloc_ha, va='top',
         fontsize=20, color=textcolor
     )
+
+
+def add_genie_version_text(textloc_x, textloc_y, textloc_ha):
+    ax = plt.gcf().axes[0]  # get the first axes of the current figure
+    ax.text(textloc_x, textloc_y, 
+            r"GENIE v3.4.0 AR23_00i_00_000", 
+            transform=ax.transAxes, 
+            ha=textloc_ha, va='top',
+            fontsize=11.5, color='gray')
 
 
 def bar_plot(breakdown_type="topology", 
@@ -521,38 +545,41 @@ def overlay_hists(breakdown_type="topology",
         ordered_handles.extend(unc_handle)
         ordered_labels.extend(unc_label)
 
+    # adjust fontsize so that legend fits in the figure
+    fontsize = 11.3
+    ncol = 3
+    if breakdown_type == "genie_sb":
+        fontsize = 10.5
+        ncol = 4
+
     ax.legend(
         ordered_handles,
         ordered_labels,
         loc='upper left',
-        fontsize=12,
+        fontsize=fontsize,
         frameon=False,
-        ncol=3,
-        bbox_to_anchor=(0.015, 0.985)
+        ncol=ncol,
+        bbox_to_anchor=(0.01, 0.99)
     )
 
     # ===============================
 
-    # ==== additional fomatting etc. ====
+    # ==== plot additions ====
 
-    # == set y-axis limit ==
+    # y-axis limit
     ax.set_ylim(0., ax_ylim_ratio* np.max(total_mc))
 
-    # == option to plot vertical lines ==
+    # vertical lines
     if vline is not None:
         for v in vline:
             ymax = ax.get_ylim()[1]
             ax.vlines(x=v, ymin=0, ymax=ymax*0.75, color='red', linestyle='--')
 
+    # textboxes
     textloc_x, textloc_ha = get_textloc_x(total_mc, var_config.bins, textloc)
     textloc_y = textloc[1]
     add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
-
-    # GEINE version
-    ax.text(textloc_x, textloc_y-0.08, r"GENIE v3.4.0 AR23_00i_00_000", transform=ax.transAxes, 
-            ha=textloc_ha, va='top',
-            fontsize=11.5, color='gray')
-
+    add_genie_version_text(textloc_x, textloc_y-0.08, textloc_ha)
 
     # ===============================
 
@@ -593,7 +620,7 @@ def plot_univ_hists(
         start_95 = (n_univ - n_95) // 2
         end_95 = start_95 + n_95
 
-        # Define bins & groupings for easy handling: [(range, color, label, skip_68)]
+        # Define bins & groupings of universes: [(range, color, label, skip_68)]
         segs = [
             (range(start_68, end_68), colors[0], "Universe (68%)", False),
             (range(start_95, end_95), colors[1], "Universe (95%)", True),
@@ -626,8 +653,7 @@ def plot_univ_hists(
 
     plt.legend(frameon=False)
 
-    # == textbox to add approval rank ==
-    # decide text location based on the distribution
+    # ==== plot additions ====
     textloc_x, textloc_ha = get_textloc_x(cv_events, var_config.bins, textloc)
     textloc_y = textloc[1]
     add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
@@ -670,12 +696,13 @@ def plot_heatmap(matrix,
                  save_fig=False, 
                  save_fig_name=None):
 
-    nbins = len(var_config.bins)
+    bins = var_config.bins
+    nbins = len(bins)
     assert nbins-1 == matrix.shape[0] == matrix.shape[1]
     unif_bin = np.linspace(0., float(nbins - 1), nbins)
     extent = [unif_bin[0], unif_bin[-1], unif_bin[0], unif_bin[-1]]
 
-    x_edges, y_edges = np.array(var_config.bins), np.array(var_config.bins)
+    x_edges, y_edges = np.array(bins), np.array(bins)
     x_tick_positions, y_tick_positions = (unif_bin[:-1] + unif_bin[1:]) / 2, (unif_bin[:-1] + unif_bin[1:]) / 2
     x_labels, y_labels = bin_range_labels(x_edges), bin_range_labels(y_edges)
 
@@ -789,14 +816,16 @@ def plot_unfolded_result(unfold,
     plt.legend(handles, labels, 
                loc='upper left', fontsize=12, frameon=False, ncol=1, bbox_to_anchor=(0.02, 0.98))
 
-    textloc_x, textloc_ha = get_textloc_x(Unfolded_perwidth, var_config.bins, textloc)
-    textloc_y = textloc[1]
-    add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
-
     plt.xlabel(var_config.var_labels[0])
     plt.ylabel(var_config.xsec_label)
     plt.xlim(bins[0], bins[-1])
     plt.ylim(0., np.max(Unfolded_perwidth)*1.7)
+
+    # ==== plot additions
+    textloc_x, textloc_ha = get_textloc_x(Unfolded_perwidth, var_config.bins, textloc)
+    textloc_y = textloc[1]
+    add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
+
 
     if save_fig:
         plt.savefig(save_name, bbox_inches='tight')
@@ -815,13 +844,13 @@ def variation_hists(evtdfs,
                     approval="internal",
                     save_fig=False, save_name=None): 
 
+    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+
     vardfs, wgtdfs = [], []
     for df in evtdfs:
         vardf, wgtf = get_clipped_evts(df, var_name, bins)
         vardfs.append(vardf)
         wgtdfs.append(wgtf)
-
-    bin_centers = 0.5 * (bins[:-1] + bins[1:])
 
     fig, axs = plt.subplots(2, 1, figsize=(7.5, 7), 
                             sharex=True, gridspec_kw={'height_ratios': [4, 1]})
@@ -850,19 +879,7 @@ def variation_hists(evtdfs,
     ax.set_xlim(bins[0], bins[-1])
     ax.legend()
 
-    # == option to plot vertical lines ==
-    if vline is not None:
-        for v in vline:
-            ymax = ax.get_ylim()[1]
-            ax.vlines(x=v, ymin=0, ymax=ymax*0.75, color='red', linestyle='--')
-
-    textloc_x, textloc_ha = get_textloc_x(total_mc, bins, textloc)
-    textloc_y = textloc[1]
-    add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
-
-
     # ==== var/CV ratio panel
-
     for i, (vardf, wgtf) in enumerate(zip(vardfs, wgtdfs)):
         if i == 0:
             continue
@@ -887,6 +904,17 @@ def variation_hists(evtdfs,
     ax_r.minorticks_on()
     ax_r.grid(which='minor', linestyle=':', linewidth=0.5, color='gray', alpha=0.5)
 
+    # ==== plot additions
+    # vertical lines on main panel
+    if vline is not None:
+        for v in vline:
+            ymax = ax.get_ylim()[1]
+            ax.vlines(x=v, ymin=0, ymax=ymax*0.75, color='red', linestyle='--')
+
+    # approval rank
+    textloc_x, textloc_ha = get_textloc_x(total_mc, bins, textloc)
+    textloc_y = textloc[1]
+    add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
 
     # == save figure ==
     if save_fig:
@@ -900,16 +928,22 @@ def signal_hists(evtdf=None,  # df with selected & reco'ed events
                  var_config=None,
                  return_data=False,
                  plot=True,
+                 textloc=[0.05, 0.55],
+                 approval="internal",
                  save_fig=False, 
                  save_name=None):
     """
-    plot generate / selected / reco'ed signal events
+    generate / selected / reco'ed signal events
 
     nuint_categ == 1 : signal
     topology_list has "1" as the first item, corresponding to the signal topology
+
+    items with "sel" tags are selected events that are signal in truth 
+    item with "allsel" tags are all selected events, signal + background
     """
 
     bins = var_config.bins
+    bin_centers = var_config.bin_centers
     reco_col = var_config.var_evt_reco_col
     truth_col = var_config.var_evt_truth_col
     nu_col = var_config.var_nu_col
@@ -925,43 +959,66 @@ def signal_hists(evtdf=None,  # df with selected & reco'ed events
     var_sel_reco, wgt_sel_reco = get_clipped_evts(evtdf_signal, reco_col, bins)
     # selected, truth (for response matrix)
     var_sel_truth, wgt_sel_truth = get_clipped_evts(evtdf_signal, truth_col, bins)
-    # all MC, truth (for efficiency vector)
-    nudf_signal = nudf[nudf.nuint_categ == 1]
-    var_allmc, wgt_allmc = get_clipped_evts(nudf_signal, nu_col, bins)
 
-    nevts_allmc, _, _ = plt.hist(var_allmc,     weights=wgt_allmc,     bins=bins, histtype="step", label="All Signal in MC")
-    nevts_allsel_truth, _, _ = plt.hist(var_allsel_truth, weights=wgt_allsel_truth, bins=bins, histtype="step", label="All Selected Signal, True")
-    nevts_allsel_reco, _, _ = plt.hist(var_allsel_reco,  weights=wgt_allsel_reco,  bins=bins, histtype="step", label="All Selected Signal, Reco", color="k")
-    nevts_sel_truth, _, _ = plt.hist(var_sel_truth, weights=wgt_sel_truth, bins=bins, histtype="step", label="Selected Signal, True")
-    nevts_sel_reco, _, _ = plt.hist(var_sel_reco,  weights=wgt_sel_reco,  bins=bins, histtype="step", label="Selected Signal, Reco", color="k")
+    nevts_allsel_truth, _ = np.histogram(var_allsel_truth, weights=wgt_allsel_truth, bins=bins)
+    nevts_allsel_reco, _  = np.histogram(var_allsel_reco,  weights=wgt_allsel_reco,  bins=bins)
+    nevts_sel_truth, _    = np.histogram(var_sel_truth,    weights=wgt_sel_truth,    bins=bins)
+    nevts_sel_reco, _     = np.histogram(var_sel_reco,     weights=wgt_sel_reco,     bins=bins)
 
-    plt.legend()
-    plt.xlabel(var_config.var_labels[0])
-    plt.ylabel("Events / Bin")
-    plt.xlim(bins[0], bins[-1])
+    if nudf is not None:
+        # all MC, truth (for efficiency vector)
+        nudf_signal = nudf[nudf.nuint_categ == 1]
+        var_allmc, wgt_allmc = get_clipped_evts(nudf_signal, nu_col, bins)
+        nevts_allmc, _ = np.histogram(var_allmc, weights=wgt_allmc, bins=bins)
+    else:
+        var_allmc = None
+        wgt_allmc = None
+        nevts_allmc = None
 
-    if save_fig:
-        plt.savefig(save_name, bbox_inches='tight')
-    plt.show()
+    if plot:
+        plt.hist(bin_centers, weights=nevts_allsel_truth, bins=bins, histtype="step", label="Selected Events, True", color="C0")
+        plt.hist(bin_centers, weights=nevts_allsel_reco,  bins=bins, histtype="step", label="Selected Events, Reco", color="C0", linestyle="--")
+        plt.hist(bin_centers, weights=nevts_sel_truth,    bins=bins, histtype="step", label="Selected Signal, True", color="C1")
+        plt.hist(bin_centers, weights=nevts_sel_reco,     bins=bins, histtype="step", label="Selected Signal, Reco", color="C1", linestyle="--")
 
-    if plot == False:
-        plt.close()
+        if nevts_allmc is not None:
+            nevts_allmc, _, _ = plt.hist(var_allmc,     weights=wgt_allmc,     bins=bins, histtype="step", label="All Signal in MC", color="black")
+        else:
+            nevts_allmc = None
+
+        plt.xlabel(var_config.var_labels[0])
+        plt.ylabel("Events / Bin")
+        plt.xlim(bins[0], bins[-1])
+        plt.legend()
+
+        # ==== plot additions ====
+        textloc_x, textloc_ha = get_textloc_x(nevts_allsel_truth, bins, textloc)
+        textloc_y = textloc[1]
+        add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
+
+        if save_fig:
+            plt.savefig(save_name, bbox_inches='tight')
+        plt.show()
 
     if return_data:
         return {
             "var_allmc": var_allmc,
-            "var_sel_truth": var_sel_truth,
-            "var_sel_reco": var_sel_reco,
-            "var_allsel_truth": var_allsel_truth,
-            "var_allsel_reco": var_allsel_reco,
             "wgt_allmc": wgt_allmc,
-            "wgt_sel_truth": wgt_sel_truth,
-            "wgt_sel_reco": wgt_sel_reco,
-            "wgt_allsel_truth": wgt_allsel_truth,
-            "wgt_allsel_reco": wgt_allsel_reco,
             "nevts_allmc": nevts_allmc,
+
+            "var_sel_truth": var_sel_truth,
+            "wgt_sel_truth": wgt_sel_truth,
             "nevts_sel_truth": nevts_sel_truth,
+
+            "var_sel_reco": var_sel_reco,
+            "wgt_sel_reco": wgt_sel_reco,
             "nevts_sel_reco": nevts_sel_reco,
+
+            "var_allsel_truth": var_allsel_truth,
+            "wgt_allsel_truth": wgt_allsel_truth,
             "nevts_allsel_truth": nevts_allsel_truth,
+
+            "var_allsel_reco": var_allsel_reco,
+            "wgt_allsel_reco": wgt_allsel_reco,
             "nevts_allsel_reco": nevts_allsel_reco,
         }

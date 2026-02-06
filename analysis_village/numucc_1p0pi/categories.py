@@ -244,8 +244,8 @@ topology_list = [1, # signal
                  0,
                  -1 # cosmic
                  ]
-topology_labels = [r"FV $\nu_{\mu}$ CC 1p0$\pi$", 
-                    r"FV $\nu_{\mu}$ CC Np0$\pi$", r"FV $\nu_{\mu}$ CC Other", r"FV $\nu$ NC", r"FV other $\nu$", 
+topology_labels = [r"$\nu_{\mu}$ CC 1p0$\pi$", 
+                    r"$\nu_{\mu}$ CC Np0$\pi$", r"$\nu_{\mu}$ CC Other", r"$\nu$ NC", r"Other $\nu$", 
                     r"Out-FV $\nu$", 
                     "Cosmic"]
 topology_colors = ["mediumslateblue", 

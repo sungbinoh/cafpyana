@@ -1,5 +1,6 @@
 # Constants for this analysis
 # Today: 2026-02-04
+
 import uproot
 import matplotlib.pyplot as plt
 from makedf.constants import *
@@ -8,7 +9,7 @@ import pandas as pd
 from pyanalib.split_df_helpers import *
 from pyanalib.pandas_helpers import *
 
-plot=False
+plot = False
 
 DETECTOR = "SBND_nohighyz"
 EPSILON = 1e-6 # for clipping distributions at bin ranges
@@ -40,10 +41,8 @@ mc_split_df = pd.read_hdf(mc_file, key="split")
 mc_n_split = get_n_split(mc_file)
 print("mc_n_split: %d" %(mc_n_split))
 n_max_concat = 3
-mc_keys2load = ['hdr'] 
-mc_dfs = load_dfs(mc_file, mc_keys2load, n_max_concat=n_max_concat)
-mc_hdr_df = mc_dfs['hdr']
-mc_tot_pot = mc_hdr_df['pot'].sum()
+mc_hdr_df = load_dfs(mc_file, ["hdr"], n_max_concat=n_max_concat)["hdr"]
+mc_tot_pot = mc_hdr_df["pot"].sum()
 print("mc_tot_pot: %.3e" %(mc_tot_pot))
 
 INTEGRATED_FLUX = mc_tot_pot * flux_vals.sum() / (1e4  * 1e6) # to cm2 # to POT
