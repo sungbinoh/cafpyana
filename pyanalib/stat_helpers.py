@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.stats import gamma
+from scipy.stats import chi2
 
 alpha = 0.3173  # for 68.27% CL, alpha = 1 - 0.6827
 

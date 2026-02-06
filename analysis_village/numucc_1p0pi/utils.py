@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from scipy.stats import chi2
 from tqdm import tqdm
 import string
 
@@ -9,14 +8,16 @@ sys.path.append('../../')
 from pyanalib.split_df_helpers import *
 from pyanalib.stat_helpers import *
 from makedf.constants import *
-from analysis_village.unfolding.unfolding_inputs import *
 from analysis_village.unfolding.wienersvd import *
 from analysis_village.numucc_1p0pi.categories import *
 from analysis_village.numucc_1p0pi.constants import *
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
+import matplotlib as mpl
 plt.style.use("presentation.mplstyle")
+cmap = mpl.cm.viridis
+norm = mpl.colors.Normalize(vmin=0.0, vmax=1.0)
 
 
 #  ====== calculation functions ======
@@ -38,7 +39,6 @@ def get_clipped_evts(df, var_col, bins, verbose=False):
     var = np.clip(var, bins[0], bins[-1] - EPSILON)
 
     if 'pot_weight' in df.columns:
-        # print(f"pot scale: {df.pot_weight.unique()[0]}")
         weights = df.loc[:, 'pot_weight']
     else:
         if verbose:
@@ -152,8 +152,22 @@ def get_univ_rates(cov_type="rate",
     return univ_events, cv_events
 
 
+def get_response_matrix(reco_vs_true, 
+                        eff):
+    denom = reco_vs_true.T.sum(axis=0)
+    num = reco_vs_true.T
+    response = np.divide(
+        num * eff, denom,
+        out=np.zeros_like(num, dtype=float),  # fill with 0 where invalid
+        where=denom != 0
+    )
+    return response
+
+
+
 # ====== plotting functions ======
 
+# ==== plot additions ====
 def get_textloc_x(values, bins, textloc=[0.05, 0.55]):
     textloc_x, _ = textloc
     n_firsthalf = np.sum(values[:len(bins)//2])
@@ -196,6 +210,7 @@ def add_genie_version_text(textloc_x, textloc_y, textloc_ha):
             fontsize=11.5, color='gray')
 
 
+# ==== bar plot ====
 def bar_plot(breakdown_type="topology", 
              generator=None,
              evtdf=None,
@@ -272,6 +287,7 @@ def bar_plot(breakdown_type="topology",
     return ret_dict
 
 
+# ==== histograms ====
 def overlay_hists(breakdown_type="topology",
                   mc_df=None,
                   data_df=None,
@@ -667,74 +683,6 @@ def plot_univ_hists(
     plt.show();
 
 
-def plot_frac_unc(frac_unc, 
-                  var_config, 
-                  plot_labels=["", "", ""],
-                  textloc=[0.05, 0.55],
-                  approval="internal",
-                  save_fig=False, 
-                  save_name=None):
-
-    plt.hist(var_config.bin_centers, bins=var_config.bins, weights=frac_unc, histtype="step", color="black")
-
-    plt.xlim(var_config.bins[0], var_config.bins[-1])
-    plt.xlabel(var_config.var_labels[0])
-    plt.ylabel("Fractional Uncertainty")
-    plt.title(plot_labels[2])
-    plt.grid(True)
-
-    textloc_x, textloc_ha = get_textloc_x(frac_unc, var_config.bins, textloc)
-    textloc_y = textloc[1]
-    add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
-
-    if save_fig:
-        plt.savefig(save_name+".pdf", bbox_inches='tight')
-    plt.show();
-
-
-def plot_heatmap(matrix, 
-                 var_config, 
-                 title="", 
-                 save_fig=False, 
-                 save_fig_name=None):
-
-    bins = var_config.bins
-    nbins = len(bins)
-    assert nbins-1 == matrix.shape[0] == matrix.shape[1]
-    unif_bin = np.linspace(0., float(nbins - 1), nbins)
-    extent = [unif_bin[0], unif_bin[-1], unif_bin[0], unif_bin[-1]]
-
-    x_edges, y_edges = np.array(bins), np.array(bins)
-    x_tick_positions, y_tick_positions = (unif_bin[:-1] + unif_bin[1:]) / 2, (unif_bin[:-1] + unif_bin[1:]) / 2
-    x_labels, y_labels = bin_range_labels(x_edges), bin_range_labels(y_edges)
-
-    fig, ax = plt.subplots(figsize=(10, 10))
-    plt.imshow(matrix, extent=extent, origin="lower")
-
-    for i in range(nbins-1):      # rows (y)
-        for j in range(nbins-1):  # columns (x)
-            value = matrix[i, j]
-            if not np.isnan(value):  # skip NaNs
-                plt.text(
-                    j + 0.5, i + 0.5,
-                    f"{value:.2f}",
-                    ha="center", va="center",   
-                    color=get_text_color(value),
-                    fontsize=10
-                )
-
-    plt.colorbar(shrink=0.7)
-    plt.xticks(x_tick_positions, x_labels, rotation=45, ha="right")
-    plt.yticks(y_tick_positions, y_labels)
-    plt.xlabel(var_config.var_labels[0], fontsize=20)
-    plt.ylabel(var_config.var_labels[1], fontsize=20)
-    plt.title(title, fontsize=20)
-
-    if save_fig:
-        plt.savefig("{}.png".format(save_fig_name), bbox_inches='tight', dpi=300)
-    plt.show();
-
-
 def plot_unfolded_result(unfold, 
                          measured, 
                          models,
@@ -834,7 +782,6 @@ def plot_unfolded_result(unfold,
     plt.show()
 
 
-# Plotters for detector variation analysis
 def variation_hists(evtdfs, 
                     var_name, 
                     bins,
@@ -924,6 +871,7 @@ def variation_hists(evtdfs,
     plt.show()
 
     return total_mc_list
+
 
 def signal_hists(evtdf=None,  # df with selected & reco'ed events
                  nudf=None,   # df with all MC truth
@@ -1024,3 +972,89 @@ def signal_hists(evtdf=None,  # df with selected & reco'ed events
             "wgt_allsel_reco": wgt_allsel_reco,
             "nevts_allsel_reco": nevts_allsel_reco,
         }
+
+
+# ==== fractional uncertainty plot ====
+def plot_frac_unc(frac_unc, 
+                  var_config, 
+                  plot_labels=["", "", ""],
+                  textloc=[0.05, 0.55],
+                  approval="internal",
+                  save_fig=False, 
+                  save_name=None):
+
+    plt.hist(var_config.bin_centers, bins=var_config.bins, weights=frac_unc, histtype="step", color="black")
+
+    plt.xlim(var_config.bins[0], var_config.bins[-1])
+    plt.xlabel(var_config.var_labels[0])
+    plt.ylabel("Fractional Uncertainty")
+    plt.title(plot_labels[2])
+    plt.grid(True)
+
+    textloc_x, textloc_ha = get_textloc_x(frac_unc, var_config.bins, textloc)
+    textloc_y = textloc[1]
+    add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
+
+    if save_fig:
+        plt.savefig(save_name+".pdf", bbox_inches='tight')
+    plt.show();
+
+
+# ==== 2D plots ====
+
+def get_text_color(value):
+    rgba = cmap(norm(value))
+    # Compute luminance (perceived brightness)
+    luminance = 0.299 * rgba[0] + 0.587 * rgba[1] + 0.114 * rgba[2]
+    return "black" if luminance > 0.5 else "white"
+
+
+def bin_range_labels(edges):
+    return [f"{edges[i]:.2f}–{edges[i+1]:.2f}" for i in range(len(edges)-1)]
+
+
+def plot_heatmap(matrix, 
+                 bins,
+                 plot_labels=["", "", ""],
+                 approval="internal",
+                 save_fig=False, 
+                 save_name=None):
+
+    nbins = len(bins)
+    assert nbins-1 == matrix.shape[0] == matrix.shape[1]
+    unif_bin = np.linspace(0., float(nbins - 1), nbins)
+    extent = [unif_bin[0], unif_bin[-1], unif_bin[0], unif_bin[-1]]
+
+    x_edges, y_edges = np.array(bins), np.array(bins)
+    x_tick_positions, y_tick_positions = (unif_bin[:-1] + unif_bin[1:]) / 2, (unif_bin[:-1] + unif_bin[1:]) / 2
+    x_labels, y_labels = bin_range_labels(x_edges), bin_range_labels(y_edges)
+
+    fig, ax = plt.subplots(figsize=(10, 10))
+    plt.imshow(matrix, extent=extent, origin="lower")
+
+    for i in range(nbins-1):      # rows (y)
+        for j in range(nbins-1):  # columns (x)
+            value = matrix[i, j]
+            if not np.isnan(value):  # skip NaNs
+                plt.text(
+                    j + 0.5, i + 0.5,
+                    f"{value:.2f}",
+                    ha="center", va="center",   
+                    color=get_text_color(value),
+                    fontsize=10
+                )
+
+    plt.colorbar(shrink=0.7, label=plot_labels[2])
+    plt.xticks(x_tick_positions, x_labels, rotation=45, ha="right")
+    plt.yticks(y_tick_positions, y_labels)
+    plt.xlabel(plot_labels[0], fontsize=20)
+    plt.ylabel(plot_labels[1], fontsize=20)
+    # plt.title(plot_labels[2], fontsize=20)
+
+    # ===== plot additions =====
+    add_approval_text(approval, 0.95, 1.05, "right")
+
+    if save_fig:
+        plt.savefig("{}.png".format(save_name), bbox_inches='tight', dpi=300)
+    plt.show();
+
