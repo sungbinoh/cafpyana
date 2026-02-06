@@ -160,10 +160,11 @@ def add_approval_text(approval, textloc_x, textloc_y, textloc_ha):
     else:
         return  # no approval or unknown: do not add
 
-    plt.text(
+    ax = plt.gcf().axes[0]  # get the first axes of the current figure
+    ax.text(
         textloc_x, textloc_y, 
         approval_text, 
-        transform=plt.gca().transAxes, 
+        transform=ax.transAxes, 
         ha=textloc_ha, va='top',
         fontsize=20, color=textcolor
     )
@@ -810,7 +811,7 @@ def variation_hists(evtdfs,
                     var_labels,
                     plot_labels=["", "", ""],
                     vline = None,
-                    textloc=[0.05, 3],
+                    textloc=[0.05, 0.55],
                     approval="internal",
                     save_fig=False, save_name=None): 
 
