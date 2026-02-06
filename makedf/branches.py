@@ -318,6 +318,7 @@ mcbranches = [
     "rec.mc.nu.pdg",
     "rec.mc.nu.iscc",
     "rec.mc.nu.genie_mode",
+    "rec.mc.nu.genweight",
     "rec.mc.nu.parent_pdg",
     "rec.mc.nu.parent_dcy_E",
     "rec.mc.nu.genie_evtrec_idx",
