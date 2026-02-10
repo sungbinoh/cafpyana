@@ -14,7 +14,7 @@ def corr_from_fraccov(cov_frac):
             corr[i, j] = cov_frac[i, j] / np.sqrt(cov_frac[i, i] * cov_frac[j, j])
     return corr
 
-def get_covariance_matrix(univ_events_a, cv_events_a
+def get_covariance_matrix(univ_events_a, cv_events_a,
                           univ_events_b, cv_events_b):
 
     # The two input array sets should have exactly the same number of bins and n_univ
@@ -63,6 +63,6 @@ def get_covariance_matrix(univ_events_a, cv_events_a
             "corr": corr,
             }
 
-def get_covariance_matrix(univ_events,
-                          cv_event):
+def get_covariance_matrix_self(univ_events,
+                               cv_event):
     return get_covariance_matrix(univ_events, cv_event, univ_events, cv_event)

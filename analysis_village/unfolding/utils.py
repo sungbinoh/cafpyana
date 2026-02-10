@@ -10,13 +10,11 @@ from pyanalib.stat_helpers import *
 from makedf.constants import *
 from analysis_village.unfolding.unfolding_inputs import *
 from analysis_village.unfolding.wienersvd import *
-from analysis_village.numucc_1p0pi.categories import *
-from analysis_village.numucc_1p0pi.constants import *
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 last_sys = sys.path[-1]
-plt.style.use(last_sys + "/analysis_village/plot_style/presentation.mplstyle")
+from analysis_village.plot_style.sbnd_style import *
 
 ##### List of functions and their purposes #####################################################
 # This file is for functions preparing histograms in multiverses to be used for covariance matrices measurements
@@ -39,6 +37,8 @@ plt.style.use(last_sys + "/analysis_village/plot_style/presentation.mplstyle")
 # signal_hists: produce histograms after clipping under/overflow events within binnings 
 #
 ################################################################################################ 
+
+EPSILON = 1e-6 # clip overflow values greater than bins[-1] - EPSILON
 
 #  ====== calculation functions ======
 def get_clipped_evts(df, var_col, bins):
@@ -74,24 +74,49 @@ def get_univ_rates(evtdf,
 
 
 def get_genie_univs(cov_type="rate", 
-                    evtdf=None, 
-                    nudf=None, 
+                    evtdf=None,
+                    nudf=None,
                     var_config=None, 
-                    syst_name="", 
+                    syst_name="",
+                    pot=None,
+                    vol=None,
+                    flux=None,
+                    topology_list=None,
                     n_univ=100, 
                     plot=False):
     """
     for the GENIE uncertainty on the xsec measurement
+    
+    Notes for variables:
+      - vol: TPC volume in cm^3 to measure total number of argon targets
+      - flux: Total flux of your interested neutrinos in (cm^2 POT)^-1, note that usuall SBND flux is given in (m^2 10^6 POT)^-1
     """
 
     if cov_type == "xsec":
         print("getting {} universes for {} uncertainty on the xsec".format(n_univ, syst_name))
+
+        if pot is None:
+            raise ValueError("pot is None, cannot make integrated flux")
+        if flux is None:
+            raise ValueError("flux is None, cannot make integrated flux")
+        if vol is None:
+            raise ValueError("vol is None, cannot make total targets")
+
+        INTEGRATED_FLUX = pot * flux
+        NTARGETS = vol * RHO * N_A / M_AR
+        XSEC_UNIT = 1 / (INTEGRATED_FLUX * NTARGETS)
         scale_factor = XSEC_UNIT
+
+        print("XSEC_UNIT: {%.3e}" %XSEC_UNIT)
+        print("NTARGETS: {%.3e}" %NTARGETS)
     elif cov_type == "rate":
         print("getting {} universes for {} uncertainty on the event rate".format(n_univ, syst_name))
         scale_factor = 1.0
     else:
         raise ValueError("Invalid covariance type: {}, choose in [xsec, rate]".format(cov_type))
+
+    if topology_list is None:
+        raise ValueError("topology_list is None, can't categorize")
 
     bins = var_config.bins
 
@@ -107,9 +132,10 @@ def get_genie_univs(cov_type="rate",
     # reco variable histogram, topology breakdown
     evtdf_div_topo = [evtdf[evtdf.nuint_categ == mode]for mode in topology_list]
 
-    univ_events = []
-    univ_effs   = []
-    univ_smears = []
+    signal_univ_events = []
+    #signal_univ_effs   = []
+    #signal_univ_smears = []
+    bkg_univ_events    = []
     for uidx in range(n_univ):
         univ_col = syst_name + ("univ_{}".format(uidx),)
 
@@ -125,10 +151,10 @@ def get_genie_univs(cov_type="rate",
                                             weights=evtdf_signal[univ_col],
                                             bins_2d=[bins, bins],
                                             plot=plot)
-            univ_smears.append(reco_vs_true)
+            #signal_univ_smears.append(reco_vs_true)
 
             eff = get_eff(reco_vs_true, signal_allmc_univ) 
-            univ_effs.append(eff)
+            #signal_univ_effs.append(eff)
 
             response_univ = get_response_matrix(reco_vs_true, eff, bins, plot=plot)
             signal_univ = response_univ @ signal_allmc_cv # note that we multiply the CV signal rate!
@@ -147,20 +173,36 @@ def get_genie_univs(cov_type="rate",
         # + univ background - cv background
         # note: cv background subtraction cancels out with the cv background subtraction for the cv event rate. 
         #       doing it anyways for the plot of universes on background subtracted event rate.
+        bkg_events_this_univ = []
         for this_evtdf in evtdf_div_topo[1:]:
             var, wgt = get_clipped_evts(this_evtdf, var_config.var_evt_reco_col, bins)
             univ_wgt = this_evtdf[univ_col].copy()
             univ_wgt[np.isnan(univ_wgt)] = 1 ## IMPORTANT: make nan univ_wgt to 1. to ignore them
             wgt *= univ_wgt
-            background_cv, _   = np.histogram(var, bins=bins)
+            #background_cv, _   = np.histogram(var, bins=bins)
             background_univ, _ = np.histogram(var, bins=bins, weights=wgt)
-            signal_univ += background_univ - background_cv
+            #signal_univ += background_univ - background_cv
+            background_univ *= scale_factor
+            bkg_events_this_univ.append(background_univ)
 
         signal_univ *= scale_factor
-        univ_events.append(signal_univ)
+        signal_univ_events.append(signal_univ)
+        bkg_univ_events.append(bkg_events_this_univ) ## for each univ, save array for each bkg evt category
 
-    univ_events = np.array(univ_events)
-    return univ_events, signal_sel_reco_cv
+    ## collect bkg cv arrays
+    bkg_sec_rec_cv = []
+    for this_evtdf in evtdf_div_topo[1:]:
+        var, wgt = get_clipped_evts(this_evtdf, var_config.var_evt_reco_col, bins)
+        background_cv, _   = np.histogram(var, bins=bins)
+        background_cv = background_cv.astype(np.float64)
+        background_cv *= scale_factor
+        bkg_sec_rec_cv.append(background_cv)
+
+    signal_univ_events = np.array(signal_univ_events)
+    bkg_univ_events = np.array(bkg_univ_events)
+    bkg_sec_rec_cv = np.array(bkg_sec_rec_cv)
+    
+    return signal_univ_events, signal_sel_reco_cv, bkg_univ_events, bkg_sec_rec_cv
 
 
 # ====== plotting functions ======
@@ -502,22 +544,21 @@ def overlay_hists(mc_df=None,
             "total_mc_bkgd": total_mc_bkgd,
             "total_data": total_data}
 
-
-def plot_univ_hists(
-                univ_events, 
-                cv_events,
-                syst_name, 
-                var_config, 
-                approval="internal",
-                textloc=[0.05, 0.55],
-                save_fig=False, 
-                save_name=None): 
+def plot_univ_hists(univ_events, 
+                    cv_events,
+                    syst_name,
+                    var_config,
+                    categ_name = "",
+                    approval="internal",
+                    textloc=[0.05, 0.55],
+                    save_fig=False, 
+                    save_name=None): 
 
     assert univ_events.shape[1] == len(cv_events) 
     n_univ = univ_events.shape[0]
 
     if (n_univ > 10):
-        colors = ["C0", "C1", "C2"]
+        colors = ["orange", "green", "red"]
 
         sorted_univs = np.sort(univ_events, axis=0)
 
@@ -553,12 +594,12 @@ def plot_univ_hists(
             plt.hist(var_config.bin_centers, bins=var_config.bins, weights=univ_events[i], histtype="step", color="gray", label=show_label)
 
     # plot CV last so that it is on top of the universes
-    plt.hist(var_config.bin_centers, bins=var_config.bins, weights=cv_events, histtype="step", color="k", label="Central Value")
+    plt.hist(var_config.bin_centers, bins=var_config.bins, weights=cv_events, histtype="step", color="black", label="Central Value", linestyle="--", linewidth=2)
 
     plt.xlim(var_config.bins[0], var_config.bins[-1])
     plt.xlabel(var_config.var_labels[1])
     plt.ylabel("Events / Bin")
-    plt.title(syst_name)
+    plt.title(syst_name + " syst.: " + categ_name)
 
     plt.legend(frameon=False)
 
@@ -624,7 +665,7 @@ def plot_heatmap(matrix,
             if not np.isnan(value):  # skip NaNs
                 plt.text(
                     j + 0.5, i + 0.5,
-                    f"{value:.2f}",
+                    f"{value:.2e}",
                     ha="center", va="center",   
                     color=get_text_color(value),
                     fontsize=10
@@ -865,11 +906,11 @@ def signal_hists(evtdf=None,  # df with selected & reco'ed events
     nudf_signal = nudf[nudf.nuint_categ == 1]
     var_allmc, wgt_allmc = get_clipped_evts(nudf_signal, nu_col, bins)
 
-    nevts_allmc, _, _ = plt.hist(var_allmc,     weights=wgt_allmc,     bins=bins, histtype="step", label="All Signal in MC")
-    nevts_allsel_truth, _, _ = plt.hist(var_allsel_truth, weights=wgt_allsel_truth, bins=bins, histtype="step", label="All Selected Signal, True")
-    nevts_allsel_reco, _, _ = plt.hist(var_allsel_reco,  weights=wgt_allsel_reco,  bins=bins, histtype="step", label="All Selected Signal, Reco", color="k")
-    nevts_sel_truth, _, _ = plt.hist(var_sel_truth, weights=wgt_sel_truth, bins=bins, histtype="step", label="Selected Signal, True")
-    nevts_sel_reco, _, _ = plt.hist(var_sel_reco,  weights=wgt_sel_reco,  bins=bins, histtype="step", label="Selected Signal, Reco", color="k")
+    nevts_allmc, _, _ = plt.hist(var_allmc, weights=wgt_allmc, bins=bins, histtype="step", label="All Signal in MC")
+    nevts_allsel_truth, _, _ = plt.hist(var_allsel_truth, weights=wgt_allsel_truth, bins=bins, histtype="step", label="All Selected Events, True", color="orange")
+    nevts_allsel_reco, _, _ = plt.hist(var_allsel_reco,  weights=wgt_allsel_reco,  bins=bins, histtype="step", label="All Selected Events, Reco", color="orange", linestyle='--')
+    nevts_sel_truth, _, _ = plt.hist(var_sel_truth, weights=wgt_sel_truth, bins=bins, histtype="step", label="Selected Signal, True", color="blue")
+    nevts_sel_reco, _, _ = plt.hist(var_sel_reco,  weights=wgt_sel_reco,  bins=bins, histtype="step", label="Selected Signal, Reco", color="blue", linestyle='--')
 
     plt.legend()
     plt.xlabel(var_config.var_labels[0])
@@ -878,10 +919,11 @@ def signal_hists(evtdf=None,  # df with selected & reco'ed events
 
     if save_fig:
         plt.savefig(save_name, bbox_inches='tight')
-    plt.show()
 
     if plot == False:
         plt.close()
+    else:
+        plt.show()
 
     if return_data:
         return {
