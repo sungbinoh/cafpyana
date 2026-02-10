@@ -204,6 +204,13 @@ def get_genie_univs(cov_type="rate",
     
     return signal_univ_events, signal_sel_reco_cv, bkg_univ_events, bkg_sec_rec_cv
 
+# ====== linear algebra
+def collect_inv_cov(cov):
+    ## covriance matrix should be positive-definite, so we can use Cholesky decomposition to get the inverse
+    L = np.linalg.cholesky(cov)      # C = L L^T
+    L_inv = np.linalg.inv(L)
+    C_inv = L_inv.T @ L_inv
+    return C_inv
 
 # ====== plotting functions ======
 
@@ -682,6 +689,208 @@ def plot_heatmap(matrix,
         plt.savefig("{}.png".format(save_fig_name), bbox_inches='tight', dpi=300)
     plt.show();
 
+def plot_overlay_with_cov(
+    data,
+    cov_data,
+    signal,
+    cov_signal,
+    background,
+    cov_background,
+    varcfg,
+    title="",
+    draw_ratio=True,
+    logy=False,
+    ylims=None,
+    bkg_label="Background",
+    sig_label="Signal",
+    sig_p_bkg_label="Signal + Background",
+    pred_unc_label="Pred. Unc.",
+    data_label="Data"
+):
+    """
+    Overlay data vs (signal+background) with:
+      - data error bars from cov_data
+      - prediction uncertainty band from (cov_signal + cov_background)
+      - stacked step-filled components for signal and background
+
+    Args
+    ----
+    data, signal, background : array-like, shape (n_bins,)
+    cov_data : array-like, shape (n_bins,) [variances] or (n_bins, n_bins)
+    cov_signal, cov_background : array-like, shape (n_bins, n_bins)
+    varcfg : VariableConfig with .bins and .var_labels
+    """
+
+    data = np.asarray(data)
+    signal = np.asarray(signal)
+    background = np.asarray(background)
+    pred = signal + background
+
+    edges = np.asarray(varcfg.bins)
+    centers = 0.5 * (edges[:-1] + edges[1:])
+    xerr = 0.5 * (edges[1:] - edges[:-1])
+
+    n_bins = len(centers)
+    if data.shape[0] != n_bins or pred.shape[0] != n_bins:
+        raise ValueError(
+            f"Bin mismatch: expected n_bins={n_bins} from varcfg.bins, "
+            f"got data={data.shape}, pred={pred.shape}"
+        )
+
+    # --- data y-errors from cov_data ---
+    cov_data = np.asarray(cov_data)
+    if cov_data.ndim == 1:
+        if cov_data.shape[0] != n_bins:
+            raise ValueError(f"cov_data length {cov_data.shape[0]} != n_bins {n_bins}")
+        yerr_data = np.sqrt(np.clip(cov_data, 0, None))
+    elif cov_data.ndim == 2:
+        if cov_data.shape != (n_bins, n_bins):
+            raise ValueError(f"cov_data shape {cov_data.shape} != {(n_bins, n_bins)}")
+        yerr_data = np.sqrt(np.clip(np.diag(cov_data), 0, None))
+    else:
+        raise ValueError("cov_data must be 1D (variances) or 2D (cov matrix).")
+
+    # --- prediction uncertainty from cov_signal + cov_background ---
+    cov_pred = np.asarray(cov_signal) + np.asarray(cov_background)
+    if cov_pred.shape != (n_bins, n_bins):
+        raise ValueError(f"cov_pred shape {cov_pred.shape} != {(n_bins, n_bins)}")
+
+    pred_err = np.sqrt(np.clip(np.diag(cov_pred), 0, None))
+
+    # Step arrays on edges (n_bins+1) to cover full first/last bin widths
+    pred_step = np.r_[pred, pred[-1]]
+    low_step  = np.r_[pred - pred_err, (pred - pred_err)[-1]]
+    high_step = np.r_[pred + pred_err, (pred + pred_err)[-1]]
+
+    # Stacked components as step arrays on edges
+    bkg_step = np.r_[background, background[-1]]
+    sig_step = np.r_[signal, signal[-1]]
+    tot_step = np.r_[background + signal, (background + signal)[-1]]
+
+    # --- figure layout ---
+    if draw_ratio:
+        fig, (ax, rax) = plt.subplots(
+            2, 1, figsize=(7, 6),
+            gridspec_kw={"height_ratios": [3, 1]},
+            sharex=True
+        )
+    else:
+        fig, ax = plt.subplots(figsize=(7, 4))
+        rax = None
+
+    # --- stacked histogram look (filled steps) ---
+    # Background fill from 0 -> bkg
+    ax.fill_between(
+        edges, 0.0, bkg_step,
+        step="post",
+        alpha=0.35,
+        label=bkg_label,
+    )
+    # Signal fill stacked on top: bkg -> bkg+sig
+    ax.fill_between(
+        edges, bkg_step, tot_step,
+        step="post",
+        alpha=0.35,
+        label=sig_label,
+    )
+
+    # --- total prediction line + uncertainty band ---
+    ax.step(
+        edges, pred_step,
+        where="post",
+        linewidth=1.5,
+        label=sig_p_bkg_label,
+    )
+    ax.fill_between(
+        edges,
+        low_step,
+        high_step,
+        step="post",
+        facecolor="none",
+        hatch="///",
+        edgecolor="black",
+        linewidth=0.0,
+        label=pred_unc_label,
+    )
+
+    # --- data on top ---
+    ax.errorbar(
+        centers, data,
+        xerr=xerr,
+        yerr=yerr_data,
+        fmt="o",
+        color="black",
+        label=data_label,
+        capsize=2,
+        zorder=10,
+    )
+
+    ax.set_ylabel("Events")
+    ax.set_title(title)
+    ax.legend(fontsize='x-small')
+
+    # --- auto y-range from what's plotted (data±err, pred±err, plus stack bounds) ---
+    y_all = np.concatenate([
+        data - yerr_data, data + yerr_data,
+        pred - pred_err, pred + pred_err,
+        np.array([0.0]),
+    ])
+    y_all = y_all[np.isfinite(y_all)]
+
+    if len(y_all) > 0:
+        min_y = np.min(y_all)
+        max_y = np.max(y_all)
+
+        if logy:
+            pos = y_all[y_all > 0]
+            if len(pos) > 0:
+                ax.set_yscale("log")
+                ax.set_ylim(np.min(pos) * 0.8, max_y * 1.2)
+        else:
+            ymin = 0 if min_y > 0 else min_y * 1.1
+            ax.set_ylim(ymin, max_y * 1.1)
+
+    if ylims is not None:
+        ax.set_ylim(ylims[0], ylims[1])
+
+    # --- x-limits (full bin width) ---
+    x_min, x_max = edges[0], edges[-1]
+    ax.set_xlim(x_min, x_max)
+
+    # --- ratio panel ---
+    if draw_ratio:
+        denom = np.where(pred == 0, np.nan, pred)
+        ratio = data / denom
+
+        # ratio y-errors from data covariance only
+        ratio_yerr = yerr_data / denom
+        ratio_step = np.r_[ratio, ratio[-1]]
+
+        ratio_pred = pred / denom
+        ratio_pred_yerr = pred_err / denom
+        rlow_step = np.r_[ratio_pred - ratio_pred_yerr, (ratio_pred - ratio_pred_yerr)[-1]]
+        rhigh_step = np.r_[ratio_pred + ratio_pred_yerr, (ratio_pred + ratio_pred_yerr)[-1]]
+
+        rax.errorbar(
+            centers, ratio,
+            xerr=xerr,
+            yerr=ratio_yerr,
+            fmt="o",
+            color="black",
+            capsize=2,
+        )
+        rax.fill_between(edges, rlow_step, rhigh_step, step="post", alpha=0.25)
+        rax.axhline(1.0, linestyle="--")
+
+        rax.set_ylabel("Data/Pred")
+        rax.set_xlabel(varcfg.var_labels[0])
+        rax.set_xlim(x_min, x_max)
+        rax.set_ylim(0.0, 2.0)
+    else:
+        ax.set_xlabel(varcfg.var_labels[0])
+
+    plt.tight_layout()
+    plt.show()
 
 def plot_unfolded_result(unfold, 
                          measured, 
