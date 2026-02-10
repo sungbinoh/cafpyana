@@ -123,8 +123,15 @@ def Is1muNcpi(df): # definition
 
 
 # ==== functions to get breadkdowns of event categories ====
+def get_nu_cosmics_category(df, ret_cuts=False, print_summary=False):
+    cut_cosmic = IsCosmic(df)
+    cut_nu_outfv = IsNuOutFV(df)
+    cut_nu_infv = IsNuInFV(df)
+    cuts = [cut_cosmic, cut_nu_outfv, cut_nu_infv]
+    return cuts
 
-def get_int_category(df, ret_cuts=False, print_summary=False):
+
+def get_topo_category(df, ret_cuts=False, print_summary=False):
     cut_cosmic = IsCosmic(df)
     cut_nu_outfv = IsNuOutFV(df)
     cut_nu_infv_nu_other = IsNuInFV_NuOther(df)
@@ -299,3 +306,27 @@ gibuu_mode_labels = [r'$\nu_{\mu}$ CC QE', r'$\nu_{\mu}$ CC QE (2p2h)', r'$\nu_{
                      r"$\nu$ NC", r"FV other $\nu$", r"Out-FV $\nu$", "Cosmic"]
 gibuu_mode_colors = ["#9b5580", "#390C1E", "#2c7c94", "#D88A3B", "#BFB17C", 
                      "darkgreen", "crimson", "sienna","gray"] 
+
+
+def get_category_cuts(breakdown_type, df, ret_cuts=False):
+    if breakdown_type == "nu_cosmics":
+        labels = nu_cosmics_labels
+        colors = nu_cosmics_colors
+        cuts = get_nu_cosmics_category(df, ret_cuts=True)
+
+    elif breakdown_type == "topology":
+        labels = topology_labels[::-1]
+        colors = topology_colors[::-1]
+        cuts = get_topo_category(df, ret_cuts=True)
+
+    elif breakdown_type == "genie":
+        labels = genie_mode_labels[::-1]
+        colors = genie_mode_colors[::-1]
+        cuts = get_genie_category(df, ret_cuts=True)
+    
+    # TODO: GiBUU breakdown
+
+    else:
+        raise ValueError("Invalid breakdown_type: %s, please choose between [topology, genie, or genie_sb]" % breakdown_type)
+
+    return cuts, labels, colors

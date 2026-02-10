@@ -6,6 +6,27 @@ from makedf.constants import *
 from makedf.util import *
 
 
+# ==== events selection cuts ====
+# slice cuts
+NU_SCORE_TH   = 0.45
+SAVE_NTRKS    = 2
+# track quality cuts
+TRACKSCORE_TH = 0.5
+VTXDIST_TH    = 1.2
+# pid cuts
+MU_CHI2MU_TH  = 30
+MU_CHI2P_TH   = 100
+MU_LEN_TH     = 50
+QUAL_TH       = 0.2
+P_CHI2P_TH    = 90
+P_LEN_TH      = 0
+# kinematic cuts
+MU_PLO_TH     = 0.22
+MU_PHI_TH     = 1
+P_PLO_TH      = 0.3
+P_PHI_TH      = 1
+
+
 def cut_clear_cosmic(df):
     return df[df.slc.is_clear_cosmic == 0]
 

@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import string
+import statsmodels.api as sm
 
 import sys
 sys.path.append('../../')
@@ -19,8 +20,23 @@ plt.style.use("presentation.mplstyle")
 cmap = mpl.cm.viridis
 norm = mpl.colors.Normalize(vmin=0.0, vmax=1.0)
 
+dpi = 300
+fig_ext = ".png"
+
 
 #  ====== calculation functions ======
+def get_pot_str(tot_pot):
+    pot_str = "{:.2e}".format(tot_pot).replace("e+0", "e").replace("e+", "e")\
+        .replace("e", " $\\times 10^{") + "}$"
+    pot_str = pot_str.replace(".00", "")
+    pot_str = pot_str.replace("$\\times 10^{", "$\\times 10^{")  
+    pot_str = pot_str.replace("}$", "}") 
+    pot_str = pot_str if pot_str.endswith("$") else pot_str + "$"
+    pot_str = pot_str.replace(" $", "$")
+    # print(pot_str)
+    return pot_str
+
+
 def generate_tags(end_tag=""):
     tags = []
     for first in string.ascii_lowercase:
@@ -46,6 +62,17 @@ def get_clipped_evts(df, var_col, bins, verbose=False):
         weights = np.ones_like(var)
     return var, weights
 
+def get_eff_err(success,total):  # success/total
+    err = [[],[]]
+    eff = success/total
+    for i in range(len(success)):
+        this_success = success[i]
+        this_tot = total[i]
+        interval = sm.stats.proportion_confint(this_success,this_tot,method='wilson')
+        err[0].append(abs(eff[i]-interval[0]))
+        err[1].append(abs(eff[i]-interval[1]))
+    return err
+
 
 def get_univ_rates(cov_type="rate", 
                     evtdf=None, 
@@ -70,12 +97,12 @@ def get_univ_rates(cov_type="rate",
 
     bins = var_config.bins
 
-    evtdf_signal = evtdf[evtdf.nuint_categ == 1]
+    evtdf_signal = evtdf[evtdf.topo_categ == 1]
     # reco variable histogram, topology breakdown
-    evtdf_div_topo = [evtdf[evtdf.nuint_categ == mode]for mode in topology_list]
+    evtdf_div_topo = [evtdf[evtdf.topo_categ == mode]for mode in topology_list]
 
     if nudf is not None:
-        nudf_signal = nudf[nudf.nuint_categ == 1]
+        nudf_signal = nudf[nudf.topo_categ == 1]
 
     ret = signal_hists(evtdf, nudf, var_config, return_data=True, plot=plot)
 
@@ -90,11 +117,14 @@ def get_univ_rates(cov_type="rate",
         # only consider effect on the response matrix for the signal channel
         if cov_type == "xsec":
             # smearing matrix
-            reco_vs_true = get_smear_matrix(ret["var_sel_truth"], 
-                                            ret["var_sel_reco"], 
-                                            weights=ret["wgt_sel_truth"]*evtdf_signal[syst_name][univ_col],
-                                            bins_2d=[bins, bins],
-                                            plot=plot)
+            # handle case where there's a single bin, in which case there's no smearing
+            if len(bins) == 2:
+                reco_vs_true = np.array([[1.0]])
+            else:
+                reco_vs_true, _, _ = np.histogram2d(ret["var_sel_truth"], 
+                                                    ret["var_sel_reco"], 
+                                                    weights=ret["wgt_sel_truth"]*evtdf_signal[syst_name][univ_col],
+                                                    bins=bins)
             univ_smears.append(reco_vs_true)
 
             # efficiency
@@ -107,7 +137,7 @@ def get_univ_rates(cov_type="rate",
             eff = signal_sel_univ / signal_allmc_univ
             univ_effs.append(eff)
 
-            response_univ = get_response_matrix(reco_vs_true, eff, bins, plot=plot)
+            response_univ = get_response_matrix(reco_vs_true, eff)
             signal_univ = response_univ @ ret["nevts_allmc"] # note that we multiply the CV signal rate!
             # signal_univ = signal_cv
 
@@ -133,7 +163,7 @@ def get_univ_rates(cov_type="rate",
             background_univ, _ = np.histogram(var, bins=bins, weights=wgt*univ_wgt)
 
             if bkgd_subtract:
-                signal_univ += background_univ - background_cv
+                signal_univ += (background_univ - background_cv)
             else:
                 signal_univ += background_univ
 
@@ -144,10 +174,10 @@ def get_univ_rates(cov_type="rate",
 
     if bkgd_subtract:
         cv_events = ret["nevts_sel_reco"]
-        cv_events *= scale_factor # = Response @ true_signal
+        cv_events *= scale_factor
     else:
         cv_events = ret["nevts_allsel_reco"]
-        cv_events *= scale_factor # = Response @ true_signal
+        cv_events *= scale_factor 
 
     return univ_events, cv_events
 
@@ -212,78 +242,58 @@ def add_genie_version_text(textloc_x, textloc_y, textloc_ha):
 
 # ==== bar plot ====
 def bar_plot(breakdown_type="topology", 
-             generator=None,
-             evtdf=None,
+             mc_df=None, intime_df=None, dirt_df=None,
              show_plot=True, 
              plot_labels=["", "", ""],
-             save_fig=False, 
-             save_name=None): 
+             approval="internal",
+             save_fig=False, save_name=None): 
 
-    if breakdown_type == "nu_cosmics":
-        ncateg = 3
-        labels = nu_cosmics_labels
-        colors = nu_cosmics_colors
-
-        cut_cosmic = IsCosmic(evtdf)
-        cut_nu_outfv = IsNuOutFV(evtdf)
-        cut_nu_intfv = IsNu(evtdf) & InFV(evtdf.slc.truth.position, det=DETECTOR)
-        cuts = [cut_cosmic, cut_nu_outfv, cut_nu_intfv]
-
-        if breakdown_type == "topology":
-            labels = topology_labels
-            colors = topology_colors
-            cuts = get_int_category(evtdf, ret_cuts=True)
-
-        elif breakdown_type == "genie":
-            labels = genie_mode_labels
-            colors = genie_mode_colors
-            cuts = get_genie_category(evtdf, ret_cuts=True)
-
+    sizes = [] 
+    for df in [mc_df, intime_df, dirt_df]:
+        if df is not None:
+            scale = df.pot_weight.unique()[0]
+            cuts, labels, colors = get_category_cuts(breakdown_type, df, ret_cuts=True)
+            this_sizes = [scale*len(df[i]) for i in cuts]
+            sizes.append(this_sizes)
         else:
-            raise ValueError("Invalid breakdown_type: %s, please choose between [topology, genie, or genie_sb]" % breakdown_type)
+            continue
+    sizes = np.array(sizes).sum(axis=0)
 
+    ncateg = len(cuts)
     fig, ax = plt.subplots(figsize = (6, ncateg*0.6))
 
-    scale = evtdf.pot_weight.unique()[0]
-    # size = [scale*len(evtdf[i]) for i in cuts]
-
-    if generator == "GiBUU":
-        wgt_means = []
-        for i in cuts:
-            wgt_means.append(np.nan_to_num(evtdf[i].genweight.mean(), nan=1.))
-        size = [scale*len(evtdf[i])*wgt_mean for i, wgt_mean in zip(cuts, wgt_means)]
-    else:
-        size = [scale*len(evtdf[i]) for i in cuts]
-
-    bars = plt.barh(labels, size, align='center', color = colors)
-    tot_count = np.array(size).sum()
+    bars = plt.barh(labels, sizes, align='center', color = colors)
+    tot_count = np.array(sizes).sum()
     
     perc_list = []
     for bar in bars:
         width = bar.get_width()
         label_y_pos = bar.get_y() + bar.get_height() / 2
         perc = 100*(width+0.)/(tot_count+0.)
-        ax.text(width+1, label_y_pos, s= ("%0.1f"%(100*(width+0.)/(tot_count+0.)) + "%"), va='center')
+        ax.text(width+1, label_y_pos, s= ("%0.1f"%(perc) + "%"), va='center')
         perc_list.append(perc)
 
     plt.xlabel(plot_labels[0])
-    plt.xlim(0, 1.12 * np.max(size))
+    plt.xlim(0, 1.12 * np.max(sizes))
 
-    if not show_plot:
-        plt.close()
-        # instead print breakdowns as a table
-        print("Breakdown ", breakdown_type, " ", generator)
-        print("-"*20)
-        for label, perc in zip(labels, perc_list):
-            print(f"{label}: {perc:.1f}%")
-        print("-"*20)
-        print(f"Total: {np.sum(perc_list):.1f}%")
+    # === plot additions ====
+    add_approval_text(approval, 0.95, 0.5, "right")
 
     if save_fig:
         plt.savefig(save_name, bbox_inches="tight")
 
-    ret_dict = {"cuts": cuts,
-                "perc_list": perc_list}
+    if not show_plot:
+        plt.close()
+        
+    # # print breakdowns as a table
+    # print("Breakdown ", breakdown_type, " ", generator)
+    # print("-"*20)
+    # for label, perc in zip(labels, perc_list):
+    #     print(f"{label}: {perc:.1f}%")
+    # print("-"*20)
+    # print(f"Total: {np.sum(perc_list):.1f}%")
+
+    ret_dict = {"perc_list": perc_list}
     return ret_dict
 
 
@@ -292,14 +302,16 @@ def overlay_hists(breakdown_type="topology",
                   mc_df=None,
                   data_df=None,
                   intime_df=None,
+                  dirt_df=None,
                   var_config="",
                   plot_labels=["", "", ""],
                   ax_ylim_ratio=1.5,
                   ratio = False,
-                  syst = False,
+                  syst = None,
                   vline = None,
                   textloc=[0.05, 0.55],
                   approval="internal",
+                  plot=True,
                   save_fig=False, 
                   save_name=None): 
 
@@ -313,7 +325,7 @@ def overlay_hists(breakdown_type="topology",
         if breakdown_type == "topology":
             labels = topology_labels
             colors = topology_colors
-            cuts = get_int_category(mc_df, ret_cuts=True)
+            cuts = get_topo_category(mc_df, ret_cuts=True)
 
         elif breakdown_type == "genie":
             labels = genie_mode_labels
@@ -455,12 +467,10 @@ def overlay_hists(breakdown_type="topology",
                 )
                 bottom += hist_vals
 
-    if syst:
-        syst_err = mc_stat_err
-        # TODO: other syst sources
-        # if 
-        # mc_stat_err_frac = 
-        # syst_err = np.sqrt(syst_err**2 + this_syst_err**2)
+    if syst is not None: # list of syst uncertainties 
+        mc_stat_err_frac = mc_stat_err / total_mc
+        syst_err = np.sqrt(mc_stat_err_frac**2 + syst**2)
+        syst_err = syst_err * total_mc
 
         ax.bar(
             var_config.bin_centers,
@@ -489,7 +499,7 @@ def overlay_hists(breakdown_type="topology",
     # == ratio panel ==
     if ratio:
         # MC 
-        if syst:
+        if syst is not None:
             mc_content_ratio = total_mc / total_mc # dummy
             mc_stat_err_ratio = syst_err / total_mc
             mc_stat_err_ratio = np.nan_to_num(mc_stat_err_ratio, nan=0.)
@@ -557,7 +567,7 @@ def overlay_hists(breakdown_type="topology",
             ordered_handles.extend(mc_handles)
             ordered_labels.extend(mc_labels[::-1]) # note the reverse order of mc_labels
 
-    if syst:
+    if syst is not None:
         unc_handle = [h for i, h in enumerate(handles) if 'Unc.' in labels_orig[i]]
         unc_label = [l for l in labels_orig if 'Unc.' in l]
         ordered_handles.extend(unc_handle)
@@ -603,13 +613,82 @@ def overlay_hists(breakdown_type="topology",
 
     # == save figure ==
     if save_fig:
-        plt.savefig(save_name+".pdf", bbox_inches='tight')
-    plt.show()
+        plt.savefig(save_name+fig_ext, bbox_inches="tight", dpi=dpi)
+
+    if plot == True:
+        plt.show()
+    else:
+        plt.close()
 
     return {"cuts": cuts, 
             "total_mc": total_mc, 
             "total_mc_bkgd": total_mc_bkgd,
             "total_data": total_data}
+
+
+def plot_efficiency(df_dict={}, 
+                    stage_labels=[],
+                    var_config=None, 
+                    textloc=[0.05, 0.55],
+                    approval="internal", 
+                    legend=True,
+                    plot=True,
+                    save_fig=False, 
+                    save_name=None):
+
+    var_name = var_config.var_nu_col
+    bins = var_config.bins
+    bin_centers = var_config.bin_centers
+
+    keys = list(df_dict.keys())
+    colors = ["C" + str(i) for i in range(len(keys))]
+
+    all_signal_df = df_dict[keys[0]][IsNuInFV_NumuCC_1p0pi(df_dict[keys[0]])]
+    n_tot_integ = len(all_signal_df)
+    var, wgts = get_clipped_evts(all_signal_df, var_name, bins)
+    n_tot, _ = np.histogram(var, weights=wgts, bins=bins)
+
+    fig, ax = plt.subplots()
+    ax_eff = ax.twinx()
+
+    for kidx, key in enumerate(keys):
+        this_df = df_dict[key]
+        this_signal_df = this_df[IsNuInFV_NumuCC_1p0pi(this_df)]
+        var, wgts = get_clipped_evts(this_signal_df, var_name, bins)
+        n, _ = np.histogram(var, weights=wgts, bins=bins)
+
+        this_eff_integ = len(this_signal_df) / n_tot_integ
+        this_label = stage_labels[kidx] + " ({:.2f}%)".format(this_eff_integ*100)
+        n, bins, _ = ax.hist(var, weights=wgts, bins=bins, histtype="step", label=this_label, alpha=0.6)
+
+        if key == keys[-1]:
+            print("final purity: {:.2f}%".format(100 * len(this_signal_df) / len(this_df)))
+
+        this_eff = n / n_tot
+        this_eff_err = get_eff_err(n, n_tot)
+        ax_eff.errorbar(bin_centers, this_eff, yerr=this_eff_err, fmt="o-", color=colors[kidx], label=this_label)
+
+    ax.set_xlabel(var_config.var_labels[0])
+    ax.set_ylabel("Events")
+    ax_eff.set_ylabel("Efficiency")
+    ax_eff.set_ylim(0, 1.05)
+    plt.xlim(bins[0], bins[-1])
+
+    if legend:
+        plt.legend(bbox_to_anchor=(1.15, 1.0))
+
+    # ==== plot additions ====
+    textloc_x, textloc_ha = get_textloc_x(n_tot, var_config.bins, textloc)
+    textloc_y = textloc[1]
+    add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
+
+    if save_fig:
+        plt.savefig(save_name+fig_ext, bbox_inches="tight", dpi=dpi)
+
+    if plot == True:
+        plt.show()
+    else:
+        plt.close()
 
 
 def plot_univ_hists(
@@ -619,6 +698,7 @@ def plot_univ_hists(
                 var_config, 
                 approval="internal",
                 textloc=[0.05, 0.55],
+                plot=True,
                 save_fig=False, 
                 save_name=None): 
 
@@ -626,7 +706,7 @@ def plot_univ_hists(
     n_univ = univ_events.shape[0]
 
     if (n_univ > 10):
-        colors = ["C0", "C1", "C2"]
+        colors = ["#FDE725FF", "#1F968BFF", "#440154FF"] # viridis colors
 
         sorted_univs = np.sort(univ_events, axis=0)
 
@@ -678,9 +758,12 @@ def plot_univ_hists(
 
 
     if save_fig:
-        plt.savefig(save_name+".pdf", bbox_inches='tight')
+        plt.savefig(save_name+fig_ext, bbox_inches='tight', dpi=dpi)
 
-    plt.show();
+    if plot == True:
+        plt.show()
+    else:
+        plt.close()
 
 
 def plot_unfolded_result(unfold, 
@@ -689,6 +772,7 @@ def plot_unfolded_result(unfold,
                          var_config, 
                          textloc=[0.05, 0.55],
                          approval="internal",
+                         plot=True,
                          save_fig=False, 
                          save_name=None,
                          closure_test=False):
@@ -776,73 +860,103 @@ def plot_unfolded_result(unfold,
     textloc_y = textloc[1]
     add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
 
-
     if save_fig:
-        plt.savefig(save_name, bbox_inches='tight')
-    plt.show()
+        plt.savefig(save_name+fig_ext, bbox_inches='tight', dpi=dpi)
+
+    if plot == True:
+        plt.show()
+    else:
+        plt.close()
 
 
-def variation_hists(evtdfs, 
-                    var_name, 
-                    bins,
-                    var_colors, 
-                    var_labels,
+def variation_hists(evtdfs=None, var_name=None, 
+                    nevts_list=None,
+                    datadf=None,
+                    bins=None,
+                    var_colors=None, var_labels=None,
                     plot_labels=["", "", ""],
                     vline = None,
                     textloc=[0.05, 0.55],
                     approval="internal",
+                    plot=True,
                     save_fig=False, save_name=None): 
 
     bin_centers = 0.5 * (bins[:-1] + bins[1:])
 
-    vardfs, wgtdfs = [], []
-    for df in evtdfs:
-        vardf, wgtf = get_clipped_evts(df, var_name, bins)
-        vardfs.append(vardf)
-        wgtdfs.append(wgtf)
+    if evtdfs is not None:
+        n_vars = len(evtdfs)
+    elif nevts_list is not None:
+        n_vars = len(nevts_list)
+    else:
+        raise ValueError("Either evtdfs or nevts_list must be provided")
 
+    # get distribution from dfs
+    if evtdfs is not None:
+        vardfs, wgtdfs = [], []
+        nevts_list = []
+        mc_stat_err_list = []
+        for df in evtdfs:
+            vardf, wgtdf = get_clipped_evts(df, var_name, bins)
+            vardfs.append(vardf)
+            wgtdfs.append(wgtdf)
+
+        # for sidx in range(n_vars):
+            nevts, _ = np.histogram(vardf, bins=bins, weights=wgtdf)
+            total_mc_err2, _ = np.histogram(vardf, bins=bins, weights=wgtdf**2)
+            mc_stat_err = np.sqrt(total_mc_err2)
+            nevts_list.append(nevts)
+            mc_stat_err_list.append(mc_stat_err)
+
+    if datadf is not None:
+        vardf_data, _   = get_clipped_evts(datadf, var_name, bins)
+        total_data, _ = np.histogram(vardf_data, bins=bins, weights=datadf.pot_weight)
+        data_eylow, data_eyhigh = return_data_stat_err(total_data)
+
+    # ===== plot =====
     fig, axs = plt.subplots(2, 1, figsize=(7.5, 7), 
                             sharex=True, gridspec_kw={'height_ratios': [4, 1]})
+
     fig.subplots_adjust(hspace=0.05)
     ax = axs[0]
     ax_r = axs[1]
 
-    total_mc_list = []
-    mc_stat_err_list = []
-    for sidx in range(len(vardfs)):
-        total_mc, _ = np.histogram(vardfs[sidx], bins=bins, weights=wgtdfs[sidx])
-        total_mc_err2, _ = np.histogram(vardfs[sidx], bins=bins, weights=wgtdfs[sidx]**2)
-        mc_stat_err = np.sqrt(total_mc_err2)
-        total_mc_list.append(total_mc)
-        mc_stat_err_list.append(mc_stat_err)
-
-        ax.hist(vardfs[sidx], 
-                weights=wgtdfs[sidx],
+    for sidx in range(n_vars):
+        ax.hist(bin_centers,
+                weights=nevts_list[sidx],
                 bins=bins, 
                 histtype="step" , 
                 color=var_colors[sidx], 
                 label=var_labels[sidx])
 
+    if datadf is not None:
+        ax.errorbar(bin_centers, 
+                    total_data, 
+                    yerr=np.vstack((data_eylow, data_eyhigh)),
+                    color='black', 
+                    fmt='o', markersize=5, capsize=3, linewidth=1.5,
+                    label='Data')
+
+
     ax.set_ylabel(plot_labels[1])
     ax.set_title(plot_labels[2])
     ax.set_xlim(bins[0], bins[-1])
-    ax.legend()
+    ax.legend(loc="best")
 
     # ==== var/CV ratio panel
-    for i, (vardf, wgtf) in enumerate(zip(vardfs, wgtdfs)):
-        if i == 0:
+    for sidx in range(n_vars):
+        if sidx == 0:
             continue
         # Avoid division by zero: ignore bins where denominator is 0
-        ratio = np.full_like(total_mc_list[0], np.nan, dtype=float)
-        nonzero_mask = total_mc_list[0] != 0
-        ratio[nonzero_mask] = total_mc_list[i][nonzero_mask] / total_mc_list[0][nonzero_mask]
+        ratio = np.full_like(nevts_list[0], np.nan, dtype=float)
+        nonzero_mask = nevts_list[0] != 0
+        ratio[nonzero_mask] = nevts_list[sidx][nonzero_mask] / nevts_list[0][nonzero_mask]
         # this_err = np.sqrt(
-        #     (mc_stat_err_list[0] / total_mc_list[0])**2 + 
-        #     (mc_stat_err_list[i] / total_mc_list[i])**2
+        #     (mc_stat_err_list[0] / nevts_list[0])**2 + 
+        #     (mc_stat_err_list[sidx] / nevts_list[sidx])**2
         # )
         # Only plot nonzero, non-nan elements in the ratio
         valid_mask = (~np.isnan(ratio)) & (ratio != 0)
-        ax_r.hist(bin_centers[valid_mask], bins=bins, weights=ratio[valid_mask], linewidth=1, histtype="step")
+        ax_r.hist(bin_centers[valid_mask], bins=bins, weights=ratio[valid_mask], linewidth=1, histtype="step", color=var_colors[sidx])
 
     ax_r.axhline(1.0, color='red', linestyle='--', linewidth=1)
     ax_r.set_xlim(bins[0], bins[-1])
@@ -861,16 +975,20 @@ def variation_hists(evtdfs,
             ax.vlines(x=v, ymin=0, ymax=ymax*0.75, color='red', linestyle='--')
 
     # approval rank
-    textloc_x, textloc_ha = get_textloc_x(total_mc, bins, textloc)
+    textloc_x, textloc_ha = get_textloc_x(nevts_list[0], bins, textloc)
     textloc_y = textloc[1]
     add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
 
     # == save figure ==
     if save_fig:
-        plt.savefig(save_name+".pdf", bbox_inches='tight')
-    plt.show()
+        plt.savefig(save_name+fig_ext, bbox_inches='tight', dpi=dpi)
 
-    return total_mc_list
+    if plot == True:
+        plt.show()
+    else:
+        plt.close()
+
+    return nevts_list
 
 
 def signal_hists(evtdf=None,  # df with selected & reco'ed events
@@ -885,7 +1003,7 @@ def signal_hists(evtdf=None,  # df with selected & reco'ed events
     """
     generate / selected / reco'ed signal events
 
-    nuint_categ == 1 : signal
+    topo_categ == 1 : signal
     topology_list has "1" as the first item, corresponding to the signal topology
 
     items with "sel" tags are selected events that are signal in truth 
@@ -904,7 +1022,7 @@ def signal_hists(evtdf=None,  # df with selected & reco'ed events
     var_allsel_truth, wgt_allsel_truth = get_clipped_evts(evtdf, truth_col, bins)
 
     # ===== true signal events =====
-    evtdf_signal = evtdf[evtdf.nuint_categ == 1]
+    evtdf_signal = evtdf[evtdf.topo_categ == 1]
     # selected, reco'ed 
     var_sel_reco, wgt_sel_reco = get_clipped_evts(evtdf_signal, reco_col, bins)
     # selected, truth (for response matrix)
@@ -917,7 +1035,7 @@ def signal_hists(evtdf=None,  # df with selected & reco'ed events
 
     if nudf is not None:
         # all MC, truth (for efficiency vector)
-        nudf_signal = nudf[nudf.nuint_categ == 1]
+        nudf_signal = nudf[nudf.topo_categ == 1]
         var_allmc, wgt_allmc = get_clipped_evts(nudf_signal, nu_col, bins)
         nevts_allmc, _ = np.histogram(var_allmc, weights=wgt_allmc, bins=bins)
     else:
@@ -947,8 +1065,12 @@ def signal_hists(evtdf=None,  # df with selected & reco'ed events
         add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
 
         if save_fig:
-            plt.savefig(save_name, bbox_inches='tight')
-        plt.show()
+            plt.savefig(save_name+fig_ext, bbox_inches='tight', dpi=dpi)
+
+        if plot == True:
+            plt.show()
+        else:
+            plt.close()
 
     if return_data:
         return {
@@ -975,15 +1097,20 @@ def signal_hists(evtdf=None,  # df with selected & reco'ed events
 
 
 # ==== fractional uncertainty plot ====
-def plot_frac_unc(frac_unc, 
+def plot_frac_unc(frac_unc_list, 
                   var_config, 
                   plot_labels=["", "", ""],
                   textloc=[0.05, 0.55],
                   approval="internal",
+                  plot=True,
                   save_fig=False, 
                   save_name=None):
 
-    plt.hist(var_config.bin_centers, bins=var_config.bins, weights=frac_unc, histtype="step", color="black")
+    for fidx, frac_unc in enumerate(frac_unc_list):
+        color = "C{}".format(fidx)
+        if len(frac_unc_list) == 1:
+            color = "black"
+        plt.hist(var_config.bin_centers, bins=var_config.bins, weights=frac_unc, histtype="step", color=color)
 
     plt.xlim(var_config.bins[0], var_config.bins[-1])
     plt.xlabel(var_config.var_labels[0])
@@ -996,8 +1123,12 @@ def plot_frac_unc(frac_unc,
     add_approval_text(approval, textloc_x, textloc_y, textloc_ha)
 
     if save_fig:
-        plt.savefig(save_name+".pdf", bbox_inches='tight')
-    plt.show();
+        plt.savefig(save_name+fig_ext, bbox_inches='tight')
+
+    if plot == True:
+        plt.show()
+    else:
+        plt.close()
 
 
 # ==== 2D plots ====
@@ -1017,6 +1148,8 @@ def plot_heatmap(matrix,
                  bins,
                  plot_labels=["", "", ""],
                  approval="internal",
+                 verbose=False,
+                 plot=True,
                  save_fig=False, 
                  save_name=None):
 
@@ -1051,10 +1184,22 @@ def plot_heatmap(matrix,
     plt.ylabel(plot_labels[1], fontsize=20)
     # plt.title(plot_labels[2], fontsize=20)
 
+    if verbose:
+        n_diag = np.sum(np.diag(matrix))
+        diagonal_ratio = n_diag / np.sum(matrix)
+        print(f"Diagonal ratio: {diagonal_ratio:.2f}")
+        print(f"True ratio: {np.diag(matrix) / np.sum(matrix, axis=0)}")
+
+        # print
+
     # ===== plot additions =====
     add_approval_text(approval, 0.95, 1.05, "right")
 
     if save_fig:
-        plt.savefig("{}.png".format(save_name), bbox_inches='tight', dpi=300)
-    plt.show();
+        plt.savefig(save_name+fig_ext, bbox_inches='tight', dpi=dpi)
+
+    if plot == True:
+        plt.show()
+    else:
+        plt.close()
 
