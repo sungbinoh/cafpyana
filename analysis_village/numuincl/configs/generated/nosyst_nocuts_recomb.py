@@ -4,8 +4,9 @@ from analysis_village.numuincl import makedf1muX as maker
 # Auto-generated for job 'nosyst_nocuts_recomb'
 maker.INCLUDE_WEIGHTS = False
 maker.SLIM = False
-maker.set_update_recomb(False)
+maker.set_update_recomb(True)
 maker.VERBOSE = False
+maker.ADD_STAT_UNC = False
 maker.apply_setting_dependencies()
 
 _base = import_module('analysis_village.numuincl.configs.base')

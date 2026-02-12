@@ -1,1 +1,0 @@
-python run_df_maker.py -c /exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/config_nospine_wtrk.py -o /exp/sbnd/data/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/pandora/mc_lowe/mc_smallpand_lowe_syst3 -i /exp/sbnd/data/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/pandora/mc_lowe/low_energy_small.list

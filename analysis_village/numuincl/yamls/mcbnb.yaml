@@ -3,52 +3,30 @@ output_dir: /exp/sbnd/data/users/brindenc/analyze_sbnd/numu/v10_06_00_validation
 #output_dir: /pnfs/sbnd/persistent/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/pandora/mc_syst/v5
 
 jobs:
-  - name: nosyst_nocuts_recomb
-    enabled: true
-    description: INCLUDE_WEIGHTS=False, SLIM=False, UPDATE_RECOMB=True, ADD_STAT_UNC=False
-    base_config: analysis_village.numuincl.configs.base
-    dfs:
-      - makedf.makedf.make_hdrdf
-      - analysis_village.numuincl.makedf1muX.make_mcnu_processed
-      - analysis_village.numuincl.makedf1muX.make_pandora_evtdf_processed
-      - analysis_village.numuincl.makedf1muX.make_custom_trkdf
-    names: [hdr, 
-      mcnu, evt_pand, 
-      trk]
-    input_list: mc_fullpand.list
-    output: mc_smallpand_nosyst_nocuts_recomb3
-    settings:
-      INCLUDE_WEIGHTS: false
-      SLIM: false
-      UPDATE_RECOMB: true
-      VERBOSE: true
-      ADD_STAT_UNC: false
-    args:
-      ngrid: 0
-      ncpu: -1
-      nfile: 2000
-
-  - name: slimsyst_nocuts_norecomb
-    enabled: true
-    description: INCLUDE_WEIGHTS=True, SLIM=True, UPDATE_RECOMB=False, ADD_STAT_UNC=False
-    base_config: analysis_village.numuincl.configs.base
-    dfs:
-      - makedf.makedf.make_hdrdf
-      - analysis_village.numuincl.makedf1muX.make_mcnu_processed
-      - analysis_village.numuincl.makedf1muX.make_pandora_evtdf_processed
-    names: [hdr, mcnu, evt_pand]
-    input_list: mc_fullpand.list
-    output: mc_smallpand_slimsyst_nocuts_norecomb3
-    settings:
-      INCLUDE_WEIGHTS: true
-      SLIM: true
-      UPDATE_RECOMB: false
-      VERBOSE: false
-      ADD_STAT_UNC: false
-    args:
-      ngrid: 0
-      ncpu: -1
-      nfile: 2000
+  # - name: nosyst_nocuts_recomb
+  #   enabled: true
+  #   description: INCLUDE_WEIGHTS=False, SLIM=False, UPDATE_RECOMB=True, ADD_STAT_UNC=False
+  #   base_config: analysis_village.numuincl.configs.base
+  #   dfs:
+  #     - makedf.makedf.make_hdrdf
+  #     - makedf.makedf.make_mcnudf
+  #     - analysis_village.numuincl.makedf1muX.make_pandora_evtdf_processed
+  #     - analysis_village.numuincl.makedf1muX.make_custom_trkdf
+  #   names: [hdr, 
+  #     mcnu, evt_pand, 
+  #     trk]
+  #   input_list: mc_fullpand.list
+  #   output: mc_medpand_nosyst_nocuts_recomb3
+  #   settings:
+  #     INCLUDE_WEIGHTS: false
+  #     SLIM: false
+  #     UPDATE_RECOMB: true
+  #     VERBOSE: false
+  #     ADD_STAT_UNC: false
+  #   args:
+  #     ngrid: 0
+  #     ncpu: 40
+  #     nfile: 10000
 
   - name: fullsyst_fullcuts_norecomb
     enabled: true
@@ -56,12 +34,12 @@ jobs:
     base_config: analysis_village.numuincl.configs.base
     dfs:
       - makedf.makedf.make_hdrdf
-      - analysis_village.numuincl.makedf1muX.make_mcnu_processed
+      - makedf.makedf.make_mcnudf
       - analysis_village.numuincl.makedf1muX.make_pandora_evtdf_processed_signal_cut
       - analysis_village.numuincl.makedf1muX.make_pandora_evtdf_processed_selected_cut
     names: [hdr, mcnu, evt_pand_signal, evt_pand_selected]
     input_list: mc_fullpand.list
-    output: mc_smallpand_fullsyst_cut_norecomb3
+    output: mc_tinypand_fullsyst_cut_norecomb4
     settings:
       INCLUDE_WEIGHTS: true
       SLIM: false
@@ -70,5 +48,28 @@ jobs:
       ADD_STAT_UNC: true
     args:
       ngrid: 0
-      ncpu: -1
-      nfile: 2000
+      ncpu: 30
+      nfile: 1
+
+  # - name: slimsyst_nocuts_norecomb
+  #   enabled: true
+  #   description: INCLUDE_WEIGHTS=True, SLIM=True, UPDATE_RECOMB=False, ADD_STAT_UNC=False
+  #   base_config: analysis_village.numuincl.configs.base
+  #   dfs:
+  #     - makedf.makedf.make_hdrdf
+  #     - makedf.makedf.make_mcnudf
+  #     - analysis_village.numuincl.makedf1muX.make_pandora_evtdf_processed
+  #   names: [hdr, mcnu, evt_pand]
+  #   input_list: mc_fullpand.list
+  #   output: mc_smallpand_slimsyst_nocuts_norecomb4
+  #   settings:
+  #     INCLUDE_WEIGHTS: true
+  #     SLIM: true
+  #     UPDATE_RECOMB: false
+  #     VERBOSE: false
+  #     ADD_STAT_UNC: false
+  #   args:
+  #     ngrid: 0
+  #     ncpu: 30
+  #     nfile: 1000
+

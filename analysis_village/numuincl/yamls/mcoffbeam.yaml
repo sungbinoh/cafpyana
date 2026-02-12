@@ -9,12 +9,11 @@ jobs:
     base_config: analysis_village.numuincl.configs.base
     dfs:
       - makedf.makedf.make_hdrdf
-      - makedf.makedf.make_mcnudf
       - analysis_village.numuincl.makedf1muX.make_pandora_evtdf_processed
       - analysis_village.numuincl.makedf1muX.make_custom_trkdf
-    names: [hdr, mcnu, evt_pand, trk]
+    names: [hdr, evt_pand, trk]
     input_list: mc_fullpand.list
-    output: mc_smallpand_nosyst_nocuts_recomb3
+    output: mc_medpand_nosyst_nocuts_recomb3
     settings:
       INCLUDE_WEIGHTS: false
       SLIM: false
@@ -23,4 +22,4 @@ jobs:
     args:
       #ngrid: -1
       ncpu: -1
-      nfile: 1000
+      nfile: 5000

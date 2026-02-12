@@ -32,8 +32,6 @@ FLAG_MAP = {
 
 
 def main() -> None:
-    os.system("source /exp/sbnd/app/users/brindenc/develop/cafpyana/setup.sh") # Source the setup script
-
     parser = argparse.ArgumentParser(description="Submit makedf jobs from YAML.")
     parser.add_argument(
         "-y", "--yaml", default=str(DEFAULT_YAML), help="Path to mcbnb.yaml (default: %(default)s)"
@@ -108,6 +106,7 @@ def run_job(
     input_dir: Optional[str],
     output_dir: Optional[str],
 ) -> None:
+    os.system("source /exp/sbnd/app/users/brindenc/develop/cafpyana/setup.sh") # Source the setup script
     slug = slugify(job["name"])
     cfg_path = GENERATED_CONFIG_DIR / f"{slug}.py"
     cfg_path.write_text(render_config(job))
@@ -186,11 +185,11 @@ def render_config(job: Dict[str, Any]) -> str:
     else:
         lines.append("NAMES = _base.NAMES")
     # Only set PREPROCESS if INCLUDE_WEIGHTS is True
-    # lines.append("if maker.INCLUDE_WEIGHTS:")
-    # lines.append("    from preprocess import Script")
-    # lines.append('    PREPROCESS = [Script("/exp/sbnd/app/users/gputnam/Ar23-knobs/update_reweight_anywhere.sh")]')
-    # lines.append("else:")
-    # lines.append("    PREPROCESS = []")
+    lines.append("if maker.INCLUDE_WEIGHTS:")
+    lines.append("    from preprocess import Script")
+    lines.append('    PREPROCESS = [Script("/exp/sbnd/app/users/gputnam/Ar23-knobs/update_reweight_anywhere.sh")]')
+    lines.append("else:")
+    lines.append("    PREPROCESS = []")
     return "\n".join(lines) + "\n"
 
 

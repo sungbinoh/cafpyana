@@ -14,7 +14,7 @@ jobs:
       - analysis_village.numuincl.makedf1muX.make_custom_trkdf
     names: [hdr, mcnu, evt_pand, trk]
     input_list: nominal_sorted.list
-    output: mc_nominal_nosyst_nocuts_recomb_med3
+    output: mc_nominal_nosyst_nocuts_recomb_tiny4
     settings:
       INCLUDE_WEIGHTS: false
       SLIM: false
@@ -22,5 +22,5 @@ jobs:
       VERBOSE: false
     args:
       #ngrid: 0
-      ncpu: 40
-      nfile: 10000
+      ncpu: -1
+      nfile: 1

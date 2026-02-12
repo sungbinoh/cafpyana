@@ -13,6 +13,7 @@ from makedf.constants import *
 #My imports 
 import sys
 sys.path.append('analysis_village/numuincl') #relative path to my stuff
+sys.path.append('/exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl') #relative path to my stuff
 from sbnd.cafclasses.slice import CAFSlice
 from sbnd.cafclasses.nu import NU
 from sbnd.cafclasses.binning import Binning2D
@@ -481,48 +482,6 @@ def make_pandora_evtdf_processed(f, include_weights=None, wgt_types=["bnb","geni
     #     for k in slc.data.keys():
     #         f.write(f'{k}\n')
     return slc.data
-
-def make_mcnu_processed(f, include_weights=None, wgt_types=["bnb","genie","g4"], slim=None, 
-                       trkScoreCut=None, updaterecomb=None, **trkArgs):
-    """
-    Process and return the mcnu dataframe with the same processing as make_pandora_evtdf_processed.
-    This allows storing mcnu separately while maintaining one df per function.
-    Note: This will rebuild the slice df for containment matching, but avoids duplicating the mcnu processing logic.
-    """
-    include_weights = _resolve_flag(include_weights, INCLUDE_WEIGHTS)
-    slim = _resolve_flag(slim, SLIM)
-    updaterecomb = _resolve_flag(updaterecomb, UPDATE_RECOMB)
-    trkScoreCut = _resolve_flag(trkScoreCut, TRK_CUTS)
-    
-    # Get the mcdf
-    _, mcdf = make_pandora_evtdf(f, include_weights=include_weights, wgt_types=wgt_types, slim=slim, 
-                                 trkScoreCut=trkScoreCut, updaterecomb=updaterecomb, return_mcdf=True, **trkArgs)
-    
-    hdr = make_hdrdf(f)
-    ismc = hdr.ismc.astype(bool).unique()
-    if len(ismc) > 1:
-        raise ValueError(f'Multiple ismc values: {ismc}')
-    else:
-        ismc = ismc[0]
-    
-    # Need to rebuild the slice df for containment matching
-    df = make_pandora_evtdf(f, include_weights=include_weights, wgt_types=wgt_types, slim=slim, 
-                               trkScoreCut=trkScoreCut, updaterecomb=updaterecomb, return_mcdf=False, **trkArgs)
-    slc = CAFSlice(df)
-    slc.remove_column_suffix(MU_KEY_SUFFIXES[-1]) #Fix null variation
-    # with open('/exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/slc_keys_inmaker.txt','w') as f:
-    #     for k in slc.data.keys():
-    #         f.write(f'{k}\n')
-    slc.scale_to_pot(nom_pot=1., sample_pot=1.)
-    
-    # Process mcnu using the same helper function
-    mcnu = _process_mcnu(mcdf, slc, ismc)
-    
-    if mcnu is not None:
-        return mcnu.data
-    else:
-        # Return empty dataframe with same structure if not MC or no data
-        return pd.DataFrame()
     
 def make_pandora_evtdf_processed_signal_cut(f, include_weights=None, wgt_types=["bnb","genie","g4"], slim=None, 
     trkScoreCut=None, updaterecomb=None, **trkArgs):
