@@ -686,9 +686,16 @@ def make_spinepartdf(f):
     return epartdf
 
 def make_blipdf(f):
+    #some issues here
+    print("starting blip")
     blipinfodf = loadbranches(f["recTree"], blipbranches)
+    print("loaded blip")
     blipclusterinfodf = loadbranches(f["recTree"], blipclusterbranches)
+    print("loaded cluster")
     trueblipinfodf = loadbranches(f["recTree"], trueblipbranches)
+    print("loaded true blip")
     fullblipdf = multicol_merge(blipinfodf, blipclusterinfodf)
+    print("combination 1")
     fullblipdf = multicol_merge(fullblipdf, trueblipinfodf)
+    print("combination 2")
     return fullblipdf

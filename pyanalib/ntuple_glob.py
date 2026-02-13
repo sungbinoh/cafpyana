@@ -86,9 +86,7 @@ def _loaddf(applyfs, preprocess, g):
             elif totevt < 1e-6:
                 print("File (%s) has 0 in TotalEvents. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
             else:
-                print(applyfs)
                 for applyf in applyfs:
-                    print(applyf)
                     df = applyf(f)  # must fully read from 'f' here
                     if df is None:
                         dfs.append(None)
