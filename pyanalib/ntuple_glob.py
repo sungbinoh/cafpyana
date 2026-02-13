@@ -79,6 +79,7 @@ def _loaddf(applyfs, preprocess, g):
     try:
         # Open AND close strictly within the context manager
         with _open_with_retries(fname) as f:
+            print('Opened successfully')
             dfs = []
             totevt = f['TotalEvents'].values()[0]
             if "recTree" not in f:
