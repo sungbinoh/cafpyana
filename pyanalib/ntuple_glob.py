@@ -79,7 +79,6 @@ def _loaddf(applyfs, preprocess, g):
     try:
         # Open AND close strictly within the context manager
         with _open_with_retries(fname) as f:
-            print('Opened successfully')
             dfs = []
             totevt = f['TotalEvents'].values()[0]
             if "recTree" not in f:
@@ -87,8 +86,9 @@ def _loaddf(applyfs, preprocess, g):
             elif totevt < 1e-6:
                 print("File (%s) has 0 in TotalEvents. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
             else:
-                print("in this special branch")
+                print(applyfs)
                 for applyf in applyfs:
+                    print(applyf)
                     df = applyf(f)  # must fully read from 'f' here
                     if df is None:
                         dfs.append(None)
@@ -109,7 +109,6 @@ def _loaddf(applyfs, preprocess, g):
                     df = df.reorder_levels(new_order)
 
                     dfs.append(df)
-                print("Exiting special branch")
             df_histpot = make_histpotdf(f)
             if "TotalPOT" not in f:
                 print(f"File ({fname}) missing TotalPOT histogram. Using empty DataFrame.")
@@ -118,7 +117,6 @@ def _loaddf(applyfs, preprocess, g):
             new_order = [df_histpot.index.nlevels - 1] + list(range(df_histpot.index.nlevels - 1))
             df_histpot = df_histpot.reorder_levels(new_order)
             dfs.append(df_histpot)
-            print("below append")
             df_histgenevt = make_histgenevtdf(f)
             if "TotalGenEvents" not in f:
                 print(f"File ({fname}) missing TotalGenEvents histogram. Using empty DataFrame.")
@@ -127,7 +125,6 @@ def _loaddf(applyfs, preprocess, g):
             new_order = [df_histgenevt.index.nlevels - 1] + list(range(df_histgenevt.index.nlevels - 1))
             df_histgenevt = df_histgenevt.reorder_levels(new_order)
             dfs.append(df_histgenevt)
-            print("At end")
 
     except (OSError, ValueError) as e:
         print(f"Could not open file ({fname}). Skipping...")
