@@ -43,7 +43,6 @@ opflashbranches = [
     "rec.opflashes.firsttime",
     "rec.opflashes.time",
     "rec.opflashes.totalpe",
-    "rec.opflashes.length",
     "rec.opflashes.center.x",
     "rec.opflashes.center.y",
     "rec.opflashes.center.z",
