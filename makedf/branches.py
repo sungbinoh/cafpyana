@@ -47,7 +47,7 @@ opflashbranches = [
     "rec.opflashes.center.y",
     "rec.opflashes.center.z",
     "rec.opflashes.cryo",
-    "rec.opflashes.fasttotal",
+    "rec.opflashes.fasttototal",
     "rec.opflashes.firstpmt",
     "rec.opflashes.onbeamtime",
     "rec.opflashes.tpc",
