@@ -538,6 +538,7 @@ eparticlematchedbranches = [
 
 blipbranches = [
     "rec.blips.cryostat",
+    "rec.blips.TPC",
     "rec.blips.dX",
     "rec.blips.dYZ",
     "rec.blips.energy",
