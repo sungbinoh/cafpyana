@@ -99,6 +99,7 @@ def _loaddf(applyfs, preprocess, g):
 
                 if "recTree" not in f:
                     print("File (%s) missing recTree. Skipping..." % fname)
+                    print(f'Keys in file: {f.keys()}')
                     return None
 
                 dfs = []

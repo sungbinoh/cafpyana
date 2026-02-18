@@ -1,19 +1,18 @@
 from importlib import import_module
 from analysis_village.numuincl import makedf1muX as maker
 
-# Auto-generated for job 'fullsyst_fullcuts_norecomb'
+# Auto-generated for job 'slimsyst_nocuts_norecomb3'
 maker.INCLUDE_WEIGHTS = True
-maker.SLIM = False
+maker.SLIM = True
 maker.set_update_recomb(False)
 maker.VERBOSE = False
-maker.ADD_STAT_UNC = True
+maker.ADD_STAT_UNC = False
 maker.apply_setting_dependencies()
 
 _base = import_module('analysis_village.numuincl.configs.base')
 DFS = [
     getattr(import_module('makedf.makedf'), 'make_hdrdf'),
     getattr(import_module('makedf.makedf'), 'make_mcnudf'),
-    getattr(import_module('analysis_village.numuincl.makedf1muX'), 'make_pandora_evtdf_processed_signal_cut'),
-    getattr(import_module('analysis_village.numuincl.makedf1muX'), 'make_pandora_evtdf_processed_selected_cut'),
+    getattr(import_module('analysis_village.numuincl.makedf1muX'), 'make_pandora_evtdf_processed'),
 ]
-NAMES = ['hdr', 'mcnu', 'evt_pand_signal', 'evt_pand_selected']
+NAMES = ['hdr', 'mcnu', 'evt_pand']

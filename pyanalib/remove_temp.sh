@@ -1,1 +1,0 @@
-rm /exp/sbnd/data/users/brindenc/analyze_sbnd/numu/v10_06_00_validation/pandora/tmp/*

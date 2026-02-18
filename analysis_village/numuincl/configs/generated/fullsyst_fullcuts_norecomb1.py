@@ -1,7 +1,7 @@
 from importlib import import_module
 from analysis_village.numuincl import makedf1muX as maker
 
-# Auto-generated for job 'fullsyst_fullcuts_norecomb'
+# Auto-generated for job 'fullsyst_fullcuts_norecomb1'
 maker.INCLUDE_WEIGHTS = True
 maker.SLIM = False
 maker.set_update_recomb(False)

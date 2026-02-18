@@ -99,10 +99,12 @@ def run_pool(output, inputs, nproc):
 
             for k, df in zip(reversed(NAMES), reversed(dfs)):
                 this_key = k + "_" + str(k_idx)
-                size_bytes = df.memory_usage(deep=True).sum()
+                size_bytes = df.memory_usage(deep=True).sum() if df is not None else 0
                 size_gb = size_bytes / (1024**3)
                 size_counters[k] += size_gb
-                df_buffers[k].append(df)  # accumulate
+                if df is not None:
+                    df_buffers[k].append(df)  # accumulate
+                    del df
 
             if any(val > split_margin for val in size_counters.values()):
                 # Concatenate and save accumulated DataFrames
@@ -179,14 +181,65 @@ def run_grid(inputfiles):
     for i_line in range(0,len(inputfiles)):
         flistForEachJob[i_line%ngrid].append(inputfiles[i])
 
+    config_path = Path(args.config)
+    if not config_path.is_file():
+        raise FileNotFoundError(f"Config file does not exist: {config_path}")
+    config_dst = Path(MasterJobDir) / config_path.name
+    shutil.copy2(config_path, config_dst)
+
+    generated_dir = config_path.parent / "generated"
+    if generated_dir.is_dir():
+        dst_generated = Path(MasterJobDir) / "generated"
+        shutil.copytree(generated_dir, dst_generated, dirs_exist_ok=True)
+
+    # Copy analysis_village directory if it exists (needed for config imports)
+    # Only copy *.py files to keep tarball size down
+    CAFPYANA_WD = os.environ.get('CAFPYANA_WD', os.getcwd())
+    analysis_village_src = Path(CAFPYANA_WD) / "analysis_village"
+    if analysis_village_src.is_dir():
+        dst_analysis_village = Path(MasterJobDir) / "analysis_village"
+        dst_analysis_village.mkdir(parents=True, exist_ok=True)
+        
+        # Walk through and copy only .py files, preserving directory structure
+        for root, dirs, files in os.walk(analysis_village_src):
+            # Get relative path from source
+            rel_path = Path(root).relative_to(analysis_village_src)
+            dst_dir = dst_analysis_village / rel_path
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Copy only .py files
+            for file in files:
+                if file.endswith('.py'):
+                    src_file = Path(root) / file
+                    dst_file = dst_dir / file
+                    shutil.copy2(src_file, dst_file)
+
+    # Use relative path for config - it will be in ${CONDOR_DIR_INPUT}/bin_dir/ when extracted
+    config_name = config_path.name
+    config_arg = f'${{CONDOR_DIR_INPUT}}/bin_dir/{config_name}'
+
     for i_flist in range(0,len(flistForEachJob)):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
+        # Use the venv's python directly (more reliable than activation)
+        out.write('VENV_PYTHON="$(pwd)/envs/venv_py39_cafpyana/bin/python"\n')
+        out.write('if [ ! -f "$VENV_PYTHON" ]; then\n')
+        out.write('  echo "ERROR: venv python not found at $VENV_PYTHON"\n')
+        out.write('  exit 1\n')
+        out.write('fi\n')
+        out.write('echo "Using python: $VENV_PYTHON"\n')
+        #out.write('$VENV_PYTHON -c "import numba; print(\"numba version:\", numba.__version__)" || echo "ERROR: numba not found in venv"\n')
+        # Copy config to current directory for easier access
+        out.write(f'cp ${{CONDOR_DIR_INPUT}}/bin_dir/{config_name} ./{config_name}\n')
+        # Copy analysis_village from tarball to cafpyana directory (overwrites if exists)
+        out.write('if [ -d "${CONDOR_DIR_INPUT}/bin_dir/analysis_village" ]; then\n')
+        out.write('  cp -r ${CONDOR_DIR_INPUT}/bin_dir/analysis_village ./\n')
+        out.write('fi\n')
+        cmd = '$VENV_PYTHON run_df_maker.py -c ./' + config_name + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
-            if i_f == 0:
+            if i_f == 0: 
                 cmd += ' ' + flist[i_f]
             else: 
                 cmd += ',' + flist[i_f]
@@ -197,7 +250,7 @@ def run_grid(inputfiles):
     os.system('cp ./bin/grid_executable.sh %s' %MasterJobDir)
 
     # 5) prepare a package for xrootd
-    CAFPYANA_WD = os.environ['CAFPYANA_WD']
+    # CAFPYANA_WD already defined above
     cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/XRootD " + MasterJobDir
     cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/pyxrootd " + MasterJobDir
     os.system(cp_XRootD)
@@ -243,7 +296,7 @@ if __name__ == "__main__":
         if args.inputfilelist != "":
             lines = open(args.inputfilelist)
             for line in lines:
-                if "#" in line:
+                if line.strip().startswith("#"):
                     continue
                 line = line.strip('\n')
                 InputSamples.append(line)

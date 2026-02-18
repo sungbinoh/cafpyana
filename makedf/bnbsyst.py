@@ -24,4 +24,5 @@ def bnbsyst(f, nuind, multisim_nuniv=250, slim=False):
     if slim:  # keep only the multiplied "Flux.univ_" columns
         flux_cols = [c for c in bnbwgtdf.columns if c[0] == "Flux"]
         bnbwgtdf = bnbwgtdf[flux_cols]
+        
     return bnbwgtdf

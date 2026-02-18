@@ -185,11 +185,11 @@ def render_config(job: Dict[str, Any]) -> str:
     else:
         lines.append("NAMES = _base.NAMES")
     # Only set PREPROCESS if INCLUDE_WEIGHTS is True
-    lines.append("if maker.INCLUDE_WEIGHTS:")
-    lines.append("    from preprocess import Script")
-    lines.append('    PREPROCESS = [Script("/exp/sbnd/app/users/gputnam/Ar23-knobs/update_reweight_anywhere.sh")]')
-    lines.append("else:")
-    lines.append("    PREPROCESS = []")
+    # lines.append("if maker.INCLUDE_WEIGHTS:")
+    # lines.append("    from preprocess import Script")
+    # lines.append('    PREPROCESS = [Script("/exp/sbnd/app/users/gputnam/Ar23-knobs/update_reweight_anywhere.sh")]')
+    # lines.append("else:")
+    # lines.append("    PREPROCESS = []")
     return "\n".join(lines) + "\n"
 
 
