@@ -35,10 +35,12 @@ void MakesBruce(const char* fileName = "input.root", const char* output_filename
         std::map<std::string, std::vector<double>> filler_map;
         std::map<std::string, std::vector<double>> filler_sigmas_map;
         bool is_multisigma = false;
+        bool is_WM_multisigma = false;
         bool is_det_multisigma = false;
         bool is_multisim = false;
         std::string multisigma_keyword = "multisigma";
         std::string det_multisigma_keyword = "CAFPYANA_SBN_v1_multisigma";
+        std::string WM_multisigma_keyword = "WireMod_SBN_v1_multisigma";
         std::string multisim_keyword = "Flux";
 
         TTree *wgt_multisigma_outtree = new TTree("multisigmaTree", "Systematic weights formatted for PROfit. Using multisigma format.");
@@ -58,6 +60,15 @@ void MakesBruce(const char* fileName = "input.root", const char* output_filename
                 is_det_multisigma = true;
                 std::vector<double> temp(3, 0.0);
                 std::vector<double> temp_sigmas(3, 0.0);
+                filler_map.insert({branchName_str, temp});
+                filler_sigmas_map.insert({branchName_str, temp_sigmas});
+                wgt_multisigma_outtree->Branch(branchName, &filler_map[branchName]);
+                wgt_multisigma_outtree->Branch(branchName_sigma.c_str(), &filler_sigmas_map[branchName]);
+            }
+	    else if(branchName_str.find(WM_multisigma_keyword) != std::string::npos){
+                is_WM_multisigma = true;
+                std::vector<double> temp(2, 0.0);
+                std::vector<double> temp_sigmas(2, 0.0);
                 filler_map.insert({branchName_str, temp});
                 filler_sigmas_map.insert({branchName_str, temp_sigmas});
                 wgt_multisigma_outtree->Branch(branchName, &filler_map[branchName]);
@@ -83,6 +94,7 @@ void MakesBruce(const char* fileName = "input.root", const char* output_filename
 
         Long64_t nEntries = tree->GetEntries();
         double weights_det_multisigma[3]; 
+        double weights_WM_multisigma[2]; 
         double weights_multisigma[7]; 
         double weights_multisim[100];
         for(Long64_t i = 0; i < nEntries; i++){
@@ -105,6 +117,18 @@ void MakesBruce(const char* fileName = "input.root", const char* output_filename
                         temp.at(j) = weights_det_multisigma[j];
                     }
                     temp.at(2) = 1.0;
+                    filler_map[branchName] = temp;
+                    filler_sigmas_map[branchName] = temp_sigmas;
+                }
+		else if(branchName_str.find(WM_multisigma_keyword) != std::string::npos){
+                    tree->SetBranchAddress(branchName, &weights_WM_multisigma);
+                    branch->GetEntry(i);
+                    std::vector<double> temp(2, 0.0);
+                    std::vector<double> temp_sigmas = {1, 0};
+                    std::cout << "Entry[" << i << "]:" << " Element[0]: " << weights_WM_multisigma[0] << std::endl;
+                    temp.at(0) = weights_WM_multisigma[0];
+                    temp.at(1) = 1.0;
+                    std::cout << "Entry[" << i << "]:" << " Element[1]: " << 1.0 << std::endl;
                     filler_map[branchName] = temp;
                     filler_sigmas_map[branchName] = temp_sigmas;
                 }

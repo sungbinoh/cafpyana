@@ -1,10 +1,13 @@
-root -q 'MakesBruce.C("/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_1_ttrees.root", "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_1_sBruce.root")'
-root -q 'MakesBruce.C("/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_2_ttrees.root", "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_2_sBruce.root")'
-root -q 'MakesBruce.C("/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_3_ttrees.root", "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_3_sBruce.root")'
-root -q 'MakesBruce.C("/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_4_ttrees.root", "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_4_sBruce.root")'
-root -q 'MakesBruce.C("/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_5_ttrees.root", "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_5_sBruce.root")'
-root -q 'MakesBruce.C("/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_6_ttrees.root", "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_6_sBruce.root")'
-root -q 'MakesBruce.C("/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_7_ttrees.root", "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_7_sBruce.root")'
-root -q 'MakesBruce.C("/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/ICARUS_SpringMC_Dev_rewgt_ttrees.root", "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/ICARUS_SpringMC_Dev_rewgt_sBruce.root")'
-root -q 'MakesBruce.C("/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SPINE_SpringBNBOffData_ttrees.root", "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SPINE_SpringBNBOffData_sBruce.root")'
-root -q 'MakesBruce.C("/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/ICARUS_Run2_BNBoff_uncalo_prescaled_ttrees.root", "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-3-fix-zexp-again-again/ICARUS_Run2_BNBoff_uncalo_prescaled_sBruce.root")'
+prefix='/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-5.3/'
+
+for i in {0..19}
+do
+    echo Running step $i
+    root -q '../PROfit/MakesBruce.C("'$prefix'SBND_SpringMC_rewgt_'$i'_ttrees.root", "'$prefix'SBND_SpringMC_rewgt_'$i'_sbruce.root")'
+done
+
+root -q '../PROfit/MakesBruce.C("'$prefix'ICARUS_SpringMCOverlay_rewgt_ttrees.root", "'$prefix'ICARUS_SpringMCOverlay_rewgt_sbruce.root")'
+root -q '../PROfit/MakesBruce.C("'$prefix'ICARUS_SpringRun2BNBOff_unblind_prescaled_ttrees.root", "'$prefix'ICARUS_SpringRun2BNBOff_unblind_prescaled_sbruce.root")'
+root -q '../PROfit/MakesBruce.C("'$prefix'SBND_SpringBNBOffData_5000_ttrees.root", "'$prefix'SBND_SpringBNBOffData_5000_sbruce.root")'
+root -q '../PROfit/MakesBruce.C("'$prefix'ICARUS_SpringMCDirt_slimwgt_ttrees.root", "'$prefix'ICARUS_SpringMCDirt_slimwgt_sbruce.root")'
+root -q '../PROfit/MakesBruce.C("'$prefix'SBND_SpringLowEMC_ttrees.root", "'$prefix'SBND_SpringLowEMC_sbruce.root")'

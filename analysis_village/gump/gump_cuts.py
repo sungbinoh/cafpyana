@@ -126,7 +126,7 @@ def contained_cut(df):
     return cut
 
 def crthitveto_cut(df):
-    return ~df.crthit
+    return (df['crthit'] == False)
 
 mode_list = [0, 10, 1, 2, 3]
 mode_labels = ['QE', 'MEC', 'RES', 'SIS/DIS', 'COH', "other"]
@@ -153,6 +153,11 @@ def breakdown_top(var, df):
            var[(df.is_sig != True) & (df.is_other_numucc != True) & (df.is_nc != True) & (df.is_fv != False) & (df.is_cosmic != True)]
            ]
     return ret
+
+def fake_cuts(recodf, DETECTOR):
+    recodf = recodf[slcfv_cut(recodf, DETECTOR)]
+    recodf = recodf.dropna(subset=['nu_E_true'])
+    return recodf
 
 def all_cuts(recodf, DETECTOR):
     ## fv cut

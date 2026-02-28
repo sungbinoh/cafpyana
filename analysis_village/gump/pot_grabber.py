@@ -11,19 +11,15 @@ def scale_pot(df_hdr):
     return pot
 
 def main():
-    dffile_nd_1 = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_1.df"
-    dffile_nd_2 = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_2.df"
-    dffile_nd_3 = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_3.df"
-    dffile_nd_4 = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_4.df"
-    dffile_nd_5 = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_5.df"
-    dffile_nd_6 = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_6.df"
-    dffile_nd_7 = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-3-fix-zexp-again-again/SBND_SpringMC_rewgt_7.df"
-    dffile_fd = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-3-fix-zexp-again-again/ICARUS_SpringMC_Dev_rewgt.df"
+    prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
 
-    inputs = [dffile_nd_1, dffile_nd_2, dffile_nd_3, dffile_nd_4, dffile_nd_5, dffile_nd_6, dffile_nd_7, dffile_fd]
+    cv_files = []
+    for i in range(19):
+        cv_files.append(prefix+f"SBND_SpringMC_rewgt_{i}.df")
+    cv_files.append(prefix+"ICARUS_SpringMCOverlay_rewgt.df")
 
     tot_tot_pot = 0
-    for input in inputs:
+    for input in cv_files:
         nsplits = get_n_split(input)
         tot_pot = 0
         for n in range(nsplits):
@@ -33,9 +29,19 @@ def main():
         print(f"{input} sample pot: {tot_pot}")
         print(f"Combined SBND pot: {tot_tot_pot}")
 
-    offbeam_nd = "/exp/sbnd/data/users/gputnam/GUMP/sbn-wgted/SBND_SPINE_SpringBNBOffData.df"
-    offbeam_fd = "/exp/sbnd/data/users/gputnam/GUMP/sbn-wgted/ICARUS_Run2_BNBoff_uncalo_prescaled.df"
+    prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
+    dirt_nd = prefix+"SBND_SpringLowEMC.df"
+    dirt_fd = prefix+"ICARUS_SpringMCDirt_slimwgt.df"
 
+    for input in [dirt_nd, dirt_fd]:
+        nsplits = get_n_split(input)
+        tot_pot = 0
+        for n in range(nsplits):
+            tot_pot += scale_pot(pd.read_hdf(input,"hdr_"+str(n)))
+        print(f"{input} sample pot: {tot_pot}")
+
+    offbeam_nd = prefix+"SBND_SpringBNBOffData_5000.df"
+    offbeam_fd = prefix+"ICARUS_SpringRun2BNBOff_unblind_prescaled.df"
     N_GATES_ON_PER_5e12POT = 1.3886218026202426
     nsplits = get_n_split(offbeam_fd)
 

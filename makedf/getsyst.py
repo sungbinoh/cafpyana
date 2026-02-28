@@ -25,6 +25,8 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
     wgt_types = f["globalTree"]['global/wgts/wgts.type'].arrays(library="np")['wgts.type'][0]
     wgt_nuniv = f["globalTree"]['global/wgts/wgts.nuniv'].arrays(library="np")['wgts.nuniv'][0]
 
+    print(wgt_names)
+
     isyst = pd.Series(np.repeat(list(range(len(wgt_nuniv))), wgt_nuniv), name="isyst")
     isyst.index.name = "iwgt"
     nuniv = wgt_nuniv.sum()

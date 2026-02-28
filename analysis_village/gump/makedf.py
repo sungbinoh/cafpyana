@@ -155,11 +155,10 @@ def make_pandora_no_cuts_df(f):
     trkdf = multicol_add(trkdf, dmagdf(slcdf.slc.vertex, trkdf.pfp.trk.start).rename(("pfp", "dist_to_vertex")))
     trkdf = trkdf[trkdf.pfp.dist_to_vertex < 10]
 
+    trkhitdf = make_trkhitdf(f)
+
     # redo chi2 for ICARUS
     if DETECTOR == "ICARUS":
-        trkhitdf = make_trkhitdf(f)
-
-        # systematic variations
         dedx_redo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS")
         trkhitdf["dedx_redo"] = dedx_redo
 
@@ -170,28 +169,29 @@ def make_pandora_no_cuts_df(f):
         dedx_smear = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", smear=0.05)
         trkhitdf["dedx_smear"] = dedx_smear
 
-        trkdf["chi2u"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_redo")[0]
-        trkdf["chi2p"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_redo")[0]
-
-        trkdf["chi2u_lo"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_lo")[0]
-        trkdf["chi2p_lo"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_lo")[0]
-
-        trkdf["chi2u_hi"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_hi")[0]
-        trkdf["chi2p_hi"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_hi")[0]
-
-        trkdf["chi2u_smear"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_smear")[0]
-        trkdf["chi2p_smear"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_smear")[0]
     else:
-        trkdf["chi2u"] = trkdf.pfp.trk.chi2pid.I2.chi2_muon
-        trkdf["chi2p"] = trkdf.pfp.trk.chi2pid.I2.chi2_proton
+        dedx_redo = chi2pid.dedx(trkhitdf, gain="SBND", calibrate="SBND")
+        trkhitdf["dedx_redo"] = dedx_redo
 
-        # TODO: implement
-        trkdf["chi2u_lo"] = trkdf.chi2u
-        trkdf["chi2u_hi"] = trkdf.chi2u
-        trkdf["chi2u_smear"] = trkdf.chi2u
-        trkdf["chi2p_lo"] = trkdf.chi2p
-        trkdf["chi2p_hi"] = trkdf.chi2p
-        trkdf["chi2p_smear"] = trkdf.chi2p
+        dedx_hi = chi2pid.dedx(trkhitdf, gain="SBND", calibrate="SBND", scale=1.01)
+        trkhitdf["dedx_hi"] = dedx_hi
+        dedx_lo = chi2pid.dedx(trkhitdf, gain="SBND", calibrate="SBND", scale=0.99)
+        trkhitdf["dedx_lo"] = dedx_lo
+        dedx_smear = chi2pid.dedx(trkhitdf, gain="SBND", calibrate="SBND", smear=0.05)
+        trkhitdf["dedx_smear"] = dedx_smear
+
+    trkdf["chi2u"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_redo")[0]
+    trkdf["chi2p"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_redo")[0]
+
+    trkdf["chi2u_lo"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_lo")[0]
+    trkdf["chi2p_lo"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_lo")[0]
+
+    trkdf["chi2u_hi"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_hi")[0]
+    trkdf["chi2p_hi"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_hi")[0]
+
+    trkdf["chi2u_smear"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_smear")[0]
+    trkdf["chi2p_smear"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_smear")[0]
+
 
     trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.chi2u / trkdf.chi2p
 

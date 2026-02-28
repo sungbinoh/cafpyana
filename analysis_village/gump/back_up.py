@@ -15,15 +15,6 @@ from makedf.util import *
 from analysis_village.gump.gump_cuts import *
 import analysis_village.gump.PID as PID 
 
-# for use after merging hdr and reco dfs
-def clean_pot(df):
-    # instead of keeping pot in first event, need to keep it in first slice
-    # otherwise we get duplicate pot info
-    is_first_slice = (df['rec.slc..index'] == 0)
-    df.loc[~is_first_slice, 'pot'] = 0.0
-    print(f"POT: {df['pot'].astype('float64').sum()}")
-    return df
-
 class FileHistogramFunction:
     def __init__(self, filename):
         with open(filename, 'r') as f:
@@ -72,13 +63,14 @@ def make_hists_from_files(files, output):
     b_p = np.array([0.0, 0.2, 0.4, 0.6])
 
     dataframes = match_across_detvar(files)
+    for i in range(len(dataframes)):
+        dataframes[i] = all_cuts(dataframes[i], dataframes[i].detector.iloc[0])
 
     hist2ds = []
     for df in dataframes:
-        p = df['pot'].astype('float64').sum()
-        df = all_cuts(df, df.detector.iloc[0])
+        #df = all_cuts(df, df.detector.iloc[0])
         counts, _, _ = np.histogram2d(df.nu_E_calo, df.del_p, bins=[b_E, b_p])
-        hist2ds.append(counts/p)
+        hist2ds.append(counts)
 
     hist2ds = np.array(hist2ds)
     hist2ds_rat = hist2ds[1]/hist2ds[0]
@@ -108,85 +100,58 @@ def make_hists_from_var(var_dataframes, cv_dataframe, output):
     save_histogram('rwt_outputs/min_'+output, lower_hist2ds_rat, b_E, b_p)
 
 def match_across_detvar(files):
-
-    keep_cols = ['slc_vtx_x', 'slc_vtx_y', 'slc_vtx_z', 'nu_E_calo', 'detector', 'tmatch_idx', 'del_p', 'nu_score',
-                 'mu_chi2_of_mu_cand', 'mu_chi2_of_prot_cand', 'prot_chi2_of_mu_cand', 'prot_chi2_of_prot_cand', 'mu_len',
-                 'other_trk_length', 'other_shw_length', 'mu_end_x', 'mu_end_y', 'mu_end_z', 'p_end_x', 'p_end_y', 'p_end_z', 'crthit', 'nu_E_true']
     dataframes = []
     unfilt_mcdataframes = []
     unfilt_recodataframes = []
-    
+    keep_cols = ['slc_vtx_x', 'slc_vtx_y', 'slc_vtx_z', 'nu_E_calo', 'detector', 'tmatch_idx', 'del_p', 'nu_score', 
+                 'mu_chi2_of_mu_cand', 'mu_chi2_of_prot_cand', 'prot_chi2_of_mu_cand', 'prot_chi2_of_prot_cand', 'mu_len',
+                 'other_trk_length', 'other_shw_length', 'mu_end_x', 'mu_end_y', 'mu_end_z', 'p_end_x', 'p_end_y', 'p_end_z', 'crthit']
     for f in files:
-        dfs = load_dfs(f, ['evt', 'mcnu', 'hdr']) 
+        dfs = load_dfs(f, ['evt', 'mcnu', 'hdr'])
         mcdf = dfs['mcnu']
         recodf = dfs['evt']
         recodf = recodf[keep_cols]
         hdrdf = dfs['hdr']
-    
         if 'del_p' in mcdf.columns:
             mcdf.rename(columns={'del_p':'del_p_true'}, inplace=True)
-    
+
         DETECTOR = recodf.detector.iloc[0]
-        # Keeps all hdrdf rows, can't be slices with out header
         merged = recodf.reset_index().merge(
             hdrdf.reset_index(),
             on=['__ntuple', 'entry'],
-            how='right'  
+            how='right'  # Keeps all hdrdf rows
         )
-        
-        # when we have a header without a slice, give it an index to preserve header info
-        merged['rec.slc..index'] = merged['rec.slc..index'].fillna(0) 
-    
-        recomatchdf = merged.set_index(['__ntuple', 'entry']) # use this for matching header to truth info
-        recodf = merged.set_index(['__ntuple', 'entry', 'rec.slc..index']) # use this for matching common truth to reco
-    
-        recomatchdf = recomatchdf[['run', 'subrun', 'evt', 'tmatch_idx']].drop_duplicates() # get rid of most cols, to avoid *_x, *_y when merging later
-                                                                                            # also drop duplicates, because we just watch to attach things to mc
-                                                                                            # i.e. if run 1183, sr 85, evt 1 has tmatch_idx 0.0 for multiple slices
-                                                                                            # don't care how many slices, just care about matching hdr info the mc truth
-        
-        recomatchdf = recomatchdf[recomatchdf.tmatch_idx != -999] # get rid of everything that doesn't match to mc
-        
+        merged['rec.slc..index'] = merged['rec.slc..index'].fillna(-1).astype('int64')
+        merged.loc[merged['rec.slc..index'] != 0, 'pot'] = 0.0       
+
+        recomatchdf = merged.set_index(['__ntuple', 'entry'])
+        recodf = merged.set_index(['__ntuple', 'entry', 'rec.slc..index'])
+
+        recomatchdf = recomatchdf[['run', 'subrun', 'evt', 'tmatch_idx', 'pot']]
         recomatchdf.columns = pd.MultiIndex.from_tuples([(col, '') for col in recomatchdf.columns])
-    
+
         mcmatchdf = ph.multicol_merge(recomatchdf.reset_index(), mcdf.reset_index(),
                                left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
                                right_on=[("__ntuple", ""), ("entry", ""), ("rec.mc.nu..index", "")],
                                how="right").set_index(['__ntuple', 'entry', "rec.mc.nu..index"])
-    
+
+        mcmatchdf = mcmatchdf[mcmatchdf.tmatch_idx != -999]
         unfilt_mcdataframes.append(mcmatchdf)
         unfilt_recodataframes.append(recodf)
-
-    filt_mcdataframes = filter_n_common_events(unfilt_mcdataframes, keys=["run", "subrun", "evt", "nu_E"])    
+    
+    filt_mcdataframes = filter_n_common_events(unfilt_mcdataframes, keys=["run", "subrun", "evt", "nu_E"])
 
     for filt_mc, reco in zip(filt_mcdataframes, unfilt_recodataframes):
-        new_filt_mc = filt_mc.drop(columns=[("run", ""), ("subrun", ""), ("evt", ""), ("nu_E", "")])
-        df = ph.multicol_merge(reco.reset_index(), new_filt_mc.reset_index(),
+        print("pre-merge:", filt_mc.pot.fillna(0.0).to_numpy()[40])
+        print("pre-merge:", np.sum(filt_mc.pot.fillna(0.0).to_numpy()))
+        filt_mc.drop(columns=[("run", ""), ("subrun", ""), ("evt", ""), ("nu_E", ""), ("pot", "")], inplace=True)
+
+        df = ph.multicol_merge(reco.reset_index(), filt_mc.reset_index(),
                                left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
                                right_on=[("__ntuple", ""), ("entry", ""), ("rec.mc.nu..index", "")],
-                               how="left") # start with keeping everything...
+                               how="left", validate="many_to_one").set_index(['__ntuple', 'entry', 'rec.slc..index'])
 
-        df = df.set_index(['__ntuple', 'entry', 'rec.slc..index'])
-
-        # Identify slices with truth
-        valid_tmatch = df['tmatch_idx'] != -999
-        
-        # Tag events that have at least one valid truth match
-        event_has_truth = valid_tmatch.groupby(['__ntuple', 'entry']).transform('any')
-
-        # Tag events where EVERY slice has a NaN PDG
-        event_all_pdg_nan = df['pdg'].isna().groupby(['__ntuple', 'entry']).transform('all')
-
-        # Create a mask for rows belonging to events that meet both criteria
-        to_drop = event_has_truth & event_all_pdg_nan
-
-        # Keep everything else
-        df_filtered = df[~to_drop]
-        
-        df = clean_pot(df_filtered.reset_index())
-        df = df.set_index(['__ntuple', 'entry', 'rec.slc..index'])
-        
-        dataframes.append(df)
+        dataframes.append(df) 
 
     return dataframes
 
@@ -319,76 +284,72 @@ def plot_2d_hist_from_file(filename, plot_title, output_tag):
 def main():
     """Main analysis pipeline."""
 
-    make_hists_from_files(["/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_Nom.df", "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_WMYZ.df"], "rwt_outputs/YZ.txt")
-    make_hists_from_files(["/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_Nom.df", "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_WMXThetaXW.df"], "rwt_outputs/XThetaXW.txt")
+    # make_hists_from_files(["/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_Nom.df", "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_WMYZ.df"], "rwt_outputs/YZ.txt")
+    # make_hists_from_files(["/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_Nom.df", "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_WMXThetaXW.df"], "rwt_outputs/XThetaXW.txt")
 
     make_hists_from_files(["/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_Nom.df", "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_0xSCE.df"], "rwt_outputs/min_SCE.txt")
     make_hists_from_files(["/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_Nom.df", "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_2xSCE.df"], "rwt_outputs/pls_SCE.txt")
 
-    dfs = []
-    for i in range(20):
-        dfs.append(load_dfs(f"/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/no-flashes/SBND_SpringMC_rewgt_{i}.df", ['evt'])['evt'])
-    recodf = pd.concat(dfs)
-    recodf_precut = recodf.copy()
-    recodf = all_cuts(recodf, recodf.detector.iloc[0])
-    make_hists_from_var(PID.get_smear_vars(recodf_precut), recodf.copy(), 'SBND_smear.txt')
-    make_hists_from_var(PID.get_gain_vars(recodf_precut), recodf.copy(), 'SBND_gain.txt')
+    # dfs = []
+    # for i in range(20):
+    #     dfs.append(load_dfs(f"/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_rewgt_{i}.df", ['evt'])['evt'])
+    # recodf = pd.concat(dfs)
+    # recodf_precut = recodf.copy()
+    # recodf = all_cuts(recodf, recodf.detector.iloc[0])
+    # make_hists_from_var(PID.get_smear_vars(recodf_precut), recodf.copy(), 'SBND_smear.txt')
+    # make_hists_from_var(PID.get_gain_vars(recodf_precut), recodf.copy(), 'SBND_gain.txt')
 
-    recodf = load_dfs(f"/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/ICARUS_SpringMCOverlay_rewgt.df", ['evt'])['evt']
-    recodf_precut = recodf.copy()
-    recodf = all_cuts(recodf, "ICARUS")
-    make_hists_from_var(PID.get_smear_vars(recodf_precut), recodf.copy(), 'ICARUS_smear.txt')
-    make_hists_from_var(PID.get_gain_vars(recodf_precut), recodf.copy(), 'ICARUS_gain.txt')
+    # recodf = load_dfs(f"/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/ICARUS_SpringMCOverlay_rewgt.df", ['evt'])['evt']
+    # recodf_precut = recodf.copy()
+    # recodf = all_cuts(recodf, "ICARUS")
+    # make_hists_from_var(PID.get_smear_vars(recodf_precut), recodf.copy(), 'ICARUS_smear.txt')
+    # make_hists_from_var(PID.get_gain_vars(recodf_precut), recodf.copy(), 'ICARUS_gain.txt')
 
-    #just a random dataframe to test map with
-    apply_double_map(recodf.copy(), 'rwt_outputs/min_SCE.txt', 'rwt_outputs/pls_SCE.txt', 'CAFPYANA_SBN_v1_multisigma_SCE')
-    apply_map(recodf, 'rwt_outputs/YZ.txt', 'CAFPYANA_SBN_v1_multisigma_WMYZ')
-    apply_map(recodf, 'rwt_outputs/XThetaXW.txt', 'CAFPYANA_SBN_v1_multisigma_WMXThetaXW')
+    # #just a random dataframe to test map with
+    # apply_double_map(recodf.copy(), 'min_SCE.txt', 'pls_SCE.txt', 'CAFPYANA_SBN_v1_multisigma_SCE')
+    # apply_map(recodf, 'YZ.txt', 'CAFPYANA_SBN_v1_multisigma_WMYZ')
+    # apply_map(recodf, 'XThetaXW.txt', 'CAFPYANA_SBN_v1_multisigma_WMXThetaXW')
 
 
 def plot():
     # SCE
     prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
-    dataframes = match_across_detvar([prefix+"SBND_SpringMC_0xSCE.df", prefix+"SBND_SpringMC_Nom.df", prefix+"SBND_SpringMC_2xSCE.df"])
-    pots = []
-
+    dataframes = match_across_detvar([prefix+"SBND_SpringMC_0xSCE.df", prefix+"SBND_SpringMC_Nom.df", ])
+    #dataframes = match_across_detvar([prefix+"SBND_SpringMC_0xSCE.df", prefix+"SBND_SpringMC_Nom.df", prefix+"SBND_SpringMC_2xSCE.df"])
     for i in range(len(dataframes)):
-        pots.append(dataframes[i]['pot'].astype('float64').sum())
+        print(len(dataframes[i].pot.to_numpy()))
+        print(sum(dataframes[i].pot.to_numpy()))
+        print(np.sort(dataframes[i].pot.to_numpy()))
         dataframes[i] = all_cuts(dataframes[i], dataframes[i].detector.iloc[0])
-
-    make_plots(dataframes, norms=pots, file_titles=["0xSCE", "CV", "2xSCE"], global_title="SCE Detector Variations", output_tag='SCE')
+    make_plots(dataframes, file_titles=["0xSCE", "CV", "2xSCE"], global_title="SCE Detector Variations", output_tag='SCE')
 
     plot_2d_hist_from_file("rwt_outputs/min_SCE.txt", "0xSCE Reweight", 'min_SCE')
     plot_2d_hist_from_file("rwt_outputs/pls_SCE.txt", "2xSCE Reweight", 'pls_SCE')
 
-    # WireMod
-    prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
-    dataframes = match_across_detvar([prefix+"SBND_SpringMC_WMXThetaXW.df", prefix+"SBND_SpringMC_WMYZ.df", prefix+"SBND_SpringMC_Nom.df",])
-    pots = []
-    for i in range(len(dataframes)):
-        pots.append(dataframes[i]['pot'].astype('float64').sum())
-        dataframes[i] = all_cuts(dataframes[i], dataframes[i].detector.iloc[0])
+    # # WireMod
+    # prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
+    # dataframes, pot = match_across_detvar([prefix+"SBND_SpringMC_WMXThetaXW.df", prefix+"SBND_SpringMC_WMYZ.df", prefix+"SBND_SpringMC_Nom.df",])
 
-    make_plots(dataframes, norms=pots, file_titles=['XThetaXW', 'YZ', 'Nominal'], global_title="WireMod Detector Variations", output_tag="WM")
+    # make_plots(dataframes, norms=pot, file_titles=['XThetaXW', 'YZ', 'Nominal'], global_title="WireMod Detector Variations", output_tag="WM")
 
-    plot_2d_hist_from_file("rwt_outputs/YZ.txt", "WireMod YZ Variation", 'WMYZ')
-    plot_2d_hist_from_file("rwt_outputs/XThetaXW.txt", "WireMod XThetaXW", 'WMXThetaXW')
+    # plot_2d_hist_from_file("rwt_outputs/YZ.txt", "WireMod YZ Variation", 'WMYZ')
+    # plot_2d_hist_from_file("rwt_outputs/XThetaXW.txt", "WireMod XThetaXW", 'WMXThetaXW')
 
-    # SBND, smear 
-    plot_2d_hist_from_file("rwt_outputs/min_SBND_smear.txt", "SBND Smear Minimum", 'min_SBND_smear')
-    plot_2d_hist_from_file("rwt_outputs/pls_SBND_smear.txt", "SBND Smear Maximum", 'pls_SBND_smear')
+    # # SBND, smear 
+    # plot_2d_hist_from_file("rwt_outputs/min_SBND_smear.txt", "SBND Smear Minimum", 'min_SBND_smear')
+    # plot_2d_hist_from_file("rwt_outputs/pls_SBND_smear.txt", "SBND Smear Maximum", 'pls_SBND_smear')
 
-    # SBND, gain
-    plot_2d_hist_from_file("rwt_outputs/min_SBND_gain.txt", "SBND Gain Minimum", 'min_SBND_gain')
-    plot_2d_hist_from_file("rwt_outputs/pls_SBND_gain.txt", "SBND Gain Maximum", 'pls_SBND_gain')
+    # # SBND, gain
+    # plot_2d_hist_from_file("rwt_outputs/min_SBND_gain.txt", "SBND Gain Minimum", 'min_SBND_gain')
+    # plot_2d_hist_from_file("rwt_outputs/pls_SBND_gain.txt", "SBND Gain Maximum", 'pls_SBND_gain')
 
-    # ICARUS, smear
-    plot_2d_hist_from_file("rwt_outputs/min_ICARUS_smear.txt", "ICARUS Smear Minimum", 'min_ICARUS_smear')
-    plot_2d_hist_from_file("rwt_outputs/pls_ICARUS_smear.txt", "ICARUS Smear Maximum", 'pls_ICARUS_smear')
+    # # ICARUS, smear
+    # plot_2d_hist_from_file("rwt_outputs/min_ICARUS_smear.txt", "ICARUS Smear Minimum", 'min_ICARUS_smear')
+    # plot_2d_hist_from_file("rwt_outputs/pls_ICARUS_smear.txt", "ICARUS Smear Maximum", 'pls_ICARUS_smear')
 
-    # ICARUS, gain
-    plot_2d_hist_from_file("rwt_outputs/min_ICARUS_gain.txt", "ICARUS Gain Minimum", 'min_ICARUS_gain')
-    plot_2d_hist_from_file("rwt_outputs/pls_ICARUS_gain.txt", "ICARUS Gain Maximum", 'pls_ICARUS_gain')
+    # # ICARUS, gain
+    # plot_2d_hist_from_file("rwt_outputs/min_ICARUS_gain.txt", "ICARUS Gain Minimum", 'min_ICARUS_gain')
+    # plot_2d_hist_from_file("rwt_outputs/pls_ICARUS_gain.txt", "ICARUS Gain Maximum", 'pls_ICARUS_gain')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog = 'rwt_map',
