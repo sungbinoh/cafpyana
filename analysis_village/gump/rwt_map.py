@@ -15,12 +15,17 @@ from makedf.util import *
 from analysis_village.gump.gump_cuts import *
 import analysis_village.gump.PID as PID 
 
-# for use after merging hdr and reco dfs
 def clean_pot(df):
-    # instead of keeping pot in first event, need to keep it in first slice
-    # otherwise we get duplicate pot info
-    is_first_slice = (df['rec.slc..index'] == 0)
-    df.loc[~is_first_slice, 'pot'] = 0.0
+    # 1. Identify rows that are duplicates of a (run, subrun) pair.
+    # keep='first' marks the very first occurrence as False (not a duplicate)
+    # and all subsequent occurrences as True.
+    id_cols = [col for col in df.columns if col[0] in ['run', 'subrun', '__ntuple']]
+
+    is_duplicate = df.duplicated(subset=id_cols, keep='first')
+    
+    # 2. Set 'pot' to 0.0 for every row that is a duplicate
+    df.loc[is_duplicate, 'pot'] = 0.0
+    
     print(f"POT: {df['pot'].astype('float64').sum()}")
     return df
 
@@ -37,19 +42,25 @@ class FileHistogramFunction:
         # 2. Load the actual data grid (skipping the header lines)
         self.grid = np.loadtxt(filename, delimiter=",")
 
-    def __call__(self, x, y):
-        # Check boundaries
-        if not (min(self.x_edges) <= x <= max(self.x_edges) and min(self.y_edges) <= y <= max(self.y_edges)):
-            return 1.0
-             
-        # Convert coordinate to index
-        centered_x = self.x_edges - x
-        centered_y = self.y_edges - y
-        ix = len(centered_x[centered_x < 0]) - 1
-        iy = len(centered_y[centered_y < 0]) - 1
-
-        # Return value (Transpose if necessary depending on your save orientation)
-        return np.nan_to_num(self.grid[ix, iy], nan=1.0)
+    def __call__(self, x_arr, y_arr):
+        # x_arr and y_arr are now numpy arrays (e.g., df.nu_E_calo.values)
+        
+        # Use digitize to find bin indices for all points at once
+        ix = np.digitize(x_arr, self.x_edges) - 1
+        iy = np.digitize(y_arr, self.y_edges) - 1
+        
+        # Handle out-of-bounds (set to a default or clip)
+        mask = (ix >= 0) & (ix < self.grid.shape[0]) & \
+               (iy >= 0) & (iy < self.grid.shape[1])
+        
+        # Pre-fill result with 1.0 (your default)
+        result = np.ones_like(x_arr, dtype=float)
+        
+        # Apply grid values where mask is True
+        # We use indexing with arrays here
+        result[mask] = self.grid[ix[mask], iy[mask]]
+        
+        return np.nan_to_num(result, nan=1.0)
 
 def save_histogram(filename, hist_values, x_edges, y_edges):
     # Extract metadata to store in the header
@@ -107,6 +118,22 @@ def make_hists_from_var(var_dataframes, cv_dataframe, output):
     lower_hist2ds_rat = lower/cv_hist2d
     save_histogram('rwt_outputs/min_'+output, lower_hist2ds_rat, b_E, b_p)
 
+def match_reco_to_mc(recomatchdf, mcdf):
+    recomatchdf = recomatchdf[['run', 'subrun', 'evt', 'tmatch_idx', 'pot']].drop_duplicates() # get rid of most cols, to avoid *_x, *_y when merging later
+                                                                                        # also drop duplicates, because we just watch to attach things to mc
+                                                                                        # i.e. if run 1183, sr 85, evt 1 has tmatch_idx 0.0 for multiple slices
+                                                                                        # don't care how many slices, just care about matching hdr info the mc truth
+    
+    recomatchdf = recomatchdf[recomatchdf.tmatch_idx != -999] # get rid of everything that doesn't match to mc
+    
+    recomatchdf.columns = pd.MultiIndex.from_tuples([(col, '') for col in recomatchdf.columns])
+
+    mcmatchdf = ph.multicol_merge(recomatchdf.reset_index(), mcdf.reset_index(),
+                           left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
+                           right_on=[("__ntuple", ""), ("entry", ""), ("rec.mc.nu..index", "")],
+                           how="right").set_index(['__ntuple', 'entry', "rec.mc.nu..index"])
+    return mcmatchdf
+
 def match_across_detvar(files):
 
     keep_cols = ['slc_vtx_x', 'slc_vtx_y', 'slc_vtx_z', 'nu_E_calo', 'detector', 'tmatch_idx', 'del_p', 'nu_score',
@@ -122,73 +149,73 @@ def match_across_detvar(files):
         recodf = dfs['evt']
         recodf = recodf[keep_cols]
         hdrdf = dfs['hdr']
-    
+
         if 'del_p' in mcdf.columns:
             mcdf.rename(columns={'del_p':'del_p_true'}, inplace=True)
-    
+
         DETECTOR = recodf.detector.iloc[0]
+        
         # Keeps all hdrdf rows, can't be slices with out header
         merged = recodf.reset_index().merge(
             hdrdf.reset_index(),
             on=['__ntuple', 'entry'],
             how='right'  
         )
-        
+
         # when we have a header without a slice, give it an index to preserve header info
         merged['rec.slc..index'] = merged['rec.slc..index'].fillna(0) 
-    
+
         recomatchdf = merged.set_index(['__ntuple', 'entry']) # use this for matching header to truth info
         recodf = merged.set_index(['__ntuple', 'entry', 'rec.slc..index']) # use this for matching common truth to reco
-    
-        recomatchdf = recomatchdf[['run', 'subrun', 'evt', 'tmatch_idx']].drop_duplicates() # get rid of most cols, to avoid *_x, *_y when merging later
-                                                                                            # also drop duplicates, because we just watch to attach things to mc
-                                                                                            # i.e. if run 1183, sr 85, evt 1 has tmatch_idx 0.0 for multiple slices
-                                                                                            # don't care how many slices, just care about matching hdr info the mc truth
-        
-        recomatchdf = recomatchdf[recomatchdf.tmatch_idx != -999] # get rid of everything that doesn't match to mc
-        
-        recomatchdf.columns = pd.MultiIndex.from_tuples([(col, '') for col in recomatchdf.columns])
-    
-        mcmatchdf = ph.multicol_merge(recomatchdf.reset_index(), mcdf.reset_index(),
-                               left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
-                               right_on=[("__ntuple", ""), ("entry", ""), ("rec.mc.nu..index", "")],
-                               how="right").set_index(['__ntuple', 'entry', "rec.mc.nu..index"])
-    
-        unfilt_mcdataframes.append(mcmatchdf)
+
+        unfilt_mcdataframes.append(match_reco_to_mc(recomatchdf, mcdf))
         unfilt_recodataframes.append(recodf)
 
+    # now match up all of our mc dfs with hdr info added
     filt_mcdataframes = filter_n_common_events(unfilt_mcdataframes, keys=["run", "subrun", "evt", "nu_E"])    
 
-    for filt_mc, reco in zip(filt_mcdataframes, unfilt_recodataframes):
-        new_filt_mc = filt_mc.drop(columns=[("run", ""), ("subrun", ""), ("evt", ""), ("nu_E", "")])
-        df = ph.multicol_merge(reco.reset_index(), new_filt_mc.reset_index(),
-                               left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
-                               right_on=[("__ntuple", ""), ("entry", ""), ("rec.mc.nu..index", "")],
-                               how="left") # start with keeping everything...
-
-        df = df.set_index(['__ntuple', 'entry', 'rec.slc..index'])
-
-        # Identify slices with truth
-        valid_tmatch = df['tmatch_idx'] != -999
-        
-        # Tag events that have at least one valid truth match
-        event_has_truth = valid_tmatch.groupby(['__ntuple', 'entry']).transform('any')
-
-        # Tag events where EVERY slice has a NaN PDG
-        event_all_pdg_nan = df['pdg'].isna().groupby(['__ntuple', 'entry']).transform('all')
-
-        # Create a mask for rows belonging to events that meet both criteria
-        to_drop = event_has_truth & event_all_pdg_nan
-
-        # Keep everything else
-        df_filtered = df[~to_drop]
-        
-        df = clean_pot(df_filtered.reset_index())
-        df = df.set_index(['__ntuple', 'entry', 'rec.slc..index'])
-        
-        dataframes.append(df)
-
+    dataframes = [apply_mc_filt_to_reco(filt_mc, reco) for filt_mc, reco in zip(filt_mcdataframes, unfilt_recodataframes)]
     return dataframes
+
+def apply_mc_filt_to_reco(filt_mc, reco):
+
+    valid_df = filt_mc[['run', 'subrun', 'pot']].dropna().drop_duplicates()
+    #valid_df.columns = pd.MultiIndex.from_tuples([(col, '') for col in valid_df.columns])
+
+    new_filt_mc = filt_mc.drop(columns=[("run", ""), ("subrun", ""), ("pot", ""), ("evt", ""), ("nu_E", "")])
+    df = ph.multicol_merge(reco.reset_index(), new_filt_mc.reset_index(),
+                           left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
+                           right_on=[("__ntuple", ""), ("entry", ""), ("rec.mc.nu..index", "")],
+                           how="left") # start with keeping everything...
+
+    df = df.set_index(['__ntuple', 'entry', 'rec.slc..index'])
+    
+    # drop cases where run, subrun not in in matched filter.
+    df = df.reset_index().merge(valid_df, on=['run', 'subrun', 'pot'], how='inner').set_index(df.index.names)       
+    #df = df.reset_index().merge(valid_df, on=[('run', ''), ('subrun', ''), ('pot', '')], how='inner').set_index(df.index.names)       
+
+    # Identify slices with truth
+    valid_tmatch = df['tmatch_idx'] != -999
+    
+    # Tag events that have at least one valid truth match
+    event_has_truth = valid_tmatch.groupby(['__ntuple', 'entry']).transform('any')
+
+    # Tag events where EVERY slice has a NaN PDG
+    event_all_pdg_nan = df['pdg'].isna().groupby(['__ntuple', 'entry']).transform('all')
+
+    # Create a mask for rows belonging to events that meet both criteria
+    to_drop = event_has_truth & event_all_pdg_nan
+
+    # copy pot everywhere so we don't lose it to mask
+    df['pot'] = df.groupby([pd.Grouper(level='__ntuple'), 'run', 'subrun'])['pot'].transform('max')
+    
+    # apply mask 
+    df_filtered = df[~to_drop]
+   
+    # clean pot after mask 
+    df = clean_pot(df_filtered.reset_index())
+
+    return df.set_index(['__ntuple', 'entry', 'rec.slc..index'])
 
 def apply_double_map(df, min_map_file, pls_map_file, col_name):
     min_func = FileHistogramFunction(min_map_file)
@@ -203,31 +230,40 @@ def apply_double_map(df, min_map_file, pls_map_file, col_name):
 
 def apply_map(df, map_file, col_name):
     func = FileHistogramFunction(map_file)
-    data = {
-            (col_name, 'ps1') : [func(E, del_p) for E, del_p in zip(df.nu_E_calo, df.del_p)],
-            }
-
-    new_df = pd.DataFrame(data)
-    return new_df
+    weights = func(df.nu_E_calo.values, df.del_p.values)
+    return pd.DataFrame({(col_name, 'ps1'): weights}, index=df.index)
 
 def filter_n_common_events(dfs, keys=['run', 'subrun', 'evt', 'nu_E_true']):
     if not dfs:
         return []
 
-    id_sets = (df[keys].drop_duplicates() for df in dfs)
-    common_ids = reduce(lambda left, right: pd.merge(left, right), id_sets)
+    # we use an additional col to count the number of duplicate columns
+    # matching with this also helps catch instances of multiple matching truth slices
+    # in same event.
+    
+    processed_dfs = []
+    for df in dfs:
+        temp_df = df.copy()
+        temp_df['occ_id'] = temp_df.groupby(keys, dropna=False).cumcount()
+        processed_dfs.append(temp_df)
+    
+    matching_keys = keys + ['occ_id']
+
+    id_sets = (df[matching_keys].drop_duplicates() for df in processed_dfs)
+    common_ids = reduce(lambda left, right: pd.merge(left, right, on=matching_keys), id_sets)
+    
     filtered_dfs = []
 
-    allindices = [set(df[keys].to_records(index=False).tolist()) for df in dfs]
-
-    for df, indices in zip(dfs, allindices):
+    for df in processed_dfs:
         index_names = df.index.names
-        orig_df = df[keys].reset_index()
-
+        
         f_df = df.reset_index() \
-                 .merge(common_ids, on=keys) \
-                 .set_index(index_names)
+                 .merge(common_ids, on=matching_keys) \
+                 .set_index(index_names) \
+                 .drop(columns=['occ_id']) # Clean up the helper column
+        
         f_df.sort_values(keys, inplace=True)
+        
         filtered_dfs.append(f_df)
 
     return filtered_dfs
