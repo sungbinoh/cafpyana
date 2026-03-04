@@ -11,6 +11,16 @@ import syst
 
 import gump_cuts as gc
 
+def tmatch(reco, mc):
+    if 'del_p' in mc.columns:
+        mc.rename(columns={'del_p':'del_p_true'}, inplace=True)
+
+    df = ph.multicol_merge(reco.reset_index(), mc.reset_index(),
+                           left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
+                           right_on=[("__ntuple", ""), ("entry", ""), ("rec.mc.nu..index", "")],
+                           how="left") # start with keeping everything...
+    return df
+
 # Dataframe names
 EVT = "mcnu_%i"
 WGT = "histpotdf_%i"
@@ -140,6 +150,10 @@ flux_syst = [
 truthvars = {
   "true_E": ("nu_E", ""),
   "true_nu_pdg": ("pdg", ""),
+  "true_issig": ("is_sig", ""),
+  "true_isothernumucc": ("is_other_numucc", ""),
+  "true_iscosmic": ("is_cosmic", ""),
+  "true_isfv": ("is_fv", ""),
   "true_isnc": ("is_nc", ""),
   "genie_mode": ("genie_mode", ""),
   "true_vtx_x": ("pos_x", ""),
