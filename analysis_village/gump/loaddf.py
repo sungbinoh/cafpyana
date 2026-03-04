@@ -152,7 +152,6 @@ truthvars = {
   "true_nu_pdg": ("pdg", ""),
   "true_issig": ("is_sig", ""),
   "true_isothernumucc": ("is_other_numucc", ""),
-  "true_iscosmic": ("is_cosmic", ""),
   "true_isfv": ("is_fv", ""),
   "true_isnc": ("is_nc", ""),
   "genie_mode": ("genie_mode", ""),
