@@ -17,3 +17,4 @@ envs/util-linux-2.39.3/
 .#
 *~
 *.ipynb_checkpoints/*
+*__init__.py
