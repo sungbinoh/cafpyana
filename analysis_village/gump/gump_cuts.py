@@ -127,7 +127,7 @@ def contained_cut(df):
 
 
 def crthitveto_cut(df):
-        return ~df.crthit
+    return ~df.crthit
 
 mode_list = [0, 10, 1, 2, 3]
 mode_labels = ['QE', 'MEC', 'RES', 'SIS/DIS', 'COH', "other"]
