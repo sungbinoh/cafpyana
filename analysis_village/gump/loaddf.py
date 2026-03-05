@@ -162,10 +162,6 @@ truthvars = {
 
 def scale_pot(df, pot, desired_pot):
     """Scale DataFrame by desired POT."""
-<<<<<<< HEAD
-    print(f"POT: {pot}\nScaling to: {desired_pot}")
-=======
->>>>>>> dcc40d4 (big catch up, will sort through soon)
     scale = desired_pot / pot
     df['glob_scale'] = scale * df.cvwgt
     return pot, scale
