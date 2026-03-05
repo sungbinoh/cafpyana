@@ -1,6 +1,6 @@
 prefix='/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-5.3/'
 
-for i in {0..19}
+for i in {0..20}
 do
     echo Running step $i
     root -q '../PROfit/MakesBruce.C("'$prefix'SBND_SpringMC_rewgt_'$i'_ttrees.root", "'$prefix'SBND_SpringMC_rewgt_'$i'_sbruce.root")'

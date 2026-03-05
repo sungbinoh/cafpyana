@@ -9,7 +9,7 @@ bool in_array(const std::string &value, const std::vector<std::string> &array)
 }
 
 void MakesBruce(const char* fileName = "input.root", const char* output_filename = "output.root") {
-    const char* treeNames[1] = {"SelectedEvents"};
+    const char* treeNames[1] = {"SelectedEvents"};// Leave open option for multiple trees
     TFile *file = TFile::Open(fileName, "READ");
     TFile *outfile = TFile::Open(output_filename, "recreate");
 

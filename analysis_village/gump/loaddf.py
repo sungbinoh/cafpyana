@@ -12,8 +12,9 @@ import syst
 import gump_cuts as gc
 
 def tmatch(reco, mc):
-    if 'del_p' in mc.columns:
-        mc.rename(columns={'del_p':'del_p_true'}, inplace=True)
+    for c in mc.columns:
+        if c in reco.columns:
+            mc.rename(columns={c:c+'_true'}, inplace=True)
 
     df = ph.multicol_merge(reco.reset_index(), mc.reset_index(),
                            left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
