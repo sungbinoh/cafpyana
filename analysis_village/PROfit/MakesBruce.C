@@ -138,18 +138,22 @@ void MakesBruce(const char* fileName = "input.root", const char* output_filename
                     std::vector<double> temp(7, 0.0);
                     std::vector<double> temp_sigmas = {1, -1, 2, -2, 3, -3, 0};
                     for (size_t j = 0; j < 7; j++) {
-                        std::cout << "Entry[" << i << "]:" << " Element[" << j << "]: " << weights_multisigma[j] << std::endl;
+                        std::cout << "multisigma Entry[" << i << "]:" << " Element[" << j << "]: " << weights_multisigma[j] << std::endl;
                         temp.at(j) = weights_multisigma[j];
                     }
                     filler_map[branchName] = temp;
                     filler_sigmas_map[branchName] = temp_sigmas;
                 }
                 else if(branchName_str.find(multisim_keyword) != std::string::npos){
+                    std::cout << "multisim debug" << std::endl;
                     tree->SetBranchAddress(branchName, &weights_multisim);
+                    std::cout << "multisim debug" << std::endl;
                     branch->GetEntry(i);
+                    std::cout << "multisim debug" << std::endl;
                     std::vector<double> temp(100, 0.0);
+                    std::cout << "multisim debug" << std::endl;
                     for (size_t j = 0; j < 100; j++) {
-                        std::cout << "Entry[" << i << "]:" << " Element[" << j << "]: " << weights_multisim[j] << std::endl;
+                        std::cout << "multisim Entry[" << i << "]:" << " Element[" << j << "]: " << weights_multisim[j] << std::endl;
                         if(isnan(weights_multisim[j])){
                             std::cout << "Found nan!" << std::endl;
                             temp.at(j) = 1.0;

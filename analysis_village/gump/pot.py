@@ -5,7 +5,19 @@ workspace_root = os.getcwd()
 sys.path.insert(0, workspace_root + "/../../")
 from pyanalib.split_df_helpers import *
 
-def scale_pot(df_hdr):
+def scale_pot(df, df_hdr, desired_pot):
+    """Scale DataFrame by desired POT."""
+    pot = sum(df_hdr.pot.tolist())
+    if pot == 0:
+        print("Warning, no POT found, using scale of 1.")
+        df['glob_scale'] = 1
+        return 1, 1
+    print(f"POT: {pot}\nScaling to: {desired_pot}")
+    scale = desired_pot / pot
+    df['glob_scale'] = scale
+    return pot, scale
+
+def read_pot(df_hdr):
     """Scale DataFrame by desired POT."""
     pot = sum(df_hdr.pot.tolist())
     return pot
@@ -28,7 +40,7 @@ def grab_pot(files, mc_bools, sep_bool=True):
         if mc_bool:
             tot_pot = 0
             for n in range(get_n_split(file)):
-                tot_pot += scale_pot(pd.read_hdf(file,"hdr_"+str(n)))
+                tot_pot += read_pot(pd.read_hdf(file,"hdr_"+str(n)))
             pot.append(tot_pot)
             print(f"{file} sample pot: {tot_pot}")
         else:

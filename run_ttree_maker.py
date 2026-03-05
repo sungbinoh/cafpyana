@@ -53,6 +53,7 @@ def run(output, inputs):
 
                 write_true = truedf is not None and not truedf.empty
                 if first_fill:
+                    print(recodf)
                     f["SelectedEvents"] = recodf.to_dict(orient="list")
                     if write_true:
                         f["TrueEvents"] = truedf.to_dict(orient="list")

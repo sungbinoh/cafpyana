@@ -1,0 +1,17 @@
+['/bnb_0', '/bnb_1', '/bnb_2', '/bnb_3', '/bnb_4', '/bnb_5', '/crt_0', '/crt_1', '/crt_2', '/crt_3', '/crt_4', '/crt_5', '/evt_0', '/evt_1', '/evt_2', '/evt_3', '/evt_4', '/evt_5', '/flash_0', '/flash_1', '/flash_2', '/flash_3', '/flash_4', '/flash_5', '/hdr_0', '/hdr_1', '/hdr_2', '/hdr_3', '/hdr_4', '/hdr_5', '/histgenevtdf_0', '/histgenevtdf_1', '/histgenevtdf_2', '/histgenevtdf_3', '/histgenevtdf_4', '/histgenevtdf_5', '/histpotdf_0', '/histpotdf_1', '/histpotdf_2', '/histpotdf_3', '/histpotdf_4', '/histpotdf_5', '/mcnu_0', '/mcnu_1', '/mcnu_2', '/mcnu_3', '/mcnu_4', '/mcnu_5', '/split', '/stub_0', '/stub_1', '/stub_2', '/stub_3', '/stub_4', '/stub_5', '/trig_0', '/trig_1', '/trig_2', '/trig_3', '/trig_4', '/trig_5', '/wgt_0', '/wgt_1', '/wgt_2', '/wgt_3', '/wgt_4', '/wgt_5']
+      level_0  ...  CAFPYANA_SBN_v1_multisigma_ICARUS_gain
+0           0  ...                              [1.0, 1.0]
+1           1  ...                              [1.0, 1.0]
+2           2  ...                              [1.0, 1.0]
+3           3  ...                              [1.0, 1.0]
+4           4  ...                              [1.0, 1.0]
+...       ...  ...                                     ...
+2085     2085  ...                              [1.0, 1.0]
+2086     2086  ...                              [1.0, 1.0]
+2087     2087  ...                              [1.0, 1.0]
+2088     2088  ...                              [1.0, 1.0]
+2089     2089  ...                              [1.0, 1.0]
+
+[2090 rows x 297 columns]
+['/bnb_0', '/bnb_1', '/bnb_2', '/bnb_3', '/bnb_4', '/bnb_5', '/crt_0', '/crt_1', '/crt_2', '/crt_3', '/crt_4', '/crt_5', '/evt_0', '/evt_1', '/evt_2', '/evt_3', '/evt_4', '/evt_5', '/flash_0', '/flash_1', '/flash_2', '/flash_3', '/flash_4', '/flash_5', '/hdr_0', '/hdr_1', '/hdr_2', '/hdr_3', '/hdr_4', '/hdr_5', '/histgenevtdf_0', '/histgenevtdf_1', '/histgenevtdf_2', '/histgenevtdf_3', '/histgenevtdf_4', '/histgenevtdf_5', '/histpotdf_0', '/histpotdf_1', '/histpotdf_2', '/histpotdf_3', '/histpotdf_4', '/histpotdf_5', '/mcnu_0', '/mcnu_1', '/mcnu_2', '/mcnu_3', '/mcnu_4', '/mcnu_5', '/split', '/stub_0', '/stub_1', '/stub_2', '/stub_3', '/stub_4', '/stub_5', '/trig_0', '/trig_1', '/trig_2', '/trig_3', '/trig_4', '/trig_5', '/wgt_0', '/wgt_1', '/wgt_2', '/wgt_3', '/wgt_4', '/wgt_5']
+['/bnb_0', '/bnb_1', '/bnb_2', '/bnb_3', '/bnb_4', '/bnb_5', '/crt_0', '/crt_1', '/crt_2', '/crt_3', '/crt_4', '/crt_5', '/evt_0', '/evt_1', '/evt_2', '/evt_3', '/evt_4', '/evt_5', '/flash_0', '/flash_1', '/flash_2', '/flash_3', '/flash_4', '/flash_5', '/hdr_0', '/hdr_1', '/hdr_2', '/hdr_3', '/hdr_4', '/hdr_5', '/histgenevtdf_0', '/histgenevtdf_1', '/histgenevtdf_2', '/histgenevtdf_3', '/histgenevtdf_4', '/histgenevtdf_5', '/histpotdf_0', '/histpotdf_1', '/histpotdf_2', '/histpotdf_3', '/histpotdf_4', '/histpotdf_5', '/mcnu_0', '/mcnu_1', '/mcnu_2', '/mcnu_3', '/mcnu_4', '/mcnu_5', '/split', '/stub_0', '/stub_1', '/stub_2', '/stub_3', '/stub_4', '/stub_5', '/trig_0', '/trig_1', '/trig_2', '/trig_3', '/trig_4', '/trig_5', '/wgt_0', '/wgt_1', '/wgt_2', '/wgt_3', '/wgt_4', '/wgt_5']

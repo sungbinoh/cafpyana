@@ -78,14 +78,14 @@ def make_gump_ttree_mc(dfname, split):
             newcol = col
         recodf_wgt_out[newcol] = np.array([matchdf[col][u].values for u in matchdf[col].columns]).T.tolist()
 
-    sce_df = apply_double_map(recodf, 'analysis_village/gump/min_SCE.txt', 'analysis_village/gump/pls_SCE.txt', 'CAFPYANA_SBN_v1_multisigma_SCE')
-    wmxthetaxw_df = apply_map(recodf, 'analysis_village/gump/XThetaXW.txt', 'WireMod_SBN_v1_multisigma_XThetaXW')
-    wmyz_df = apply_map(recodf, 'analysis_village/gump/YZ.txt', 'WireMod_SBN_v1_multisigma_YZ')
+    sce_df = apply_double_map(recodf, 'analysis_village/gump/rwt_outputs/min_SCE.txt', 'analysis_village/gump/rwt_outputs/pls_SCE.txt', 'CAFPYANA_SBN_v1_multisigma_SCE')
+    wmxthetaxw_df = apply_map(recodf, 'analysis_village/gump/rwt_outputs/XThetaXW.txt', 'WireMod_SBN_v1_multisigma_XThetaXW')
+    wmyz_df = apply_map(recodf, 'analysis_village/gump/rwt_outputs/YZ.txt', 'WireMod_SBN_v1_multisigma_YZ')
 
-    smear_df = apply_double_map(recodf, f'analysis_village/gump/min_{DETECTOR}_smear.txt', f'analysis_village/gump/pls_{DETECTOR}_smear.txt', f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_smear')
+    smear_df = apply_double_map(recodf, f'analysis_village/gump/rwt_outputs/min_{DETECTOR}_smear.txt', f'analysis_village/gump/rwt_outputs/pls_{DETECTOR}_smear.txt', f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_smear')
     recodf_wgt_out[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_smear'] = np.array([smear_df[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_smear'][u].values for u in smear_df[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_smear'].columns]).T.tolist()
 
-    gain_df = apply_double_map(recodf, f'analysis_village/gump/min_{DETECTOR}_gain.txt', f'analysis_village/gump/pls_{DETECTOR}_gain.txt', f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_gain')
+    gain_df = apply_double_map(recodf, f'analysis_village/gump/rwt_outputs/min_{DETECTOR}_gain.txt', f'analysis_village/gump/rwt_outputs/pls_{DETECTOR}_gain.txt', f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_gain')
     recodf_wgt_out[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_gain'] = np.array([gain_df[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_gain'][u].values for u in gain_df[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_gain'].columns]).T.tolist()
 
     if DETECTOR == "ICARUS":
