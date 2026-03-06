@@ -58,21 +58,25 @@ def run_pool(output, inputs, nproc):
     split_margin = args.SplitSize
     with pd.HDFStore(output) as hdf_pd:
         NAMES.append("histpotdf")
+        NAMES.append("histgenevtdf")
         size_counters = {k: 0 for k in NAMES}
         df_buffers = {k: [] for k in NAMES}
 
         for dfs in dfss:
             this_NAMES = NAMES
-            if len(dfs) == 1: ## no recTree but with TotalPOT histogram
-                this_NAMES = ["histpotdf"]
+            if len(dfs) == 2: ## no or empty recTree
+                this_NAMES = ["histpotdf", "histgenevtdf"]
 
             for k, df in zip(reversed(this_NAMES), reversed(dfs)):
                 this_key = k + "_" + str(k_idx)
                 size_bytes = df.memory_usage(deep=True).sum() if df is not None else 0
                 size_gb = size_bytes / (1024**3)
-                if len(dfs) == 1: ## no recTree but with TotalPOT histogram
-                    size_counters[0] += size_gb
-                    df_buffers[0].append(df)
+                if len(dfs) == 2: ## no or empty recTree
+                    size_counters["histpotdf"] += size_gb
+                    df_buffers["histpotdf"].append(df)
+
+                    size_counters["histgenevtdf"] += size_gb
+                    df_buffers["histgenevtdf"].append(df)
                 else:
                     size_counters[k] += size_gb
                     if df is not None:

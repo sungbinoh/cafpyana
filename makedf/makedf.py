@@ -41,11 +41,26 @@ def make_envdf(f):
     return env
 
 def make_histpotdf(f):
-    # get the value from the TotalPOT histogram
+    if f is None or "TotalPOT" not in f:
+        histpot = pd.DataFrame({"TotalPOT": pd.Series(dtype="float64")})
+        histpot.index.name = "entry"
+        return histpot
+
     pot = f['TotalPOT'].values()
     histpot = pd.DataFrame(data={'TotalPOT':pot})
     histpot.index.name = 'entry'
     return histpot
+
+def make_histgenevtdf(f):
+    if f is None or "TotalGenEvents" not in f:
+        histgenevt = pd.DataFrame({"TotalGenEvents": pd.Series(dtype="float64")})
+        histgenevt.index.name = "entry"
+        return histgenevt
+
+    genevt = f['TotalGenEvents'].values()
+    histgenevt = pd.DataFrame(data={'TotalGenEvents':genevt})
+    histgenevt.index.name = 'entry'
+    return histgenevt
 
 def make_hdrdf(f):
     hdr = loadbranches(f["recTree"], hdrbranches).rec.hdr

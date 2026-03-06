@@ -195,7 +195,7 @@ shwbranches = [
     shwbranch + 'conversion_gap', 
     shwbranch + "density",
     shwbranch + "open_angle",
-    shwbranch + 'bestplane',
+    shwbranch + 'bestplane_for_energy', shwbranch + 'bestplane_for_dedx',
     shwbranch + 'bestplane_dEdx', shwbranch + 'bestplane_energy',
     shwbranch + 'plane.0.dEdx',   shwbranch + 'plane.1.dEdx', shwbranch + 'plane.2.dEdx',
     shwbranch + 'plane.0.energy', shwbranch + 'plane.1.energy', shwbranch + 'plane.2.energy',
@@ -282,13 +282,14 @@ slcbranches = [
     "rec.slc.opt0.hypoPE",
 ]
 
-## making this branches separately to support sbnd flat.caf versions older than v10_10_*
+# making this branches separately from slcbranches since ICARUS CAFs do not have rec.slc.barycenterFM.score
 barycenterFMbranches = [
     "rec.slc.barycenterFM.chargeTotal",
     "rec.slc.barycenterFM.flashTime",
     "rec.slc.barycenterFM.flashPEs",
     "rec.slc.barycenterFM.chi2",
     "rec.slc.barycenterFM.score",
+    "rec.slc.barycenterFM.deltaZ",
 ]
 
 mcbranches = [
