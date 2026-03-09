@@ -1,4 +1,5 @@
 import sys
+import argparse
 import os
 import pandas as pd
 workspace_root = os.getcwd()
@@ -62,15 +63,23 @@ def grab_pot(files, mc_bools, sep_bool=True):
         print("Cannot have negative POT!!!")
         sys.exit()
 
-        if sep_bool: 
-            if len(pot) == 1:
-                return pot[0]
-            else:
-                return pot
+    if sep_bool:
+        if len(pot) == 1:
+            return pot[0]
         else:
-            return sum(pot)
+            return pot
+    else:
+        print(f"final total: {sum(pot)}")
+        return sum(pot)
 
 def test():
+    pac_prefix = "/exp/sbnd/data/users/nrowe/PAC/df/"
+
+    pac_files = []
+    for i in range(35):
+        pac_files.append(pac_prefix+f"ICARUS_Run4_MC_{i:02d}.df")
+    grab_pot(pac_files, True, False)
+
     prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
 
     cv_files = []
@@ -85,4 +94,15 @@ def test():
     grab_pot(prefix+"ICARUS_SpringRun2BNBOff_unblind_prescaled.df", False)
 
 if __name__ == "__main__":
-    test()
+
+    parser = argparse.ArgumentParser(prog = 'pot',
+                                     description = 'POT grabber and related functions for gump analysis.')
+    parser.add_argument('-i','--input', nargs='+', type=str)
+    parser.add_argument('-t','--test', action='store_true')
+
+    args = parser.parse_args()
+
+    if args.test:
+        test()
+    elif args.input:
+        grab_pot(args.input, True, False)

@@ -14,7 +14,11 @@ import gump_cuts as gc
 def tmatch(reco, mc):
     for c in mc.columns:
         if c in reco.columns:
-            mc.rename(columns={c:c+'_true'}, inplace=True)
+            print(f'duplicate column found! {c}, setting right col to *_true.')
+            if(isinstance(c, tuple)):
+                mc.rename(columns={c:(c[0]+'_true', '')}, inplace=True)
+            else:
+                mc.rename(columns={c:c+'_true'}, inplace=True)
 
     df = ph.multicol_merge(reco.reset_index(), mc.reset_index(),
                            left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
