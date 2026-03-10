@@ -3,7 +3,7 @@ from .branches import *
 from .util import *
 from .calo import *
 from . import numisyst, g4syst, geniesyst, bnbsyst, getenv
-from makedf import chi2pid, CALO_VARIATIONS
+from makedf import chi2pid
 
 pd.set_option('future.no_silent_downcasting', True)
 
@@ -213,7 +213,7 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
             trkhitdf = trkhitdf[InFV(df=trkhitdf, det=det)]
 
             if updatecalo == True:
-                dedx_redo = chi2pid.dedx(trkhitdf, gain=det, calibrate=det, plane=plane, isMC=ismc, new_calo_params=CALO_VARIATIONS[updatecalo])
+                dedx_redo = chi2pid.dedx(trkhitdf, gain=det, calibrate=det, plane=plane, isMC=ismc, new_calo_params=chi2pid.CALO_VARIATIONS[updatecalo])
 
             trkhitdf["dedx_redo"] = dedx_redo
             # TODO: check if score is reproduced
