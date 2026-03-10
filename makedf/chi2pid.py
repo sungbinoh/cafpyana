@@ -33,6 +33,21 @@ SBND_CALO_PARAMS = {
 }
 
 
+# calo variations
+# variations on recombination parameters are taken from the ICARUS measurement uncertainties
+CALO_VARIATIONS = {
+    "cv": SBND_CALO_PARAMS,
+    "ccal_p": {**SBND_CALO_PARAMS, "c_cal_frac": [1.02, 1.02, 1.02]},
+    "ccal_m": {**SBND_CALO_PARAMS, "c_cal_frac": [0.98, 0.98, 0.98]},
+    "alpha_p": {**SBND_CALO_PARAMS, "alpha_emb": [0.904+0.008, 0.904+0.008]},
+    "alpha_m": {**SBND_CALO_PARAMS, "alpha_emb": [0.904-0.008, 0.904-0.008]},
+    "beta_p": {**SBND_CALO_PARAMS, "beta_90": [0.204+0.008, 0.204+0.008]},
+    "beta_m": {**SBND_CALO_PARAMS, "beta_90": [0.204-0.008, 0.204-0.008]},
+    "R_p": {**SBND_CALO_PARAMS, "R_emb": [1.25+0.02, 1.25+0.02]},
+    "R_m": {**SBND_CALO_PARAMS, "R_emb": [1.25-0.02, 1.25-0.02]},
+}
+
+
 def chi2(hitdf, exprr, expdedx, experr, dedxname="dedx"):
     dedx_exp = pd.cut(hitdf.rr, exprr, labels=expdedx).astype(float)
     dedx_err = pd.cut(hitdf.rr, exprr, labels=experr).astype(float)
@@ -165,21 +180,27 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
 
     return dqdx*gain_perhit
 
-def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False, smear=-1, scale=1):
+def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False, smear=-1, scale=1, new_calo_params=None):
     dqdx_v = dqdx(dqdxdf, gain=gain, calibrate=calibrate, isMC=isMC)
-    if gain == "ICARUS":
+    if gain == "SBND":
+
+        if new_calo_params is None:
+            calo_params = SBND_CALO_PARAMS
+        else:
+            calo_params = new_calo_params
+
+        scalegain = calo_params['c_cal_frac'][plane]
+        this_alpha_emb = calo_params["alpha_emb"][0] if isMC else calo_params["alpha_emb"][1]
+        this_beta_90 = calo_params["beta_90"][0] if isMC else calo_params["beta_90"][1]
+        this_R_emb = calo_params["R_emb"][0] if isMC else calo_params["R_emb"][1]
+        dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, this_alpha_emb, this_beta_90, this_R_emb)
+
+    elif gain == "ICARUS":
         scalegain = ICARUS_CALO_PARAMS['c_cal_frac'][plane]
-    elif gain == "SBND":
-        scalegain = SBND_CALO_PARAMS['c_cal_frac'][plane]
+        dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
+
     else:
         scalegain = 1.
-
-    if gain == "SBND":
-        this_alpha_emb = SBND_CALO_PARAMS["alpha_emb"][0] if isMC else SBND_CALO_PARAMS["alpha_emb"][1]
-        this_beta_90 = SBND_CALO_PARAMS["beta_90"][0] if isMC else SBND_CALO_PARAMS["beta_90"][1]
-        this_R_emb = SBND_CALO_PARAMS["R_emb"][0] if isMC else SBND_CALO_PARAMS["R_emb"][1]
-        dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, this_alpha_emb, this_beta_90, this_R_emb)
-    else:
         dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
 
     if smear > 0:
