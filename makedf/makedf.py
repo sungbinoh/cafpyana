@@ -178,7 +178,7 @@ def make_opflashdf(f):
     opflashdf = loadbranches(f["recTree"], opflashbranches).rec.opflashes
     return opflashdf
 
-def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False, det="SBND", updatecalo=False):
+def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False, det="SBND", updatecalo=None):
     trkdf = loadbranches(f["recTree"], trkbranches)
     if scoreCut:
         trkdf = trkdf.rec.slc.reco[trkdf.rec.slc.reco.pfp.trackScore > 0.5]
@@ -204,7 +204,7 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
     trkdf[("pfp", "tindex", "", "", "", "")] = trkdf.index.get_level_values(2)
 
 
-    if updatecalo:
+    if updatecalo is not None:
         hdrdf = make_mchdrdf(f)
         ismc = hdrdf.ismc.iloc[0]
 
@@ -212,8 +212,7 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
             trkhitdf = make_trkhitdf(f, plane)
             trkhitdf = trkhitdf[InFV(df=trkhitdf, det=det)]
 
-            if updatecalo == True:
-                dedx_redo = chi2pid.dedx(trkhitdf, gain=det, calibrate=det, plane=plane, isMC=ismc, new_calo_params=chi2pid.CALO_VARIATIONS[updatecalo])
+            dedx_redo = chi2pid.dedx(trkhitdf, gain=det, calibrate=det, plane=plane, isMC=ismc, new_calo_params=chi2pid.CALO_VARIATIONS[updatecalo])
 
             trkhitdf["dedx_redo"] = dedx_redo
             # TODO: check if score is reproduced
