@@ -149,6 +149,7 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
     
     # Just for muons and just on the collection plane
     if updaterecomb:
+        #print('Updating recombination parameters')
         calo_params = SBND_CALO_PARAMS.copy()
         calo_params_recomb = SBND_CALO_PARAMS.copy()
         hdrdf = make_hdrdf(f)
@@ -212,11 +213,15 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
                             trkdf[this_chi2_col] = trkdf[this_chi2_col].fillna(0.)
                             trkdf[this_ndof_col] = trkdf[this_ndof_col].fillna(0)
                         except:
-                            print("no selected tracks")
+                            print("WARNING: no selected tracks")
 
 
     trkdf[("pfp", "tindex", "", "", "", "")] = trkdf.index.get_level_values(2)
-
+    # with open('/exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/trkdf_keys_inmaker2.txt','w') as f:
+    #     for k in trkdf.columns:
+    #         f.write(f'{k}: (')
+    #         f.write(f'min = {trkdf[k].min()}')
+    #         f.write(f', max = {trkdf[k].max()})\n')
     return trkdf
 
 def make_trkhitdf(f,plane):

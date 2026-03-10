@@ -236,6 +236,12 @@ def make_pandora_evtdf(f, include_weights=None, wgt_types=["bnb","genie","g4"], 
         trkdf.loc[:, ("pfp","trk","truth","p","dir","x")] = trkdf.pfp.trk.truth.p.genp.x/trkdf.pfp.trk.truth.p.totp
         trkdf.loc[:, ("pfp","trk","truth","p","dir","y")] = trkdf.pfp.trk.truth.p.genp.y/trkdf.pfp.trk.truth.p.totp
         trkdf.loc[:, ("pfp","trk","truth","p","dir","z")] = trkdf.pfp.trk.truth.p.genp.z/trkdf.pfp.trk.truth.p.totp
+    # Save the keys in the trkdf, with the nan min and max
+    # with open('/exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/trkdf_keys_inmaker.txt','w') as f:
+    #     for k in trkdf.columns:
+    #         f.write(f'{k}: (')
+    #         f.write(f'min = {trkdf[k].min()}')
+    #         f.write(f', max = {trkdf[k].max()})\n')
 
     mudf_list = []
     for key_suffix in MU_KEY_SUFFIXES:
@@ -412,40 +418,16 @@ def make_pandora_evtdf_processed(f, include_weights=None, wgt_types=["bnb","geni
         # Fix the costheta and momentum for slices that don't have a true muon
         mask = (slc.data.truth.mu.dir.z == -1) | (np.isnan(slc.data.truth.mu.dir.z))
         dir_col = slc.get_key([f'mu.pfp.trk.truth.p.dir.z'])[0]
-        slc.data.truth.mu.dir.z[mask] = slc.data.loc[:,dir_col][mask]
+        truth_dir_col = slc.get_key([f'truth.mu.dir.z'])[0]
+        if mask.sum() > 0:
+            slc.data.loc[mask,truth_dir_col] = slc.data.loc[mask,dir_col]
 
         mask = (slc.data.truth.mu.totp == -1) | (np.isnan(slc.data.truth.mu.totp))
         totp_col = slc.get_key([f'mu.pfp.trk.truth.p.totp'])[0]
-        slc.data.truth.mu.totp[mask] = slc.data.loc[:,totp_col][mask]
-
-        #Assign binning
-        slc.assign_bins(DIFF_COSTHETA_BINS,'truth.mu.dir.z',assign_key='true_bin.costheta')
-        slc.assign_bins(DIFF_MOMENTUM_BINS,'truth.mu.totp',assign_key='true_bin.momentum')
-
-        # Differential bins
-        mask = slc.data.true_bin.values.astype(float) >= 0
-        mask = np.all(mask,axis=1)
-        differential_bins = slc.data.true_bin.costheta.values.astype(float) + slc.data.true_bin.momentum.values.astype(float)*np.max(slc.data.true_bin.costheta.values.astype(float))
-        slc.add_cols('true_bin.differential',differential_bins[mask],conditions=mask,fill=-1.)
-        if VERBOSE:
-            print(f'{np.sum(mask==False)}/{len(slc.data)} slices have no true differential bin')
-    #Reco binnings
-    slc.assign_bins(DIFF_COSTHETA_BINS,f'mu.pfp.trk.costheta',assign_key='bin.costheta')
-    slc.assign_bins(DIFF_MOMENTUM_BINS,f'mu.pfp.trk.P.p_muon',assign_key='bin.momentum')
-
-
-    # Differential bins
-    mask = slc.data.bin.values.astype(float) >= 0
-    mask = np.all(mask,axis=1)
-    differential_bins = slc.data.bin.costheta.values.astype(float) + slc.data.bin.momentum.values.astype(float)*np.max(slc.data.bin.costheta.values.astype(float))
-    slc.add_cols('bin.differential',differential_bins[mask],conditions=mask,fill=-1.)
-
-    mask = slc.data.bin.values.astype(float) >= 0
-    mask = np.all(mask,axis=1)
-    differential_bins = slc.data.bin.costheta.values.astype(float) + slc.data.bin.momentum.values.astype(float)*np.max(slc.data.bin.costheta.values.astype(float))
-    slc.add_cols('bin.differential',differential_bins[mask],conditions=mask,fill=-1.)
-    if VERBOSE:
-        print(f'{np.sum(mask==False)}/{len(slc.data)} slices have no reco differential bin')
+        truth_totp_col = slc.get_key([f'truth.mu.totp'])[0]
+        if mask.sum() > 0:
+            slc.data.loc[mask,truth_totp_col] = slc.data.loc[mask,totp_col]
+    slc.add_2d_binning(include_truth=ismc, include_reco=True)
 
 
     #Opt0 cuts
@@ -478,9 +460,9 @@ def make_pandora_evtdf_processed(f, include_weights=None, wgt_types=["bnb","geni
             print(PAND_CUTS)
             print('Pandora pur, eff, f1:')
             print(pur,eff,f1)
-    # with open('/exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/slc_keys_inmaker.txt','w') as f:
-    #     for k in slc.data.keys():
-    #         f.write(f'{k}\n')
+    with open('/exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/slc_keys_inmaker.txt','w') as f:
+        for k in slc.data.keys():
+            f.write(f'{k}\n')
     return slc.data
     
 def make_pandora_evtdf_processed_signal_cut(f, include_weights=None, wgt_types=["bnb","genie","g4"], slim=None, 
@@ -507,6 +489,10 @@ def make_pandora_evtdf_processed_signal_cut(f, include_weights=None, wgt_types=[
     #Apply the cut all for both the reco and truth dataframes (only cut if requested)
     slc.cut_all(cut=True,mode='truth',cont=False)
 
+    with open('/exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/slc_signal_keys_inmaker.txt','w') as f:
+        for k in slc.data.keys():
+            f.write(f'{k}\n')
+
     return slc.data #return just the df
 
 def make_pandora_evtdf_processed_selected_cut(f, include_weights=None, wgt_types=["bnb","genie","g4"], slim=None, 
@@ -528,4 +514,7 @@ def make_pandora_evtdf_processed_selected_cut(f, include_weights=None, wgt_types
     slc = CAFSlice(df)
     slc.remove_column_suffix(MU_KEY_SUFFIXES[-1]) #Fix null variation
     slc.cut_all(cut=True,mode='reco',cont=False)
+    with open('/exp/sbnd/app/users/brindenc/develop/cafpyana/analysis_village/numuincl/slc_selected_keys_inmaker.txt','w') as f:
+        for k in slc.data.keys():
+            f.write(f'{k}\n')
     return slc.data #return just the df

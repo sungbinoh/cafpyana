@@ -47,11 +47,13 @@ def new_dedx(hit_df, c_cal_frac = 1.0, plane = 2, alpha_emb = alpha_emb_cv, beta
     return dedx
 
 def particle_chi2(dEdx, ResRange, particle, dedx_a0, dedx_a1):
+    #print(f'len(dEdx) = {len(dEdx)}, len(ResRange) = {len(ResRange)}')
     if particle != "kaon" and particle != "proton" and particle != "muon" and particle != "pion" :
-        print("Not a valid particle input")
+        #print("Not a valid particle input")
         #return 99999., -1
         return 0., 0
     if len(dEdx) < 1 or len(ResRange) < 1:
+        #print("No dEdx or ResRange data")
         #return 88888.0, 0
         return 0., 0
     
@@ -70,6 +72,8 @@ def particle_chi2(dEdx, ResRange, particle, dedx_a0, dedx_a1):
 
     v_chi2 = (dEdx - dedx_exp)**2 / (dedx_err**2 + dedx_res**2)
 
+    # print(f'ResRange (min/max) = {ResRange.min()}, {ResRange.max()}')
+    # print(f'dEdx (min/max) = {dEdx.min()}, {dEdx.max()}')
     when_chi2 = (ResRange < max_res_range) & (ResRange > 0.) & (dEdx < dEdx_truncate_upper) & (dEdx > dEdx_truncate_bellow)
 
     v_chi2= v_chi2.iloc[N_skip:-1 * N_skip]

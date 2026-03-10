@@ -30,3 +30,5 @@ SPINE_CUT_LABELS_CONT = ['Time Contained','Flash Match\n(best match, whole detec
 
 SPINE_CUTS_CONT_NOFM = ['time_contained','fv','muon','cont']
 SPINE_CUT_LABELS_CONT_NOFM = ['Time Contained','Fiducial','Has Muon','Contained']
+
+GENIE_LABEL = 'GENIE v3.4.0 AR23_20i_00_000'

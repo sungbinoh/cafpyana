@@ -135,6 +135,7 @@ def _loaddf(applyfs, preprocess, g):
                     dfs.append(df)
                 else:
                     print("File (%s) missing TotalPOT histgoram. Cannot make histpotdf..." % fname)
+                    dfs.append(None)
 
                 if "TotalGenEvents" in f:
                     df = make_histgenevtdf(f)
@@ -146,6 +147,7 @@ def _loaddf(applyfs, preprocess, g):
                     dfs.append(df)
                 else:
                     print("File (%s) missing TotalGenEvents histgoram. Cannot make histgenevtdf..." % fname)
+                    dfs.append(None)
             
             # Success - break out of retry loop
             break

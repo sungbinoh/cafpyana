@@ -17,6 +17,8 @@ class Script(PreProcessor):
     def run(self, input_file, output_file):
         result = subprocess.run([self.script, input_file, output_file], 
                               capture_output=True, text=True)
+        print(f'Stdout: {result.stdout}')
+        print(f'Stderr: {result.stderr}')
         if result.returncode != 0:
             raise RuntimeError(
                 f"Preprocess script failed with return code {result.returncode}.\n"
