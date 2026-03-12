@@ -162,8 +162,10 @@ def run_grid(inputfiles):
         
         out.write('\n# 3. Force XRootD to use the token and enable verbose logging\n')
         out.write('export XrdSecDEBUG=3\n')
-        out.write('export XrdSecPROTOCOL=token\n\n')
+        out.write('export XrdSecPROTOCOL=ztn\n\n')
         out.write('export XRD_PLUGINDIR=$(dirname $(which xrdcp))/../lib64\n')
+        out.write('echo "Testing ztn plugin presence..."\n')
+        out.write('ls -l $XRD_PLUGINDIR/libXrdSecztn-5.so\n')
         # --- End of Debugging Block ---
 
         # --- OS and XRootD Diagnostics ---
