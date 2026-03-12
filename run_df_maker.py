@@ -163,6 +163,7 @@ def run_grid(inputfiles):
         out.write('\n# 3. Force XRootD to use the token and enable verbose logging\n')
         out.write('export XrdSecDEBUG=2\n')
         out.write('export XrdSecPROTOCOL=token\n\n')
+        out.write('export XRD_PLUGINDIR=$(dirname $(which xrdcp))/../lib64\n')
         # --- End of Debugging Block ---
 
         # --- OS and XRootD Diagnostics ---
@@ -199,10 +200,10 @@ def run_grid(inputfiles):
 
     # 5) prepare a package for xrootd
     CAFPYANA_WD = os.environ['CAFPYANA_WD']
-    cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/XRootD " + MasterJobDir
-    cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/pyxrootd " + MasterJobDir
-    os.system(cp_XRootD)
-    os.system(cp_pyxrootd)
+    #cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/XRootD " + MasterJobDir
+    #cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/pyxrootd " + MasterJobDir
+    #os.system(cp_XRootD)
+    #os.system(cp_pyxrootd)
 
     os.chdir(MasterJobDir)
     tar_cmd = 'tar cf bin_dir.tar ./'
