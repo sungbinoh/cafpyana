@@ -150,41 +150,36 @@ def run_grid(inputfiles):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        out.write('echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"\n')
-
-        # --- Start of Token & XRootD Debugging Block ---
-        out.write('\n# 1. Identify the token\n')
+        out.write('\n# === 1. ENVIRONMENT & TOKEN VALIDATION ===\n')
+        out.write('echo "[run_%s.sh] OS: $(cat /etc/os-release | grep PRETTY_NAME)"\n'%i_flist)
+        out.write('echo "[run_%s.sh] XRootD from: $(which xrdcp)"\n'%i_flist)
+        
+        # Verify the token exists and isn't empty/corrupt
         out.write('export XRD_BEARER_TOKEN_FILE=$BEARER_TOKEN_FILE\n')
-        
-        out.write('\n# 2. Debug: check if the token is actually valid for reading\n')
-        out.write('echo "[run_%s.sh] Checking token scopes..."\n'%i_flist)
-        out.write('htdecodetoken | grep -E "aud|scope"\n')
-        
-        out.write('\n# 3. Force XRootD to use the token and enable verbose logging\n')
-        out.write('export XrdSecDEBUG=3\n')
-        out.write('export XrdSecPROTOCOL=ztn\n\n')
-        out.write('export XRD_PLUGINDIR=$(dirname $(which xrdcp))/../lib64\n')
-        out.write('echo "Testing ztn plugin presence..."\n')
-        out.write('ls -l $XRD_PLUGINDIR/libXrdSecztn-5.so\n')
-        # --- End of Debugging Block ---
+        out.write('if [ -s "$XRD_BEARER_TOKEN_FILE" ]; then\n')
+        out.write('    echo "[run_%s.sh] Token found. Decoding scopes:"\n'%i_flist)
+        out.write('    htdecodetoken | grep -E "aud|scope"\n')
+        out.write('else\n')
+        out.write('    echo "[run_%s.sh] ERROR: Token file is missing or empty!"\n'%i_flist)
+        out.write('fi\n')
 
-        # --- OS and XRootD Diagnostics ---
-        out.write('\necho "--- OS Version ---"\n')
-        out.write('cat /etc/os-release | grep PRETTY_NAME\n')
-
-        out.write('\necho "--- XRootD Binary Path & Version ---"\n')
-        out.write('which xrdcp\n')
-        out.write('xrdcp --version\n')
-
-        out.write('\necho "--- Library Dependencies ---"\n')
-        out.write('# Check the main binary dependencies\n')
-        out.write('ldd $(which xrdcp) | grep -i sec\n')
+        out.write('\n# === 2. PLUGIN HEALTH (AL9 COMPATIBILITY) ===\n')
+        # Dynamically locate the ztn plugin within the active Spack tree
+        out.write('XROOTD_LIB64=$(dirname $(which xrdcp))/../lib64\n')
+        out.write('ZTN_LIB=$XROOTD_LIB64/libXrdSecztn-5.so\n')
         
-        out.write('\n# Check if the specific Token plugin can load (critical for AL9)\n')
-        out.write('# This assumes the plugin is in your LD_LIBRARY_PATH\n')
-        out.write('find . -name "libXrdSecToken.so" -exec ldd {} \; | grep "not found"\n')
-        
-        # --- End Diagnostics ---
+        out.write('if [ -f "$ZTN_LIB" ]; then\n')
+        out.write('    echo "[run_%s.sh] Found ztn plugin at: $ZTN_LIB"\n'%i_flist)
+        out.write('    echo "Checking for missing AL9 dependencies:"\n')
+        out.write('    ldd $ZTN_LIB | grep "not found" || echo "All dependencies satisfied."\n')
+        out.write('    export XRD_PLUGINDIR=$XROOTD_LIB64\n')
+        out.write('else\n')
+        out.write('    echo "[run_%s.sh] ERROR: libXrdSecztn-5.so NOT found in $XROOTD_LIB64!"\n'%i_flist)
+        out.write('fi\n')
+
+        out.write('\n# === 3. XROOTD RUNTIME DEBUGGING ===\n')
+        out.write('export XrdSecPROTOCOL=ztn\n')
+        out.write('export XrdSecDEBUG=3\n') # Level 3 is the "sweet spot" for auth logs
 
         #out.write('htgettoken -a htvaultprod.fnal.gov -i sbnd\n')
         cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
