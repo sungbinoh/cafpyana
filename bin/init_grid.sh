@@ -43,6 +43,8 @@ pip install --upgrade pip
 pip install wheel setuptools
 pip install -r pip_requirements.txt
 
+#htgettoken -a htvaultprod.fnal.gov -i sbnd
+
 # Deactivate virtual environment
 echo "Virtual environment '$VENV_NAME' set up successfully with Python $PYTHON_VERSION and required packages installed."
 echo "If you want to exit from this virtual env, do $ deactivate"
