@@ -151,6 +151,20 @@ def run_grid(inputfiles):
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
         out.write('echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"\n')
+
+        # --- Start of Token & XRootD Debugging Block ---
+        out.write('\n# 1. Identify the token\n')
+        out.write('export XRD_BEARER_TOKEN_FILE=$BEARER_TOKEN_FILE\n')
+        
+        out.write('\n# 2. Debug: check if the token is actually valid for reading\n')
+        out.write('echo "[run_%s.sh] Checking token scopes..."\n'%i_flist)
+        out.write('htdecodetoken | grep -E "aud|scope"\n')
+        
+        out.write('\n# 3. Force XRootD to use the token and enable verbose logging\n')
+        out.write('export XrdSecDEBUG=2\n')
+        out.write('export XrdSecPROTOCOL=token\n\n')
+        # --- End of Debugging Block ---
+
         #out.write('htgettoken -a htvaultprod.fnal.gov -i sbnd\n')
         cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
         for i_f in range(0,len(flist)):

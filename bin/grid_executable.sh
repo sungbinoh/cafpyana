@@ -26,8 +26,9 @@ spack find cmake
 spack load cmake@3.27.7
 which cmake
 echo "@@ check if other spack packages"
-spack load hdf5
-spack load xrootd
+spack load hdf5@1.12.2%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
+spack load xrootd@5.6.9%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
+
 spack load ifdhc@2.7.2
 echo "@@ run init_grid.sh"
 source ./bin/init_grid.sh
