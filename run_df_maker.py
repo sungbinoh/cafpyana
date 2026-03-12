@@ -161,7 +161,7 @@ def run_grid(inputfiles):
         out.write('htdecodetoken | grep -E "aud|scope"\n')
         
         out.write('\n# 3. Force XRootD to use the token and enable verbose logging\n')
-        out.write('export XrdSecDEBUG=2\n')
+        out.write('export XrdSecDEBUG=3\n')
         out.write('export XrdSecPROTOCOL=token\n\n')
         out.write('export XRD_PLUGINDIR=$(dirname $(which xrdcp))/../lib64\n')
         # --- End of Debugging Block ---
