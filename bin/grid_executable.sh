@@ -6,8 +6,8 @@ DFPREFIX=$2
 
 nProcess=$PROCESS
 echo "@@ nProcess : "${nProcess}
-
-source /cvmfs/larsoft.opensciencegrid.org/spack-packages/setup-env.sh
+source /cvmfs/fermilab.opensciencegrid.org/packages/common/setup-env.sh
+spack load sam-web-client@3.6%gcc@11.4.1
 
 echo "@@ pwd"
 pwd
@@ -26,9 +26,10 @@ spack find cmake
 spack load cmake@3.27.7
 which cmake
 echo "@@ check if other spack packages"
+
+source /cvmfs/larsoft.opensciencegrid.org/spack-packages/setup-env.sh
 spack load hdf5@1.12.2%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
 spack load xrootd@5.6.9%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
-
 spack load ifdhc@2.7.2
 echo "@@ run init_grid.sh"
 source ./bin/init_grid.sh
