@@ -165,6 +165,24 @@ def run_grid(inputfiles):
         out.write('export XrdSecPROTOCOL=token\n\n')
         # --- End of Debugging Block ---
 
+        # --- OS and XRootD Diagnostics ---
+        out.write('\necho "--- OS Version ---"\n')
+        out.write('cat /etc/os-release | grep PRETTY_NAME\n')
+
+        out.write('\necho "--- XRootD Binary Path & Version ---"\n')
+        out.write('which xrdcp\n')
+        out.write('xrdcp --version\n')
+
+        out.write('\necho "--- Library Dependencies ---"\n')
+        out.write('# Check the main binary dependencies\n')
+        out.write('ldd $(which xrdcp) | grep -i sec\n')
+        
+        out.write('\n# Check if the specific Token plugin can load (critical for AL9)\n')
+        out.write('# This assumes the plugin is in your LD_LIBRARY_PATH\n')
+        out.write('find . -name "libXrdSecToken.so" -exec ldd {} \; | grep "not found"\n')
+        
+        # --- End Diagnostics ---
+
         #out.write('htgettoken -a htvaultprod.fnal.gov -i sbnd\n')
         cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
         for i_f in range(0,len(flist)):
