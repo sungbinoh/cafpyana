@@ -73,8 +73,14 @@ def grab_pot(files, mc_bools, sep_bool=True):
         return sum(pot)
 
 def test():
-    pac_prefix = "/exp/sbnd/data/users/nrowe/PAC/df/"
+    pac_prefix = "/exp/sbnd/data/users/nrowe/"
 
+    pac_files = []
+    for i in range(7):
+        pac_files.append(pac_prefix+f"SBND_Run1_MC_{i:02d}.df")
+    grab_pot(pac_files, True, False)
+
+    pac_prefix = "/exp/sbnd/data/users/nrowe/PAC/df/"
     pac_files = []
     for i in range(35):
         pac_files.append(pac_prefix+f"ICARUS_Run4_MC_{i:02d}.df")
@@ -89,7 +95,6 @@ def test():
     grab_pot(cv_files, True)
     grab_pot(prefix+"ICARUS_SpringMCOverlay_rewgt.df", True)
     grab_pot(prefix+"SBND_SpringLowEMC.df", True)
-    grab_pot(prefix+"ICARUS_SpringMCDirt_slimwgt.df", True)
     grab_pot(prefix+"SBND_SpringBNBOffData_5000.df", False)
     grab_pot(prefix+"ICARUS_SpringRun2BNBOff_unblind_prescaled.df", False)
 
