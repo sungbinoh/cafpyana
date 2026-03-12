@@ -1,5 +1,6 @@
 #!/bin/bash 
 
+echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"
 export machine=${HOSTNAME}
 if [[ $machine == *sbnd* ]]; then
   echo "working on a sbnd machine"
@@ -55,3 +56,4 @@ cd ..
 export PYTHONPATH=$PYTHONPATH:$PWD/..
 export CAFPYANA_WD=`pwd`
 echo $CAFPYANA_WD
+echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"
