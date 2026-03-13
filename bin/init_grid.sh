@@ -14,10 +14,8 @@ if [[ $machine == *icarus* ]]; then
   export CAFPYANA_GRID_OUT_DIR="/pnfs/icarus/scratch/users/$USER/cafpyana_out"
   mkdir -p $CAFPYANA_GRID_OUT_DIR
 fi
-
-spack load hdf5@1.12.2%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
-spack load xrootd@5.6.9%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
-spack load ifdhc@2.7.2
+spack load hdf5@1.14.3
+spack load xrootd@5.6.1
 
 ######################################################
 #### setup virtual python env if it is not already set

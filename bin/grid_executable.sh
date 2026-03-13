@@ -6,8 +6,8 @@ DFPREFIX=$2
 
 nProcess=$PROCESS
 echo "@@ nProcess : "${nProcess}
-source /cvmfs/fermilab.opensciencegrid.org/packages/common/setup-env.sh
-spack load sam-web-client@3.6%gcc@11.4.1
+
+source /cvmfs/larsoft.opensciencegrid.org/spack-packages/setup-env.sh
 
 echo "@@ pwd"
 pwd
@@ -21,16 +21,20 @@ git checkout remotes/origin/N8Dev
 echo "@@ git branch -a"
 echo "@@ ls -alh"
 ls -alh
-echo "@@ check if there is cmake"
-spack find cmake
-spack load cmake@3.27.7
-which cmake
-echo "@@ check if other spack packages"
 
-source /cvmfs/larsoft.opensciencegrid.org/spack-packages/setup-env.sh
-spack load hdf5@1.12.2%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
-spack load xrootd@5.6.9%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
+spack find cmake
+spack find hdf5
+spack find xrootd
+spack find ifdhc
+
+spack load cmake@3.27.7
+spack load hdf5@1.14.3
+spack load xrootd@5.6.1
 spack load ifdhc@2.7.2
+
+echo "@@ which xrdcp"
+which xrdcp
+
 echo "@@ run init_grid.sh"
 source ./bin/init_grid.sh
 echo "@@ ls -alh"
@@ -47,13 +51,16 @@ echo "@@ Setup xrootd"
 cp -r ${filesFromSender}/XRootD $VIRTUAL_ENV/lib/python3.9/site-packages/
 cp -r ${filesFromSender}/pyxrootd $VIRTUAL_ENV/lib/python3.9/site-packages/
 export LD_LIBRARY_PATH=$VIRTUAL_ENV/lib/python3.9/site-packages/pyxrootd:$LD_LIBRARY_PATH
-#export LD_LIBRARY_PATH=$VIRTUAL_ENV/lib/python3.9/site-packages/xrootd-5.6.1-py3.9-linux-x86_64.egg/pyxrootd:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$VIRTUAL_ENV/lib/python3.9/site-packages/xrootd-5.6.1-py3.9-linux-x86_64.egg/pyxrootd:$LD_LIBRARY_PATH
 
 export IFDH_CP_MAXRETRIES=2
 
 echo "@@ outDir : "${outDir}
 echo "@@ ifdh  mkdir_p "${outDir}
 ifdh  mkdir_p ${outDir}
+
+echo "@@ which xrdcp"
+which xrdcp
 
 echo "@@ source ${filesFromSender}/run_"${nProcess}".sh "
 ls -alh

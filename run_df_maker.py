@@ -150,24 +150,9 @@ def run_grid(inputfiles):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        out.write('\n# === 1. ENVIRONMENT & TOKEN VALIDATION ===\n')
-        out.write('echo "[run_%s.sh] OS: $(cat /etc/os-release | grep PRETTY_NAME)"\n'%i_flist)
-        out.write('echo "[run_%s.sh] XRootD from: $(which xrdcp)"\n'%i_flist)
-        
-        # Verify the token exists and isn't empty/corrupt
-        out.write('export XRD_BEARER_TOKEN_FILE=$BEARER_TOKEN_FILE\n')
-        out.write('if [ -s "$XRD_BEARER_TOKEN_FILE" ]; then\n')
-        out.write('    echo "[run_%s.sh] Token found. Decoding scopes:"\n'%i_flist)
-        out.write('    htdecodetoken | grep -E "aud|scope"\n')
-        out.write('else\n')
-        out.write('    echo "[run_%s.sh] ERROR: Token file is missing or empty!"\n'%i_flist)
-        out.write('fi\n')
+        out.write('export XrdSecDEBUG=4\n')
+        out.write('echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"\n')
 
-        out.write('\n# === 2. PLUGIN HEALTH (AL9 COMPATIBILITY) ===\n')
-        # Dynamically locate the ztn plugin within the active Spack tree
-        out.write('XROOTD_LIB64=$(dirname $(which xrdcp))/../lib64\n')
-        out.write('ZTN_LIB=$XROOTD_LIB64/libXrdSecztn-5.so\n')
-        
         out.write('if [ -f "$ZTN_LIB" ]; then\n')
         out.write('    echo "[run_%s.sh] Found ztn plugin at: $ZTN_LIB"\n'%i_flist)
         out.write('    echo "Checking for missing AL9 dependencies:"\n')
@@ -176,12 +161,15 @@ def run_grid(inputfiles):
         out.write('else\n')
         out.write('    echo "[run_%s.sh] ERROR: libXrdSecztn-5.so NOT found in $XROOTD_LIB64!"\n'%i_flist)
         out.write('fi\n')
-
-        out.write('\n# === 3. XROOTD RUNTIME DEBUGGING ===\n')
         out.write('export XrdSecPROTOCOL=ztn\n')
-        out.write('export XrdSecDEBUG=3\n') # Level 3 is the "sweet spot" for auth logs
-
-        #out.write('htgettoken -a htvaultprod.fnal.gov -i sbnd\n')
+        # --- Start of Token & XRootD Debugging Block ---
+        out.write('\n# 1. Identify the token\n')
+        out.write('export XRD_BEARER_TOKEN_FILE=$BEARER_TOKEN_FILE\n')
+        
+        out.write('\n# 2. Debug: check if the token is actually valid for reading\n')
+        out.write('echo "[run_%s.sh] Checking token scopes..."\n'%i_flist)
+        out.write('htdecodetoken | grep -E "aud|scope"\n')
+        
         cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
@@ -189,7 +177,7 @@ def run_grid(inputfiles):
                 cmd += ' ' + flist[i_f]
             else: 
                 cmd += ',' + flist[i_f]
-            #out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
+            out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
         out.write(cmd)
         out.close()
 
@@ -197,10 +185,10 @@ def run_grid(inputfiles):
 
     # 5) prepare a package for xrootd
     CAFPYANA_WD = os.environ['CAFPYANA_WD']
-    #cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/XRootD " + MasterJobDir
-    #cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/pyxrootd " + MasterJobDir
-    #os.system(cp_XRootD)
-    #os.system(cp_pyxrootd)
+    cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/XRootD " + MasterJobDir
+    cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/pyxrootd " + MasterJobDir
+    os.system(cp_XRootD)
+    os.system(cp_pyxrootd)
 
     os.chdir(MasterJobDir)
     tar_cmd = 'tar cf bin_dir.tar ./'
