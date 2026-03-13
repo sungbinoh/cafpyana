@@ -204,7 +204,7 @@ def run_grid(inputfiles):
                 cmd += ' ' + flist[i_f]
             else: 
                 cmd += ',' + flist[i_f]
-            out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
+            # out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
         out.write(cmd)
         out.close()
 
@@ -244,6 +244,10 @@ def run_grid(inputfiles):
     os.chdir(CAFPYANA_WD)
     
 if __name__ == "__main__":
+    import XRootD
+    print(f"XRootD Version: {XRootD.client.__version__}")
+    print(f"Location: {os.path.dirname(XRootD.client.__file__)}")
+
     printhelp = ((args.inputfiles == "" and args.inputfilelist == "") or args.config == "" or args.output == "")
     if printhelp:
         parser.print_help()
