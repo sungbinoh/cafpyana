@@ -25,7 +25,7 @@ spack load cmake@3.27.7
 spack load hdf5@1.14.3
 spack load xrootd@5.6.1
 spack load ifdhc@2.7.2
-
+spack find --loaded
 echo "@@ run init_grid.sh"
 source ./bin/init_grid.sh
 echo "@@ ls -alh"
@@ -50,6 +50,7 @@ echo "@@ outDir : "${outDir}
 echo "@@ ifdh  mkdir_p "${outDir}
 ifdh  mkdir_p ${outDir} || true
 
+spack find --loaded
 echo "@@ source ${filesFromSender}/run_"${nProcess}".sh "
 ls -ltr
 
