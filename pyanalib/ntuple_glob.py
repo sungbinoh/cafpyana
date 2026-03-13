@@ -1,5 +1,6 @@
 #import glob
 import XRootD.client.glob_funcs as glob
+#from XRootD.client import Env
 import numpy as np
 import uproot
 import pandas as pd
@@ -59,10 +60,10 @@ def _loaddf(applyfs, preprocess, g):
     index, fname = g
     # Convert pnfs to xroot URL's
     if fname.startswith("/pnfs"):
-        fname = fname.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
+        fname = fname.replace("/pnfs", "xroots://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
     # fix xroot URL's
     elif fname.startswith("xroot"):
-        fname = fname[1:]
+        fname = fname.replace("xroot", "xroots")
 
     madef = False
 
@@ -147,15 +148,6 @@ def _loaddf(applyfs, preprocess, g):
 
 class NTupleGlob(object):
     def __init__(self, g, branches):
-        creds_dir = "/srv/.condor_creds/"
-        found_tokens = glob.glob(os.path.join(creds_dir, "*.use"))
-
-        if found_tokens:
-            print(f'Found tokens: {found_tokens[0]}')
-            os.environ['XRD_BEARERTOKENFILE'] = found_tokens[0]
-            os.environ['XrdSecPROTOCOL'] = 'ztn'
-        else:
-            print(f"Did not find tokens in {creds_dir}.")
 
         if isinstance(g, list) and len(g) == 1:
             g = g[0]

@@ -1,5 +1,17 @@
 #!/usr/bin/env python3 
 import os,sys,time
+import glob
+creds_dir = "/srv/.condor_creds/"
+found_tokens = glob.glob(os.path.join(creds_dir, "*.use"))
+
+if found_tokens:
+    print(f'Found tokens: {found_tokens[0]}')
+    os.environ['XRD_BEARERTOKENFILE'] = found_tokens[0]
+    os.environ['XrdSecPROTOCOL'] = 'ztn'
+else:
+    print(f"Did not find tokens in {creds_dir}.")
+
+import XRootD.client.glob_funcs as glob
 import datetime
 import pathlib
 #from TimeTools import *
@@ -250,6 +262,7 @@ if __name__ == "__main__":
     print(f"Location: {os.path.dirname(XRootD.client.__file__)}")
     if 'BEARER_TOKEN_FILE' in os.environ:
         os.environ['XrdSecGSISRVNAMES'] = '*'
+        print("first try: ", os.envhron['BEARER_TOKEN_FILE'])
         os.environ['XRD_BEARERTOKENFILE'] = os.environ['BEARER_TOKEN_FILE']
 
     printhelp = ((args.inputfiles == "" and args.inputfilelist == "") or args.config == "" or args.output == "")
