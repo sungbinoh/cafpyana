@@ -36,10 +36,6 @@ else
     echo "Virtual environment '$VENV_NAME' created."
 fi
 
-echo "@@ before pip test:"
-xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root before_pip.root
-ls -alh
-
 # Activate the virtual environment
 source $VENV_NAME/bin/activate
 
@@ -47,9 +43,6 @@ source $VENV_NAME/bin/activate
 pip install --upgrade pip
 pip install wheel setuptools
 pip install -r pip_requirements.txt
-echo "@@ after pip test:"
-xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root after_pip.root
-ls -alh
 
 #htgettoken -a htvaultprod.fnal.gov -i sbnd
 

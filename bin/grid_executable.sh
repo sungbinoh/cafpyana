@@ -64,6 +64,11 @@ cp -r ${filesFromSender}/pyxrootd $VIRTUAL_ENV/lib/python3.9/site-packages/
 export LD_LIBRARY_PATH=$VIRTUAL_ENV/lib/python3.9/site-packages/pyxrootd:$LD_LIBRARY_PATH
 export LD_LIBRARY_PATH=$VIRTUAL_ENV/lib/python3.9/site-packages/xrootd-5.6.1-py3.9-linux-x86_64.egg/pyxrootd:$LD_LIBRARY_PATH
 
+echo "@@ fifth test:"
+xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root fifth_test.root
+ls -alh
+
+
 export IFDH_CP_MAXRETRIES=2
 
 echo "@@ outDir : "${outDir}
