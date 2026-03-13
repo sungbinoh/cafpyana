@@ -1,5 +1,4 @@
 # Setup grid submission
-echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"
 outDir=$1
 echo "@@ outDir : ${outDir}"
 DFPREFIX=$2
@@ -9,8 +8,6 @@ echo "@@ nProcess : "${nProcess}
 
 source /cvmfs/larsoft.opensciencegrid.org/spack-packages/setup-env.sh
 
-echo "@@ pwd"
-pwd
 echo "@@ ls -alh"
 ls -alh
 echo "@@ git clone cafpyana"
@@ -21,11 +18,6 @@ git checkout remotes/origin/N8Dev
 echo "@@ git branch -a"
 echo "@@ ls -alh"
 ls -alh
-
-spack find cmake
-spack find hdf5
-spack find xrootd
-spack find ifdhc
 
 spack load cmake@3.27.7
 spack load hdf5@1.14.3
@@ -57,20 +49,16 @@ export IFDH_CP_MAXRETRIES=2
 
 echo "@@ outDir : "${outDir}
 echo "@@ ifdh  mkdir_p "${outDir}
-ifdh  mkdir_p ${outDir}
+ifdh  mkdir_p ${outDir} || true
 
-echo "@@ which xrdcp"
+echo "@@ before which xrdcp"
 which xrdcp
 
-spack -ftwa
-
 echo "@@ source ${filesFromSender}/run_"${nProcess}".sh "
-ls -alh
-pwd
+ls -ltr
 
-spack -ftwb
-
-#htgettoken -a htvaultprod.fnal.gov -i sbnd
+echo "@@ after which xrdcp"
+which xrdcp
 
 cp ${filesFromSender}/run_${nProcess}.sh ./
 source run_${nProcess}.sh  &> log_${nProcess}.log
@@ -78,7 +66,6 @@ ls -alh
 echo "@@ Check output : ${DFPREFIX}_${nProcess}.df"
 ls -alh ${DFPREFIX}_${nProcess}.df
 
-spack -ftwc
 outFILE=${thisOutputCreationDir}/${DFPREFIX}_${nProcess}.df
 if [ -f "$outFILE" ]; then
   echo "ifdh cp ${thisOutputCreationDir}/${DFPREFIX}_${nProcess}.df ${outDir}/${DFPREFIX}_${nProcess}.df"
@@ -90,6 +77,3 @@ else
   ifdh cp ${thisOutputCreationDir}/log_${nProcess}.log ${outDir}/log_${nProcess}.log
   echo "File not exist"
 fi
-
-spack -ftwd
-echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"
