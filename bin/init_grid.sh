@@ -24,8 +24,8 @@ echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"
 #!/bin/bash
 cd envs
 # Define the Python version and virtual environment name
-PYTHON_VERSION=3.9.21
-VENV_NAME=venv_py39_cafpyana
+PYTHON_VERSION=3.10.16
+VENV_NAME=venv_py310_cafpyana
 
 # Check if virtual environment already exists
 if [ -d "$VENV_NAME" ]; then
