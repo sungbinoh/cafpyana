@@ -77,7 +77,6 @@ def _loaddf(applyfs, preprocess, g):
             fname = temp_file_name
 
     try:
-        # Open AND close strictly within the context manager
         with _open_with_retries(fname) as f:
             dfs = []
             if("TotalEvents" in f):
@@ -148,6 +147,16 @@ def _loaddf(applyfs, preprocess, g):
 
 class NTupleGlob(object):
     def __init__(self, g, branches):
+        creds_dir = "/srv/.condor_creds/"
+        found_tokens = glob.glob(os.path.join(creds_dir, "*.use"))
+
+        if found_tokens:
+            print(f'Found tokens: {found_tokens[0]}')
+            os.environ['XRD_BEARERTOKENFILE'] = found_tokens[0]
+            os.environ['XrdSecPROTOCOL'] = 'ztn'
+        else:
+            print(f"Did not find tokens in {creds_dir}.")
+
         if isinstance(g, list) and len(g) == 1:
             g = g[0]
         if isinstance(g, list):
