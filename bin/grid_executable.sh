@@ -1,4 +1,7 @@
 # Setup grid submission
+echo "@@ initial test:"
+xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root .
+
 outDir=$1
 echo "@@ outDir : ${outDir}"
 DFPREFIX=$2
