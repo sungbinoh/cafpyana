@@ -262,7 +262,7 @@ if __name__ == "__main__":
     print(f"Location: {os.path.dirname(XRootD.client.__file__)}")
     if 'BEARER_TOKEN_FILE' in os.environ:
         os.environ['XrdSecGSISRVNAMES'] = '*'
-        print("first try: ", os.envhron['BEARER_TOKEN_FILE'])
+        print("first try: ", os.environ['BEARER_TOKEN_FILE'])
         os.environ['XRD_BEARERTOKENFILE'] = os.environ['BEARER_TOKEN_FILE']
 
     printhelp = ((args.inputfiles == "" and args.inputfilelist == "") or args.config == "" or args.output == "")
