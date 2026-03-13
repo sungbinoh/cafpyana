@@ -11,6 +11,18 @@ if found_tokens:
 else:
     print(f"Did not find tokens in {creds_dir}.")
 
+import XRootD.client
+loc = XRootD.client.__file__
+print(f"Client file: {loc}")
+
+# Get the directory containing that file
+dir_path = os.path.dirname(loc)
+print(f"Directory: {dir_path}")
+
+# List everything in that directory
+print("Contents:")
+print(os.listdir(dir_path))
+
 import XRootD.client.glob_funcs as glob
 import datetime
 import pathlib
