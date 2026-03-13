@@ -155,7 +155,7 @@ def run_grid(inputfiles):
         out.write('echo "@@ sixth test:"\n')
         out.write('xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root sixth_test.root\n')
         out.write('ls -alh\n')
-        out.write('xrdcp --version')
+        out.write('xrdcp --version\n')
         #out.write('spack find --loaded\n')
 
         #out.write('\n# --- Ensuring SciTokens is visible to the ZTN plugin ---\n')
