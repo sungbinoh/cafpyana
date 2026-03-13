@@ -248,6 +248,9 @@ if __name__ == "__main__":
     import XRootD
     print(f"XRootD Version: {XRootD.client.__version__}")
     print(f"Location: {os.path.dirname(XRootD.client.__file__)}")
+    if 'BEARER_TOKEN_FILE' in os.environ:
+        os.environ['XrdSecGSISRVNAMES'] = '*'
+        os.environ['XRD_BEARERTOKENFILE'] = os.environ['BEARER_TOKEN_FILE']
 
     printhelp = ((args.inputfiles == "" and args.inputfilelist == "") or args.config == "" or args.output == "")
     if printhelp:
