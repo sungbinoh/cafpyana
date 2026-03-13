@@ -39,14 +39,19 @@ ls -alh
 thisOutputCreationDir=`pwd`
 filesFromSender=${CONDOR_DIR_INPUT}/bin_dir/
 
-echo "@@ first attempt!"
-echo "@@ source ${filesFromSender}/run_"${nProcess}".sh "
-source run_${nProcess}.sh  &> log_${nProcess}_first.log
+#echo "@@ first attempt!"
+#echo "@@ source ${filesFromSender}/run_"${nProcess}".sh "
+#source run_${nProcess}.sh  &> log_${nProcess}_first.log
 
 echo "@@ run init_grid.sh"
 source ./bin/init_grid.sh
 echo "@@ ls -alh"
 ls -alh
+
+echo "@@ fourth test:"
+xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root fourth_test.root
+ls -alh
+
 echo "@@ mkdir output"
 mkdir output
 echo "@@ Done!"
@@ -80,8 +85,6 @@ outFILE=${thisOutputCreationDir}/${DFPREFIX}_${nProcess}.df
 if [ -f "$outFILE" ]; then
   echo "ifdh cp ${thisOutputCreationDir}/${DFPREFIX}_${nProcess}.df ${outDir}/${DFPREFIX}_${nProcess}.df"
   ifdh cp ${thisOutputCreationDir}/${DFPREFIX}_${nProcess}.df ${outDir}/${DFPREFIX}_${nProcess}.df
-  echo "ifdh cp ${thisOutputCreationDir}/log_${nProcess}.log ${outDir}/log_${nProcess}_first.log"
-  ifdh cp ${thisOutputCreationDir}/log_${nProcess}.log ${outDir}/log_${nProcess}_first.log
   echo "ifdh cp ${thisOutputCreationDir}/log_${nProcess}.log ${outDir}/log_${nProcess}.log"
   ifdh cp ${thisOutputCreationDir}/log_${nProcess}.log ${outDir}/log_${nProcess}.log
   echo "@@ Done!"
