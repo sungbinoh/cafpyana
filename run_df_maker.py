@@ -178,7 +178,7 @@ def run_grid(inputfiles):
         #out.write('echo $LD_LIBRARY_PATH | tr ":" "\\n" | grep -i scitokens || echo "scitokens not found in path"\n')
         #out.write('export XrdSecDEBUG=4\n')
         #out.write('export XRD_PLUGINDIR=/cvmfs/larsoft.opensciencegrid.org/spack-packages/opt/spack/linux-almalinux9-x86_64_v2/gcc-12.2.0/xrootd-5.6.1-marsevmbf4ihnwj5wcz2pg6mkytb5nga/lib64\n')
-        #out.write('echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"\n')
+        out.write('echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"\n')
         #out.write('export XrdSecPROTOCOL=ztn,token\n')
         ## --- Start of Token & XRootD Debugging Block ---
         #out.write('\n# 1. Identify the token\n')
