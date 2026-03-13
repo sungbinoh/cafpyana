@@ -165,6 +165,17 @@ def run_grid(inputfiles):
         out.write('\n# 2. Debug: check if the token is actually valid for reading\n')
         out.write('echo "[run_%s.sh] Checking token scopes..."\n'%i_flist)
         out.write('htdecodetoken | grep -E "aud|scope"\n')
+
+        out.write('\n# === THE SMOKING GUN DIAGNOSTIC ===\n')
+        out.write('ZTN_PLUGIN=$(find $(dirname $(which xrdcp))/../ -name "libXrdSecztn-5.so" | head -n 1)\n')
+        out.write('echo "Checking dependencies for plugin: $ZTN_PLUGIN"\n')
+        # This will show EXACTLY which libraries are "not found" or where it is pulling them from
+        out.write('ldd $ZTN_PLUGIN\n')
+        
+        # Check the SciTokens library directly
+        out.write('echo "Checking system SciTokens:"\n')
+        out.write('ls -l /usr/lib64/libSciTokens.so.0\n')
+        out.write('ldd /usr/lib64/libSciTokens.so.0\n')
         cmd = ''
         #cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
         for i_f in range(0,len(flist)):
