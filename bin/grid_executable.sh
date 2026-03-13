@@ -21,16 +21,24 @@ git checkout remotes/origin/N8Dev
 echo "@@ git branch -a"
 echo "@@ ls -alh"
 ls -alh
+echo "@@ second test:"
+xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root second_test.root
+ls -alh
 
-#spack find scitokens-cpp
 spack load scitokens-cpp@1.0.1
 spack load cmake@3.27.7
 spack load hdf5@1.14.3
 spack load xrootd@5.6.1
 spack load ifdhc@2.7.2
 spack find --loaded
+
+echo "@@ third test:"
+xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root third_test.root
+ls -alh
 echo "@@ first attempt!"
 echo "@@ source ${filesFromSender}/run_"${nProcess}".sh "
+source run_${nProcess}.sh  &> log_${nProcess}.log
+
 echo "@@ run init_grid.sh"
 source ./bin/init_grid.sh
 echo "@@ ls -alh"
