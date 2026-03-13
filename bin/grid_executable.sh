@@ -19,15 +19,12 @@ echo "@@ git branch -a"
 echo "@@ ls -alh"
 ls -alh
 
-spack find scitokens-cpp
-
+#spack find scitokens-cpp
+#spack load scitokens-cpp@1.0.1
 spack load cmake@3.27.7
 spack load hdf5@1.14.3
 spack load xrootd@5.6.1
 spack load ifdhc@2.7.2
-
-echo "@@ which xrdcp"
-which xrdcp
 
 echo "@@ run init_grid.sh"
 source ./bin/init_grid.sh
@@ -53,14 +50,8 @@ echo "@@ outDir : "${outDir}
 echo "@@ ifdh  mkdir_p "${outDir}
 ifdh  mkdir_p ${outDir} || true
 
-echo "@@ before which xrdcp"
-which xrdcp
-
 echo "@@ source ${filesFromSender}/run_"${nProcess}".sh "
 ls -ltr
-
-echo "@@ after which xrdcp"
-which xrdcp
 
 cp ${filesFromSender}/run_${nProcess}.sh ./
 source run_${nProcess}.sh  &> log_${nProcess}.log

@@ -150,6 +150,8 @@ def run_grid(inputfiles):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
+        out.write('ls /usr/lib64"\n')
+        out.write('ls /usr/lib64/libSciTokens.so.0"\n')
         out.write('echo "Checking LD_LIBRARY_PATH for scitokens:"\n')
         out.write('echo $LD_LIBRARY_PATH | tr ":" "\\n" | grep -i scitokens || echo "scitokens not found in path"\n')
         out.write('export XrdSecDEBUG=4\n')
