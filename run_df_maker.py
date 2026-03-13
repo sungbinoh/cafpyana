@@ -150,17 +150,11 @@ def run_grid(inputfiles):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
+        out.write('echo "Checking LD_LIBRARY_PATH for scitokens:"\n')
+        out.write('echo $LD_LIBRARY_PATH | tr ":" "\\n" | grep -i scitokens || echo "scitokens not found in path"\n')
         out.write('export XrdSecDEBUG=4\n')
+        out.write('export XRD_PLUGINDIR=/cvmfs/larsoft.opensciencegrid.org/spack-packages/opt/spack/linux-almalinux9-x86_64_v2/gcc-12.2.0/xrootd-5.6.1-marsevmbf4ihnwj5wcz2pg6mkytb5nga/lib64\n')
         out.write('echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"\n')
-
-        out.write('if [ -f "$ZTN_LIB" ]; then\n')
-        out.write('    echo "[run_%s.sh] Found ztn plugin at: $ZTN_LIB"\n'%i_flist)
-        out.write('    echo "Checking for missing AL9 dependencies:"\n')
-        out.write('    ldd $ZTN_LIB | grep "not found" || echo "All dependencies satisfied."\n')
-        out.write('    export XRD_PLUGINDIR=$XROOTD_LIB64\n')
-        out.write('else\n')
-        out.write('    echo "[run_%s.sh] ERROR: libXrdSecztn-5.so NOT found in $XROOTD_LIB64!"\n'%i_flist)
-        out.write('fi\n')
         out.write('export XrdSecPROTOCOL=ztn\n')
         # --- Start of Token & XRootD Debugging Block ---
         out.write('\n# 1. Identify the token\n')
@@ -169,8 +163,8 @@ def run_grid(inputfiles):
         out.write('\n# 2. Debug: check if the token is actually valid for reading\n')
         out.write('echo "[run_%s.sh] Checking token scopes..."\n'%i_flist)
         out.write('htdecodetoken | grep -E "aud|scope"\n')
-        
-        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
+        cmd = ''
+        #cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
             if i_f == 0:

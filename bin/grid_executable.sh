@@ -19,6 +19,8 @@ echo "@@ git branch -a"
 echo "@@ ls -alh"
 ls -alh
 
+spack find scitokens-cpp
+
 spack load cmake@3.27.7
 spack load hdf5@1.14.3
 spack load xrootd@5.6.1
