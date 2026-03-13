@@ -26,6 +26,8 @@ spack load hdf5@1.14.3
 spack load xrootd@5.6.1
 spack load ifdhc@2.7.2
 spack find --loaded
+echo "@@ first attempt!"
+echo "@@ source ${filesFromSender}/run_"${nProcess}".sh "
 echo "@@ run init_grid.sh"
 source ./bin/init_grid.sh
 echo "@@ ls -alh"
@@ -57,6 +59,7 @@ ls -ltr
 cp ${filesFromSender}/run_${nProcess}.sh ./
 source run_${nProcess}.sh  &> log_${nProcess}.log
 ls -alh
+echo "@@ second attempt!"
 echo "@@ Check output : ${DFPREFIX}_${nProcess}.df"
 ls -alh ${DFPREFIX}_${nProcess}.df
 
