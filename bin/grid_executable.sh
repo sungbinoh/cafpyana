@@ -62,9 +62,13 @@ ifdh  mkdir_p ${outDir}
 echo "@@ which xrdcp"
 which xrdcp
 
+spack -ftwa
+
 echo "@@ source ${filesFromSender}/run_"${nProcess}".sh "
 ls -alh
 pwd
+
+spack -ftwb
 
 #htgettoken -a htvaultprod.fnal.gov -i sbnd
 
@@ -74,6 +78,7 @@ ls -alh
 echo "@@ Check output : ${DFPREFIX}_${nProcess}.df"
 ls -alh ${DFPREFIX}_${nProcess}.df
 
+spack -ftwc
 outFILE=${thisOutputCreationDir}/${DFPREFIX}_${nProcess}.df
 if [ -f "$outFILE" ]; then
   echo "ifdh cp ${thisOutputCreationDir}/${DFPREFIX}_${nProcess}.df ${outDir}/${DFPREFIX}_${nProcess}.df"
@@ -86,4 +91,5 @@ else
   echo "File not exist"
 fi
 
+spack -ftwd
 echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"
