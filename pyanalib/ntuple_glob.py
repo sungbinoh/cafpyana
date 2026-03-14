@@ -46,8 +46,10 @@ class NTupleProc(object):
 
 def _open_with_retries(path, attempts=5, sleep=2.0):
     last_exc = None
+    print('open_with_retries')
     for k in range(attempts):
         try:
+            print('attempt: ', k)
             return uproot.open(path, timeout=120)
         except (OSError, ValueError) as e:
             last_exc = e
@@ -79,6 +81,7 @@ def _loaddf(applyfs, preprocess, g):
 
     try:
         with _open_with_retries(fname) as f:
+            print('starting...')
             dfs = []
             if("TotalEvents" in f):
                 totevt = f['TotalEvents'].values()[0]
@@ -92,6 +95,7 @@ def _loaddf(applyfs, preprocess, g):
                 print("File (%s) has 0 in TotalEvents. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
             else:
                 for applyf in applyfs:
+                    print('applyf')
                     df = applyf(f)  # must fully read from 'f' here
                     if df is None:
                         dfs.append(None)
