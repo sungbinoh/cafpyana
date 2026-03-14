@@ -168,7 +168,8 @@ def run_grid(inputfiles):
         flistForEachJob.append( [] )
 
     for i_line in range(0,len(inputfiles)):
-        flistForEachJob[i_line%ngrid].append(inputfiles[i])
+        print(inputfiles[i_line])
+        flistForEachJob[i_line%ngrid].append(inputfiles[i_line])
 
     for i_flist in range(0,len(flistForEachJob)):
         flist = flistForEachJob[i_flist]
@@ -232,7 +233,9 @@ def run_grid(inputfiles):
                 cmd += ',' + flist[i_f].split('/')[-1]
 
             out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
+        out.write('ls -alh\n')
         out.write(cmd)
+        out.write('ls -alh\n')
         out.close()
 
     os.system('cp ./bin/grid_executable.sh %s' %MasterJobDir)
