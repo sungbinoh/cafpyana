@@ -175,6 +175,8 @@ def run_grid(inputfiles):
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
         out.write('ls -alh\n')
+        out.write('source venv_py310_cafpyana/bin/activate\n')
+        out.write('pip list\n')
         out.write('echo "Checking LD_LIBRARY_PATH for scitokens:"\n')
         out.write('echo "@@ sixth test:"\n')
         out.write('xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root sixth_test.root\n')

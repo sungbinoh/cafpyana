@@ -92,7 +92,7 @@ ls -alh
 echo "@@ second attempt!"
 echo "@@ Check output : ${DFPREFIX}_${nProcess}.df"
 ls -alh ${DFPREFIX}_${nProcess}.df
-
+pip list
 outFILE=${thisOutputCreationDir}/${DFPREFIX}_${nProcess}.df
 if [ -f "$outFILE" ]; then
   echo "ifdh cp ${thisOutputCreationDir}/${DFPREFIX}_${nProcess}.df ${outDir}/${DFPREFIX}_${nProcess}.df"
