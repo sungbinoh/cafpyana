@@ -87,7 +87,7 @@ echo "@@ source ${filesFromSender}/run_"${nProcess}".sh "
 ls -ltr
 
 cp ${filesFromSender}/run_${nProcess}.sh ./
-#source run_${nProcess}.sh  &> log_${nProcess}.log
+source run_${nProcess}.sh  &> log_${nProcess}.log
 ls -alh
 echo "@@ second attempt!"
 echo "@@ Check output : ${DFPREFIX}_${nProcess}.df"
