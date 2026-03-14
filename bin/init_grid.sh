@@ -42,6 +42,7 @@ source $VENV_NAME/bin/activate
 # Upgrade pip
 pip install --upgrade pip
 pip install wheel setuptools
+cat pip_requirements.txt
 pip install -r pip_requirements.txt
 
 #htgettoken -a htvaultprod.fnal.gov -i sbnd
