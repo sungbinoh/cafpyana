@@ -1,7 +1,4 @@
 # Setup grid submission
-echo "@@ initial test:"
-xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root .
-
 outDir=$1
 echo "@@ outDir : ${outDir}"
 DFPREFIX=$2
@@ -21,9 +18,6 @@ git checkout remotes/origin/N8Dev
 echo "@@ git branch -a"
 echo "@@ ls -alh"
 ls -alh
-echo "@@ second test:"
-xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root second_test.root
-ls -alh
 
 # spack load scitokens-cpp@1.0.1
 spack load cmake@3.27.7
@@ -31,10 +25,6 @@ spack load cmake@3.27.7
 # spack load xrootd@5.6.1
 spack load ifdhc@2.7.2
 # spack find --loaded
-
-echo "@@ third test:"
-xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root third_test.root
-ls -alh
 
 thisOutputCreationDir=`pwd`
 filesFromSender=${CONDOR_DIR_INPUT}/bin_dir/
@@ -58,10 +48,6 @@ ls -alh ${filesFromSender}
 cp -r ${filesFromSender}/XRootD $VIRTUAL_ENV/lib/python3.9/site-packages/
 cp -r ${filesFromSender}/pyxrootd $VIRTUAL_ENV/lib/python3.9/site-packages/
 
-echo "@@ new fourth test:"
-xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root new_fourth_test.root
-ls -alh
-
 #export LD_LIBRARY_PATH=$VIRTUAL_ENV/lib/python3.9/site-packages/pyxrootd:$LD_LIBRARY_PATH
 #export LD_LIBRARY_PATH=$VIRTUAL_ENV/lib/python3.9/site-packages/xrootd-5.8.3-py3.10-linux-x86_64.egg/pyxrootd:$LD_LIBRARY_PATH
 #
@@ -72,10 +58,6 @@ ls -alh
 #ls $VIRTUAL_ENV/lib/python3.10/site-packages
 #ls $VIRTUAL_ENV/lib/python3.10/site-packages/xrootd-5.8.3-py3.10-linux-x86_64.egg
 #ls $VIRTUAL_ENV/lib/python3.10/site-packages/xrootd-5.8.3-py3.10-linux-x86_64.egg/pyxrootd
-
-echo "@@ fifth test:"
-xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root fifth_test.root
-ls -alh
 
 export IFDH_CP_MAXRETRIES=2
 

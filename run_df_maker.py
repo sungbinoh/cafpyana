@@ -175,12 +175,6 @@ def run_grid(inputfiles):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        out.write('ls -alh\n')
-        out.write('echo "Checking LD_LIBRARY_PATH for scitokens:"\n')
-        out.write('echo "@@ sixth test:"\n')
-        #out.write('xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root sixth_test.root\n')
-        out.write('ls -alh\n')
-        out.write('xrdcp --version\n')
         #out.write('spack find --loaded\n')
 
         #out.write('\n# --- Ensuring SciTokens is visible to the ZTN plugin ---\n')
@@ -203,7 +197,6 @@ def run_grid(inputfiles):
         #out.write('echo $LD_LIBRARY_PATH | tr ":" "\\n" | grep -i scitokens || echo "scitokens not found in path"\n')
         #out.write('export XrdSecDEBUG=4\n')
         #out.write('export XRD_PLUGINDIR=/cvmfs/larsoft.opensciencegrid.org/spack-packages/opt/spack/linux-almalinux9-x86_64_v2/gcc-12.2.0/xrootd-5.6.1-marsevmbf4ihnwj5wcz2pg6mkytb5nga/lib64\n')
-        out.write('echo "script BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"\n')
         #out.write('export XrdSecPROTOCOL=ztn,token\n')
         ## --- Start of Token & XRootD Debugging Block ---
         #out.write('\n# 1. Identify the token\n')
@@ -259,6 +252,7 @@ def run_grid(inputfiles):
 --tar_file_name "dropbox://$(pwd)/bin_dir.tar" \\
 -N %d \\
 --disk 100GB \\
+--memory 10GB \\
 --expected-lifetime 10h \\
 "file://$(pwd)/grid_executable.sh" \\
 "%s" \\
