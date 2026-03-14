@@ -177,7 +177,7 @@ def run_grid(inputfiles):
         out.write('ls -alh\n')
         out.write('echo "Checking LD_LIBRARY_PATH for scitokens:"\n')
         out.write('echo "@@ sixth test:"\n')
-        out.write('xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root sixth_test.root\n')
+        #out.write('xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_production/mc/MCP2025C_1e20_v10_06_00_09/v10_06_00_09/prodgenie_corsika_proton_rockbox_sbnd/CV/caf/d2/64/caf.flat.caf-3750ae6a-8d07-44db-b813-1a16c0407cf4.root sixth_test.root\n')
         out.write('ls -alh\n')
         out.write('xrdcp --version\n')
         #out.write('spack find --loaded\n')
@@ -230,8 +230,9 @@ def run_grid(inputfiles):
                 cmd += ' ' + flist[i_f].split('/')[-1]
             else: 
                 cmd += ',' + flist[i_f].split('/')[-1]
+
             out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
-        #out.write(cmd)
+        out.write(cmd)
         out.close()
 
     os.system('cp ./bin/grid_executable.sh %s' %MasterJobDir)
