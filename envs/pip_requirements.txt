@@ -17,4 +17,3 @@ corner
 lz4
 xxhash
 fsspec-xrootd
-xrootd

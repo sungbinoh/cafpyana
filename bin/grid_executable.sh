@@ -26,7 +26,7 @@ xrdcp root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr/sbn/data_add/sbn_nd/poms_
 ls -alh
 
 # spack load scitokens-cpp@1.0.1
-# spack load cmake@3.27.7
+spack load cmake@3.27.7
 # spack load hdf5@1.14.3
 # spack load xrootd@5.6.1
 spack load ifdhc@2.7.2
