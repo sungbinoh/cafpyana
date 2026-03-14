@@ -223,19 +223,16 @@ def run_grid(inputfiles):
         #out.write('echo "Checking system SciTokens:"\n')
         #out.write('ls -l /usr/lib64/libSciTokens.so.0\n')
         #out.write('ldd /usr/lib64/libSciTokens.so.0\n')
-        cmd = ''
-        #cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
+        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
             if i_f == 0:
                 cmd += ' ' + flist[i_f].split('/')[-1]
             else: 
                 cmd += ',' + flist[i_f].split('/')[-1]
-
             out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
         out.write('ls -alh\n')
         out.write(cmd)
-        out.write('ls -alh\n')
         out.close()
 
     os.system('cp ./bin/grid_executable.sh %s' %MasterJobDir)
