@@ -407,7 +407,7 @@ def make_PAC_nuslimwgtdf(f):
 
 def make_PAC_nuwgtdf(f):
     print("Starting: make_PAC_nuwgtdf")
-    return make_mcnudf(f, include_weights=True, slim=False, genie_systematics=gump_genie_systematics)
+    return make_mcnudf(f, include_weights=True, slim=False, genie_systematics=PAC_genie_systematics)
 
 def make_PAC_nurewgtdf(f):
     print("Starting: make_PAC_nurewgtdf")
