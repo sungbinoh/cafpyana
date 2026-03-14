@@ -228,10 +228,10 @@ def run_grid(inputfiles):
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
             if i_f == 0:
-                cmd += ' ' + flist[i_f]
+                cmd += ' ' + flist[i_f].split('/')[-1]
             else: 
-                cmd += ',' + flist[i_f]
-            # out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
+                cmd += ',' + flist[i_f].split('/')[-1]
+            out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
         out.write(cmd)
         out.close()
 
