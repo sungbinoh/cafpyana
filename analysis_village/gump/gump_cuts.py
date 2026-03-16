@@ -87,7 +87,30 @@ def _fv_cut(df, det, inx=10, iny=10, inzfront=10, inzback=50):
         raise NameError("DETECTOR not valid, should be SBND or ICARUS")
 
 def cosmic_cut(df):
-    return (df.nu_score > 0.4)
+    df = add_opening_angle_mu_p(df)
+
+    return (df.nu_score > 0.4) & (df["mu_p_opening_angle_deg"] < 155)
+
+def add_opening_angle_mu_p(df, out_col="mu_p_opening_angle_deg", degrees=True):
+    mu = df[["mu_dir_x", "mu_dir_y", "mu_dir_z"]].to_numpy(dtype=float)
+    p  = df[["p_dir_x",  "p_dir_y",  "p_dir_z"]].to_numpy(dtype=float)
+
+    mu_norm = np.linalg.norm(mu, axis=1)
+    p_norm  = np.linalg.norm(p,  axis=1)
+
+    valid = np.isfinite(mu_norm) & np.isfinite(p_norm) & (mu_norm > 0) & (p_norm > 0)
+
+    cosang = np.full(len(df), np.nan, dtype=float)
+    dot = np.einsum("ij,ij->i", mu, p)
+    cosang[valid] = dot[valid] / (mu_norm[valid] * p_norm[valid])
+    cosang = np.clip(cosang, -1.0, 1.0)
+
+    ang = np.arccos(cosang)
+    if degrees:
+        ang = np.degrees(ang)
+
+    df[out_col] = ang
+    return df
 
 def del_p_cut(df):
     return (df.del_p <= 0.6)
@@ -102,7 +125,7 @@ def pid_cut_df(df):
 def pid_cut(mu_chi2_mu_cand, mu_chi2_prot_cand, prot_chi2_mu_cand,
             prot_chi2_prot_cand, mu_len):
 
-    MUSEL_MUSCORE_TH, MUSEL_PSCORE_TH, MUSEL_LEN_TH = 15, 90, 50
+    MUSEL_MUSCORE_TH, MUSEL_PSCORE_TH, MUSEL_LEN_TH = 30, 80, 25 #old: 15, 90, 50
     mu_cut = (mu_chi2_mu_cand < MUSEL_MUSCORE_TH) & \
              (prot_chi2_mu_cand > MUSEL_PSCORE_TH) & \
              (mu_len > MUSEL_LEN_TH)
