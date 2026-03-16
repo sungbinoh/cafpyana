@@ -1,6 +1,5 @@
 #import glob
 import XRootD.client.glob_funcs as glob
-from XRootD.client import Env
 import numpy as np
 import uproot
 import pandas as pd
