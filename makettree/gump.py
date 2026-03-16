@@ -149,26 +149,8 @@ def make_gump_ttree_data(dfname, split):
 
     ## Figure out which detector this is
     DETECTOR = recodf.detector.iloc[0]
-    ## Apply cuts
-    recodf = recodf[slcfv_cut(recodf, DETECTOR)]
 
-    ### NuScore cut
-    recodf = recodf[cosmic_cut(recodf)]
-
-    ### Two prong cut
-    recodf = recodf[twoprong_cut(recodf)]
-
-    ### containment cut
-    recodf = recodf[mufv_cut(recodf, DETECTOR)]
-    recodf = recodf[pfv_cut(recodf, DETECTOR)]
-
-    ### PID cut
-    recodf = recodf[pid_cut(recodf.mu_chi2_of_mu_cand, recodf.mu_chi2_of_prot_cand, 
-                            recodf.prot_chi2_of_mu_cand, recodf.prot_chi2_of_prot_cand, 
-                            recodf.mu_len)]
-
-    ### crthitveto cut
-    if DETECTOR == "ICARUS":
-        recodf = recodf[crthitveto_cut(recodf)]
+    ## apply selection
+    recodf = all_cuts(recodf, DETECTOR)
 
     return recodf
