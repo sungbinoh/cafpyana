@@ -707,3 +707,11 @@ def make_spinepartdf(f):
     epartdf.columns = pd.MultiIndex.from_tuples([fixpos(c) for c in epartdf.columns])
 
     return epartdf
+
+def make_blipdf(f):
+    blipinfodf = loadbranches(f["recTree"], blipbranches)
+    blipclusterinfodf = loadbranches(f["recTree"], blipclusterbranches)
+    trueblipinfodf = loadbranches(f["recTree"], trueblipbranches)
+    fullblipdf = multicol_merge(blipinfodf, blipclusterinfodf, left_index=True, right_index=True, how="left", validate="one_to_one")
+    fullblipdf = multicol_merge(fullblipdf, trueblipinfodf, left_index=True, right_index=True, how="left", validate="one_to_one")
+    return fullblipdf 

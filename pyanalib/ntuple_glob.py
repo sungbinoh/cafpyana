@@ -107,8 +107,6 @@ def _loaddf(applyfs, preprocess, g):
                     df = df.reorder_levels(new_order)
 
                     dfs.append(df)
-
-
             df_histpot = make_histpotdf(f)
             if "TotalPOT" not in f:
                 print(f"File ({fname}) missing TotalPOT histogram. Using empty DataFrame.")
@@ -117,7 +115,6 @@ def _loaddf(applyfs, preprocess, g):
             new_order = [df_histpot.index.nlevels - 1] + list(range(df_histpot.index.nlevels - 1))
             df_histpot = df_histpot.reorder_levels(new_order)
             dfs.append(df_histpot)
-
             df_histgenevt = make_histgenevtdf(f)
             if "TotalGenEvents" not in f:
                 print(f"File ({fname}) missing TotalGenEvents histogram. Using empty DataFrame.")
