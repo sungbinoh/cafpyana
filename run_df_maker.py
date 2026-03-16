@@ -1,29 +1,5 @@
 #!/usr/bin/env python3 
 import os,sys,time
-import glob
-creds_dir = "/srv/.condor_creds/"
-found_tokens = glob.glob(os.path.join(creds_dir, "*.use"))
-
-if found_tokens:
-    print(f'Found tokens: {found_tokens[0]}')
-    os.environ['XRD_BEARERTOKENFILE'] = found_tokens[0]
-    os.environ['XrdSecPROTOCOL'] = 'ztn'
-else:
-    print(f"Did not find tokens in {creds_dir}.")
-
-import XRootD.client
-loc = XRootD.client.__file__
-print(f"Client file: {loc}")
-
-# Get the directory containing that file
-dir_path = os.path.dirname(loc)
-print(f"Directory: {dir_path}")
-
-# List everything in that directory
-print("Contents:")
-print(os.listdir(dir_path))
-
-import XRootD.client.glob_funcs as glob
 import datetime
 import pathlib
 #from TimeTools import *
@@ -168,55 +144,13 @@ def run_grid(inputfiles):
         flistForEachJob.append( [] )
 
     for i_line in range(0,len(inputfiles)):
-        print(inputfiles[i_line])
         flistForEachJob[i_line%ngrid].append(inputfiles[i_line])
 
     for i_flist in range(0,len(flistForEachJob)):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        #out.write('spack find --loaded\n')
-
-        #out.write('\n# --- Ensuring SciTokens is visible to the ZTN plugin ---\n')
-        ## 1. Ask Spack where it installed the library
-        #out.write('SPACK_SCI_DIR=$(spack location -i scitokens-cpp 2>/dev/null)/lib64\n')
-        #
-        ## 2. Add the Spack path AND the system path as a fallback
-        #out.write('if [ -d "$SPACK_SCI_DIR" ]; then\n')
-        #out.write('    export LD_LIBRARY_PATH="$SPACK_SCI_DIR:$LD_LIBRARY_PATH"\n')
-        #out.write('    echo "Added Spack SciTokens to path: $SPACK_SCI_DIR"\n')
-        #out.write('else\n')
-        #out.write('    export LD_LIBRARY_PATH="/usr/lib64:$LD_LIBRARY_PATH"\n')
-        #out.write('    echo "Spack location failed; falling back to system /usr/lib64"\n')
-        #out.write('fi\n')
-
-        ## 3. Final verification for your log
-        #out.write('echo "Final LD_LIBRARY_PATH check:"\n')
-        #out.write('ls -l $(echo $LD_LIBRARY_PATH | tr ":" "\\n" | xargs -I {} find {} -name "libSciTokens.so.0" 2>/dev/null | head -n 1)\n')
-
-        #out.write('echo $LD_LIBRARY_PATH | tr ":" "\\n" | grep -i scitokens || echo "scitokens not found in path"\n')
-        #out.write('export XrdSecDEBUG=4\n')
-        #out.write('export XRD_PLUGINDIR=/cvmfs/larsoft.opensciencegrid.org/spack-packages/opt/spack/linux-almalinux9-x86_64_v2/gcc-12.2.0/xrootd-5.6.1-marsevmbf4ihnwj5wcz2pg6mkytb5nga/lib64\n')
-        #out.write('export XrdSecPROTOCOL=ztn,token\n')
-        ## --- Start of Token & XRootD Debugging Block ---
-        #out.write('\n# 1. Identify the token\n')
-        #out.write('export XRD_BEARER_TOKEN_FILE=$BEARER_TOKEN_FILE\n')
-        #
-        #out.write('\n# 2. Debug: check if the token is actually valid for reading\n')
-        #out.write('echo "[run_%s.sh] Checking token scopes..."\n'%i_flist)
-        #out.write('htdecodetoken | grep -E "aud|scope"\n')
-
-        #out.write('\n# === THE SMOKING GUN DIAGNOSTIC ===\n')
-        #out.write('ZTN_PLUGIN=$(find $(dirname $(which xrdcp))/../ -name "libXrdSecztn-5.so" | head -n 1)\n')
-        #out.write('echo "Checking dependencies for plugin: $ZTN_PLUGIN"\n')
-        ## This will show EXACTLY which libraries are "not found" or where it is pulling them from
-        #out.write('ldd $ZTN_PLUGIN\n')
-        #
-        ## Check the SciTokens library directly
-        #out.write('echo "Checking system SciTokens:"\n')
-        #out.write('ls -l /usr/lib64/libSciTokens.so.0\n')
-        #out.write('ldd /usr/lib64/libSciTokens.so.0\n')
-        cmd = 'timeout 10m python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
+        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
             if i_f == 0:
@@ -265,14 +199,6 @@ def run_grid(inputfiles):
     os.chdir(CAFPYANA_WD)
     
 if __name__ == "__main__":
-    import XRootD
-    print(f"XRootD Version: {XRootD.client.__version__}")
-    print(f"Location: {os.path.dirname(XRootD.client.__file__)}")
-    if 'BEARER_TOKEN_FILE' in os.environ:
-        os.environ['XrdSecGSISRVNAMES'] = '*'
-        print("first try: ", os.environ['BEARER_TOKEN_FILE'])
-        os.environ['XRD_BEARERTOKENFILE'] = os.environ['BEARER_TOKEN_FILE']
-
     printhelp = ((args.inputfiles == "" and args.inputfilelist == "") or args.config == "" or args.output == "")
     if printhelp:
         parser.print_help()

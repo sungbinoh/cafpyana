@@ -1,6 +1,6 @@
 #import glob
 import XRootD.client.glob_funcs as glob
-#from XRootD.client import Env
+from XRootD.client import Env
 import numpy as np
 import uproot
 import pandas as pd
@@ -46,10 +46,8 @@ class NTupleProc(object):
 
 def _open_with_retries(path, attempts=5, sleep=2.0):
     last_exc = None
-    print('open_with_retries')
     for k in range(attempts):
         try:
-            print('attempt: ', k)
             return uproot.open(path, timeout=120)
         except (OSError, ValueError) as e:
             last_exc = e
@@ -62,10 +60,10 @@ def _loaddf(applyfs, preprocess, g):
     index, fname = g
     # Convert pnfs to xroot URL's
     if fname.startswith("/pnfs"):
-        fname = fname.replace("/pnfs", "xroots://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
+        fname = fname.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
     # fix xroot URL's
     elif fname.startswith("xroot"):
-        fname = fname.replace("xroot", "xroots")
+        fname = fname[1:]
 
     madef = False
 
@@ -81,7 +79,6 @@ def _loaddf(applyfs, preprocess, g):
 
     try:
         with _open_with_retries(fname) as f:
-            print('starting...')
             dfs = []
             if("TotalEvents" in f):
                 totevt = f['TotalEvents'].values()[0]
@@ -95,7 +92,6 @@ def _loaddf(applyfs, preprocess, g):
                 print("File (%s) has 0 in TotalEvents. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
             else:
                 for applyf in applyfs:
-                    print('applyf')
                     df = applyf(f)  # must fully read from 'f' here
                     if df is None:
                         dfs.append(None)
@@ -152,7 +148,6 @@ def _loaddf(applyfs, preprocess, g):
 
 class NTupleGlob(object):
     def __init__(self, g, branches):
-
         if isinstance(g, list) and len(g) == 1:
             g = g[0]
         if isinstance(g, list):
