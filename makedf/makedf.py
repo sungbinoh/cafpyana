@@ -488,12 +488,14 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
 def make_spine_df(f, trkDistCut=-1, requireFiducial=True, **trkArgs):
     # load
     partdf = make_spinepartdf(f, **trkArgs)
-    partdf.columns = pd.MultiIndex.from_tuples([tuple(["particle"] + list(c)) for c in partdf.columns])
+    #partdf.columns = pd.MultiIndex.from_tuples([tuple(["particle"] + list(c)) for c in partdf.columns])
     eslcdf = make_spineslcdf(f)
 
     # merge in tracks
-    eslcdf = multicol_merge(eslcdf, partdf, left_index=True, right_index=True, how="right", validate="one_to_many")
-    eslcdf = multicol_add(eslcdf, dmagdf(eslcdf.vertex, eslcdf.particle.start_point).rename("dist_to_vertex"))
+    #eslcdf = multicol_merge(eslcdf, partdf, left_index=True, right_index=True, how="right", validate="one_to_many")
+
+    #print(*eslcdf.columns, sep="\n")
+    #eslcdf = multicol_add(eslcdf, dmagdf(eslcdf.vertex, eslcdf.particle.start_point).rename("dist_to_vertex"))
 
     if trkDistCut > 0:
         eslcdf = eslcdf[eslcdf.dist_to_vertex < trkDistCut]
@@ -623,7 +625,8 @@ def make_spineslcdf(f):
     eslc_matchdf = eslc_matchdf.rec.dlp
 
     # Then use bestmatch.match to get the nu ids in etintdf
-    eslc_matchdf_wids = pd.merge(eslc_matchdf, etintdf, left_on=["entry", "match"], right_on=["entry", "id"], how="left")
+    #eslc_matchdf_wids = pd.merge(eslc_matchdf, etintdf, left_on=["entry", "match"], right_on=["entry", "id"], how="left")
+    eslc_matchdf_wids = pd.merge(eslc_matchdf, etintdf, left_on=["entry", "match_ids"], right_on=["entry", "id"], how="left")
     eslc_matchdf_wids.index = eslc_matchdf.index
 
     # Now use nu_ids to get the true interaction information
@@ -631,7 +634,8 @@ def make_spineslcdf(f):
     eslc_matchdf_trueints.index = eslc_matchdf_wids.index
 
     # delete unnecesary matching branches
-    del eslc_matchdf_trueints[("match", "")]
+    #del eslc_matchdf_trueints[("match", "")]
+    del eslc_matchdf_trueints[("match_ids", "")]
     del eslc_matchdf_trueints[("nu_id", "")]
     del eslc_matchdf_trueints[("id", "")]
 
@@ -668,12 +672,14 @@ def make_spinepartdf(f):
 
     etpartdf = loadbranches(f["recTree"], etrueparticlebranches)
     etpartdf = etpartdf.rec.dlp_true.particles
-    etpartdf.columns = [s for s in etpartdf.columns]
+    etpartdf.columns = [s for s in etpartdf.columns] # ???
     
+     
     # Do matching
     # 
     # First get the ML true particle IDs matched to each reco particle
     epart_matchdf = loadbranches(f["recTree"], eparticlematchedbranches)
+    """
     epart_match_overlap_df = loadbranches(f["recTree"], eparticlematchovrlpbranches)
     epart_match_overlap_df.index.names = epart_matchdf.index.names
     epart_matchdf = multicol_merge(epart_matchdf, epart_match_overlap_df, left_index=True, right_index=True, how="left", validate="one_to_one")
@@ -713,5 +719,5 @@ def make_spinepartdf(f):
         return tuple([c[0]] + [mappos(c[1])] + list(c[2:]))
 
     epartdf.columns = pd.MultiIndex.from_tuples([fixpos(c) for c in epartdf.columns])
-
+    """
     return epartdf
