@@ -191,7 +191,8 @@ trkmcsbranches = [
 
 shwbranches = [
     shwbranch + "start.x", shwbranch + "start.y", shwbranch + "start.z",
-    shwbranch + "end.x",   shwbranch + "end.y", shwbranch + "end.z",
+    shwbranch + "end.x",   shwbranch + "end.y",   shwbranch + "end.z",
+    shwbranch + "dir.x",   shwbranch + "dir.y",   shwbranch + "dir.z",
     shwbranch + 'conversion_gap', 
     shwbranch + "density",
     shwbranch + "open_angle",
@@ -274,12 +275,12 @@ slcbranches = [
     "rec.slc.tmatch.pur",
     "rec.slc.tmatch.index",
     "rec.slc.producer",
-    "rec.slc.nuid.crlongtrkdiry",
+    #"rec.slc.nuid.crlongtrkdiry",
     "rec.slc.nu_score",
-    "rec.slc.opt0.score",
-    "rec.slc.opt0.time",
-    "rec.slc.opt0.measPE",
-    "rec.slc.opt0.hypoPE",
+    #"rec.slc.opt0.score",
+    #"rec.slc.opt0.time",
+    #"rec.slc.opt0.measPE",
+    #"rec.slc.opt0.hypoPE",
 ]
 
 # making this branches separately from slcbranches since ICARUS CAFs do not have rec.slc.barycenterFM.score
@@ -290,6 +291,13 @@ barycenterFMbranches = [
     "rec.slc.barycenterFM.chi2",
     "rec.slc.barycenterFM.score",
     "rec.slc.barycenterFM.deltaZ",
+]
+
+correctedflashbranches = [
+    "rec.slc.correctedOpFlash.OpFlashT0",
+    "rec.slc.correctedOpFlash.NuToFLight",
+    "rec.slc.correctedOpFlash.NuToFCharge",
+    "rec.slc.correctedOpFlash.OpFlashT0Corrected",
 ]
 
 mcbranches = [
