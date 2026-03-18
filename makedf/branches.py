@@ -361,6 +361,40 @@ mchbranches = [
   "rec.mc.prtl.C5",
 ]
 
+mevprtltruth = "rec.mc.prtl."
+mevprtltruthbranches = [
+   mevprtltruth + "gen",
+   mevprtltruth + "time",
+   mevprtltruth + "E",
+   mevprtltruth + "M",
+   mevprtltruth + "flux_weight",
+   mevprtltruth + "ray_weight",
+   mevprtltruth + "decay_weight",
+   mevprtltruth + "decay_length",
+   mevprtltruth + "allowed_decay_fraction",
+   mevprtltruth + "cryostat",
+   mevprtltruth + "position.x",
+   mevprtltruth + "position.y",
+   mevprtltruth + "position.z",
+   mevprtltruth + "momentum.x",
+   mevprtltruth + "momentum.y",
+   mevprtltruth + "momentum.z",
+   mevprtltruth + "enter.x",
+   mevprtltruth + "enter.y",
+   mevprtltruth + "enter.z",
+   mevprtltruth + "exit.x",
+   mevprtltruth + "exit.y",
+   mevprtltruth + "exit.z",
+   mevprtltruth + "start.x",
+   mevprtltruth + "start.y",
+   mevprtltruth + "start.z",
+   mevprtltruth + "C1",
+   mevprtltruth + "C2",
+   mevprtltruth + "C3",
+   mevprtltruth + "C4",
+   mevprtltruth + "C5",
+]
+
 stubbranches = [
     "rec.slc.reco.stub.vtx.x",
     "rec.slc.reco.stub.vtx.y",
@@ -531,5 +565,3 @@ eparticlematchedbranches = [
     epart + "match_ids",
     epart + "match_overlaps",
 ]
-
-

@@ -4,6 +4,10 @@ from makedf.util import *
 import warnings
 warnings.filterwarnings('ignore')
 
+#----------------------------------------------------------------------------------#
+# Functions to read MC neutrinos
+#----------------------------------------------------------------------------------#
+
 def make_mcnudf_hnl(f,**args):
     mcdf = make_mcnudf(f,**args)
     # drop mcdf columns not relevant for this analysis
@@ -12,11 +16,11 @@ def make_mcnudf_hnl(f,**args):
     if 'cpi' in list(zip(*list(mcdf.columns)))[0]:  mcdf = mcdf.drop('cpi',axis=1,level=0)
     return mcdf
 
-def make_hnldf_mc_wgt(f):
-    df = make_hnldf_mc(f,include_weights=True)
+def make_hnldf_mcnu_wgt(f):
+    df = make_hnldf_mcnu(f,include_weights=True)
     return df
 
-def make_hnldf_mc(f, include_weights=False,multisim_nuniv=100,slim=True):
+def make_hnldf_mcnu(f, include_weights=False,multisim_nuniv=100,slim=True):
     
     slcdf = make_hnldf(f)
     mcdf = make_mcnudf_hnl(f,include_weights=include_weights,multisim_nuniv=multisim_nuniv,slim=slim)
@@ -30,6 +34,32 @@ def make_hnldf_mc(f, include_weights=False,multisim_nuniv=100,slim=True):
                         how="left")
     df = df.set_index(slcdf.index.names, verify_integrity=True)
     return df
+
+#----------------------------------------------------------------------------------#
+# Functions to read MC MeVPrtl HNLs
+#----------------------------------------------------------------------------------#
+
+def make_hnldf_mevprtl_wgt(f):
+    df = make_hnldf_mevprtl(f,include_weights=True)
+    return df
+
+def make_hnldf_mevprtl(f, include_weights=False, multisim_nuniv=100,slim=True):
+    slcdf = make_hnldf(f)
+    mcdf = make_mevprtldf(f,include_weights=include_weights,multisim_nuniv=multisim_nuniv,slim=slim)
+    mcdf.columns = pd.MultiIndex.from_tuples([tuple(["slc", "prtl"] + list(c)) for c in mcdf.columns])
+    df = multicol_merge(slcdf.reset_index(), 
+                        mcdf.reset_index(),
+                        left_on=[('entry', '', '', '', '', ''), 
+                                ('slc', 'tmatch', 'idx', '', '', '')], 
+                        right_on=[('entry', '', '', '', '', ''), 
+                                ('rec.mc.prtl..index', '', '')], 
+                        how="left")
+    df = df.set_index(slcdf.index.names, verify_integrity=True)
+    return df
+
+#----------------------------------------------------------------------------------#
+# Functions to read data
+#----------------------------------------------------------------------------------#
 
 def make_hnldf_data(f):
     slcdf = make_hnldf(f)
@@ -48,6 +78,10 @@ def make_hnldf_data(f):
                         how="left")
     df = df.set_index(slcdf.index.names, verify_integrity=True)
     return df
+
+#----------------------------------------------------------------------------------#
+# Functions to read reconstruction (both MC/data)
+#----------------------------------------------------------------------------------#
     
 def p_to_energy(p, mass):
     return np.sqrt(p**2 + mass**2)

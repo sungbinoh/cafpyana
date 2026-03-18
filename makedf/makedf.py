@@ -92,7 +92,7 @@ def make_mcnuwgtdf_slim(f):
     return make_mcnudf(f, include_weights=True, multisim_nuniv=100, slim=True)
 
 # TODO: zip the nuniv configs
-def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nuniv=100, wgt_types=["bnb","genie"], slim=False, genie_systematics=None):
+def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nuniv=100, wgt_types=["bnb","genie","g4"], slim=False, genie_systematics=None):
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if (1 == det.unique()):
@@ -113,10 +113,45 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nun
             if "genie" in wgt_types:
                 geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim, systematics=genie_systematics)
                 df_list.append(geniewgtdf)
+            if "g4" in wgt_types:
+                g4wgtdf = g4syst.g4syst(f, mcdf.ind)
+                df_list.append(g4wgtdf)
 
             wgtdf = pd.concat(df_list, axis=1)
             mcdf = multicol_concat(mcdf, wgtdf)
 
+    return mcdf
+
+def make_mevprtlwgtdf(f):
+    return make_mevprtldf(f, include_weights=True, multisim_nuniv=100)
+
+def make_mevprtlwgtdf_slim(f):
+    return make_mevprtldf(f, include_weights=True, multisim_nuniv=100, slim=True)
+
+def make_mevprtldf(f, branches = mevprtltruthbranches, include_weights=False, multisim_nuniv=100, genie_multisim_nuniv=100, wgt_types=["bnb","g4"], slim=False):
+    # ----- sbnd or icarus? -----
+    det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
+    if (1 == det.unique()):
+        det = "SBND"
+    else:
+        det = "ICARUS"
+
+    mcdf = loadbranches(f["recTree"], branches).rec.mc.prtl
+    mcdf["ind"] = mcdf.index.get_level_values(1)
+    if include_weights:
+        if len(wgt_types) == 0:
+            print("include_weights is set to True, pass at least one type of wgt to save")
+        else:
+            df_list = []
+            if "bnb" in wgt_types:
+                bnbwgtdf = bnbsyst.bnbsyst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
+                df_list.append(bnbwgtdf)
+            if "g4" in wgt_types:
+                g4wgtdf = g4syst.g4syst(f, mcdf.ind)
+                df_list.append(g4wgtdf)
+
+            wgtdf = pd.concat(df_list, axis=1)
+            mcdf = multicol_concat(mcdf, wgtdf)
     return mcdf
 
 def make_geniedf(f):
