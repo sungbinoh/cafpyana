@@ -109,13 +109,18 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nun
         else:
             df_list = []
             if "bnb" in wgt_types:
+                print(f"file: {f}")
                 print("bnb in wgt_types")
                 bnbwgtdf = bnbsyst.bnbsyst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
+                print("bnbwgtdf:", bnbwgtdf)
                 df_list.append(bnbwgtdf)
             if "genie" in wgt_types:
+                print(f"file: {f}")
                 print("genie in wgt_types")
                 geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim, systematics=genie_systematics)
+                print("geniewgtdf:", geniewgtdf)
                 df_list.append(geniewgtdf)
+            print(df_list)
             wgtdf = pd.concat(df_list, axis=1)
             print(mcdf)
             print(wgtdf)
