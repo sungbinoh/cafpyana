@@ -93,6 +93,7 @@ def make_mcnuwgtdf_slim(f):
 
 # TODO: zip the nuniv configs
 def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nuniv=100, wgt_types=["bnb","genie"], slim=False, genie_systematics=None):
+    print(wgt_types)
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if (1 == det.unique()):
@@ -108,9 +109,11 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nun
         else:
             df_list = []
             if "bnb" in wgt_types:
+                print("bnb in wgt_types")
                 bnbwgtdf = bnbsyst.bnbsyst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
                 df_list.append(bnbwgtdf)
             if "genie" in wgt_types:
+                print("genie in wgt_types")
                 geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim, systematics=genie_systematics)
                 df_list.append(geniewgtdf)
 
