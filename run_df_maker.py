@@ -150,7 +150,7 @@ def run_grid(inputfiles):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
+        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu 7 -i'
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
             if i_f == 0:
@@ -186,8 +186,9 @@ def run_grid(inputfiles):
 --tar_file_name "dropbox://$(pwd)/bin_dir.tar" \\
 -N %d \\
 --disk 100GB \\
---memory 10GB \\
---expected-lifetime 10h \\
+--cpu 7 \\
+--memory 2GB \\
+--expected-lifetime 1h \\
 "file://$(pwd)/grid_executable.sh" \\
 "%s" \\
 "%s"'''%(ngrid,OutputDir,args.output)
