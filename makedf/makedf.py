@@ -116,8 +116,9 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nun
                 print("genie in wgt_types")
                 geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim, systematics=genie_systematics)
                 df_list.append(geniewgtdf)
-
             wgtdf = pd.concat(df_list, axis=1)
+            print(mcdf)
+            print(wgtdf)
             mcdf = multicol_concat(mcdf, wgtdf)
 
     return mcdf
