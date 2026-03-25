@@ -11,10 +11,10 @@ source /cvmfs/larsoft.opensciencegrid.org/spack-packages/setup-env.sh
 echo "@@ ls -alh"
 ls -alh
 echo "@@ git clone cafpyana"
-git clone https://github.com/gputnam/cafpyana.git
+git clone https://github.com/sungbinoh/cafpyana.git
 echo "@@ cd to cafpyana dir"
 cd cafpyana
-git checkout remotes/origin/N8Dev
+git checkout remotes/origin/grid
 echo "@@ git branch -a"
 echo "@@ ls -alh"
 ls -alh
