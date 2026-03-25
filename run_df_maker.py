@@ -166,12 +166,12 @@ def run_grid(inputfiles):
 
     # 5) prepare a package for xrootd
     CAFPYANA_WD = os.environ['CAFPYANA_WD']
-    cp_XRootD = "cp -r /exp/sbnd/app/users/nrowe/cafpyana/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/XRootD " + MasterJobDir
-    #cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/XRootD " + MasterJobDir
-    cp_pyxrootd = "cp -r /exp/sbnd/app/users/nrowe/cafpyana/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/pyxrootd " + MasterJobDir
-    #cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/pyxrootd " + MasterJobDir
-    os.system(cp_XRootD)
-    os.system(cp_pyxrootd)
+    #cp_XRootD = "cp -r /exp/sbnd/app/users/nrowe/cafpyana/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/XRootD " + MasterJobDir
+    ##cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/XRootD " + MasterJobDir
+    #cp_pyxrootd = "cp -r /exp/sbnd/app/users/nrowe/cafpyana/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/pyxrootd " + MasterJobDir
+    ##cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/pyxrootd " + MasterJobDir
+    #os.system(cp_XRootD)
+    #os.system(cp_pyxrootd)
 
     os.chdir(MasterJobDir)
     tar_cmd = 'tar cf bin_dir.tar ./'

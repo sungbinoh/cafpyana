@@ -45,8 +45,8 @@ echo "@@ check filesFromSender dir"
 ls -alh ${filesFromSender}
 
 #echo "@@ Setup xrootd"
-cp -r ${filesFromSender}/XRootD $VIRTUAL_ENV/lib/python3.9/site-packages/
-cp -r ${filesFromSender}/pyxrootd $VIRTUAL_ENV/lib/python3.9/site-packages/
+# cp -r ${filesFromSender}/XRootD $VIRTUAL_ENV/lib/python3.9/site-packages/
+# cp -r ${filesFromSender}/pyxrootd $VIRTUAL_ENV/lib/python3.9/site-packages/
 
 export IFDH_CP_MAXRETRIES=2
 
