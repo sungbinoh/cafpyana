@@ -82,6 +82,10 @@ def make_framedf(f):
     frame = loadbranches(f["recTree"],sbndframebranches).rec.sbnd_frames
     return frame
 
+def make_timingdf(f):
+    timing = loadbranches(f["recTree"],sbndtimingbranches).rec.sbnd_timings
+    return timing
+
 def make_triggerdf(f):
     return  loadbranches(f["recTree"], trigger_info_branches).rec.hdr.triggerinfo
 
