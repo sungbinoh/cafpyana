@@ -610,7 +610,7 @@ def plot_univ_hists(univ_events,
 
     plt.xlim(var_config.bins[0], var_config.bins[-1])
     plt.xlabel(var_config.var_labels[1])
-    plt.ylim(-1, )
+    #plt.ylim(-1, )
     plt.ylabel("Events / Bin")
     plt.title(syst_name + " syst.: " + categ_name)
 
