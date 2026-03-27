@@ -432,8 +432,8 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
             #trkhitdf["dedx_bias"] = dedx_bias
             #print(trkhitdf[trkhitdf.rr < 26.].head(50))
             for par in ['muon', 'proton']:
-                #this_chi2_new, this_chi2_ndof = chi2pid.chi2par(trkhitdf, dedxname="dedx_redo", par=par)
-                this_chi2_new, this_chi2_ndof = chi2pid.chi2par(trkhitdf, dedxname="dedx", par=par)
+                this_chi2_new, this_chi2_ndof = chi2pid.chi2par(trkhitdf, dedxname="dedx_redo", par=par)
+                #this_chi2_new, this_chi2_ndof = chi2pid.chi2par(trkhitdf, dedxname="dedx", par=par) ## fixme, only for chi2par validation
                 this_chi2_col = ('pfp', 'trk', 'chi2pid', 'I' + str(plane), 'chi2_' + par + '_new', '')
                 this_ndof_col = ('pfp', 'trk', 'chi2pid', 'I' + str(plane), 'ndof_' + par + '_new', '')
                 trkdf[this_chi2_col] = this_chi2_new

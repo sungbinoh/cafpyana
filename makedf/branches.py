@@ -235,8 +235,8 @@ trkhitbranches_perplane = lambda IPLANE : [
 trktruehitbranches_perplane = lambda IPLANE : [
     trkbranch + "calo.%i.points.truth.h_e"% IPLANE,
     trkbranch + "calo.%i.points.truth.h_nelec"% IPLANE,
-    trkbranch + "calo.%i.points.truth.h_e_sed"% IPLANE,
-    trkbranch + "calo.%i.points.truth.h_nelec_sed"% IPLANE,
+    #trkbranch + "calo.%i.points.truth.h_e_sed"% IPLANE,
+    #trkbranch + "calo.%i.points.truth.h_nelec_sed"% IPLANE,
 ]
 
 trkhitbranches = trkhitbranches_perplane(2)
@@ -313,6 +313,7 @@ mcbranches = [
     "rec.mc.nu.pdg",
     "rec.mc.nu.iscc",
     "rec.mc.nu.genie_mode",
+    "rec.mc.nu.genie_inttype",
     "rec.mc.nu.parent_pdg",
     "rec.mc.nu.parent_dcy_E",
     "rec.mc.nu.genie_evtrec_idx",

@@ -6,7 +6,7 @@ import uproot
 
 larsoft_data_v = "v1_02_02"
 icarus_data_v = "v10_06_00"
-sbnd_data_v = "v01_35_00"
+sbnd_data_v = "v01_35_00" ## for sbndcode v10_06_00_09
 
 rr_max_cut_chi2 = 26. ## for resolving MC's hit RR cut, after fixing the issue, put this value to 26.
 
@@ -22,13 +22,13 @@ ICARUS_CALO_PARAMS = {
 #### Default
 #### == For each element, the first entry is for MC and the second entry is for the data
 SBND_CALO_PARAMS = {
-    "alpha_emb": [0.904, 0.904],
-    "beta_90": [0.204, 0.204],
-    "R_emb": [1.25, 1.25],
+    "alpha_emb": [0.9037296894423146, 0.9365911516604355],
+    "beta_90": [0.20615910226525963, 0.18453869701427542],
+    "R_emb": [1.2739207737639888, 1.4999999824587602],
     "gains": [
-        [0.02020, 0.02006, 0.02047], ## MC
+        [0.02020, 0.02006, 0.020], ## MC
         #[0.0220552, 0.02168213, 0.02144327] ## Data
-        [0.02172, 0.02150, 0.0205] ## Data
+        [0.02172, 0.02150, 0.02] ## Data
     ],
     "c_cal_frac": [1., 1., 1.],
     "etau": [35., 35.], ## first value for MC and second value for data
