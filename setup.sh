@@ -12,17 +12,29 @@ spack load sam-web-client@3.6%gcc@11.4.1
 which samweb > /dev/null 2>&1 && echo "SAMWeb client set up" || echo "Warning: SAMWeb client not set up"
 
 SPACK_ROOT="/cvmfs/larsoft.opensciencegrid.org/spack-fnal-v1.0.0/setup-env.sh"
-if [[ $machine == *sbnd* || $machine == *jupyter* ]]; then
-  echo "working on a sbnd machine"
+if [[ $machine == *sbnd* ]]; then
+    echo "working on a sbnd machine"
   source "${SPACK_ROOT}"
   export CAFPYANA_GRID_OUT_DIR="/pnfs/sbnd/scratch/users/$USER/cafpyana_out"
+  export CAFPYANA_TMP_SCRATCH="/pnfs/sbnd/scratch/users/$USER/cafpyana_tmp"
   mkdir -p $CAFPYANA_GRID_OUT_DIR
+  mkdir -p $CAFPYANA_TMP_SCRATCH
 fi
 if [[ $machine == *icarus* ]]; then
   echo "working on a icarus machine"
   source "${SPACK_ROOT}"
   export CAFPYANA_GRID_OUT_DIR="/pnfs/icarus/scratch/users/$USER/cafpyana_out"
+  export CAFPYANA_TMP_SCRATCH="/pnfs/icarus/scratch/users/$USER/cafpyana_tmp"
   mkdir -p $CAFPYANA_GRID_OUT_DIR
+  mkdir -p $CAFPYANA_TMP_SCRATCH
+fi
+if [[ $machine == *jupyter* ]]; then
+  echo "working on a sbnd machine"
+  source "${SPACK_ROOT}"
+  export CAFPYANA_GRID_OUT_DIR="/pnfs/sbnd/scratch/users/$USER/cafpyana_out"
+  export CAFPYANA_TMP_SCRATCH="/scratch/7DayLifetime/$USER/tmp_failover"
+  mkdir -p $CAFPYANA_GRID_OUT_DIR
+  mkdir -p $CAFPYANA_TMP_SCRATCH
 fi
 spack load hdf5@1.12.2%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2
 spack load xrootd@5.6.9%gcc@12.5.0 arch=linux-almalinux9-x86_64_v2

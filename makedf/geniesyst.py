@@ -140,7 +140,7 @@ ar23p_genie_systematics = [
     'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin3'
 ]
 
-regen_systematics = ar23p_genie_systematics + regen_systematics
+#regen_systematics = ar23p_genie_systematics + regen_systematics
 
 def geniesyst(f, nuind, multisim_nuniv=100, slim=False, systematics=None):
     if systematics is None:
