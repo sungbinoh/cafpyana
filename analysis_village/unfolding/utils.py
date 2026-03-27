@@ -64,12 +64,17 @@ def get_univ_rates(evtdf,
     if n_univ > n_univ_max:
         n_univ = n_univ_max
     univ_events = np.zeros((n_univ, len(var_config.bin_centers)))
+    print(n_univ)
+    print(univ_events.shape)
     for uidx in range(n_univ):
-        weights = evtdf[syst_name]["univ_{}".format(uidx)]
+        #weights = evtdf[syst_name]["univ_{}".format(uidx)]
+        weights = evtdf[syst_name][evtdf[syst_name].columns[uidx]]
         weights = np.where(np.isnan(weights), 1, weights) # nan are non-neutrino events
+        print(weights)
         n_univ, _ = np.histogram(var, bins=var_config.bins, weights=weights)
         univ_events[uidx, :] = n_univ
     cv_events, _ = np.histogram(var, bins=var_config.bins)
+    print(univ_events.shape)
     return univ_events, cv_events
 
 
@@ -597,18 +602,19 @@ def plot_univ_hists(univ_events,
     # if too few universes, just plot all of them in gray
     else:
         for i in range(n_univ):
-            show_label = "Universe" if i == 0 else None
-            plt.hist(var_config.bin_centers, bins=var_config.bins, weights=univ_events[i], histtype="step", color="gray", label=show_label)
+            show_label = "Syst. #" + str(i) # if i == 0 else None
+            plt.hist(var_config.bin_centers, bins=var_config.bins, weights=univ_events[i], histtype="step", label=show_label)
 
     # plot CV last so that it is on top of the universes
     plt.hist(var_config.bin_centers, bins=var_config.bins, weights=cv_events, histtype="step", color="black", label="Central Value", linestyle="--", linewidth=2)
 
     plt.xlim(var_config.bins[0], var_config.bins[-1])
     plt.xlabel(var_config.var_labels[1])
+    plt.ylim(-1, )
     plt.ylabel("Events / Bin")
     plt.title(syst_name + " syst.: " + categ_name)
 
-    plt.legend(frameon=False)
+    plt.legend(frameon=False, fontsize=12)
 
     # == textbox to add approval rank ==
     # decide text location based on the distribution
@@ -705,7 +711,10 @@ def plot_overlay_with_cov(
     sig_label="Signal",
     sig_p_bkg_label="Signal + Background",
     pred_unc_label="Pred. Unc.",
-    data_label="Data"
+    data_label="Data",
+    y_label_top="Events",
+    ratio_y_min=0.,
+    ratio_y_max=2.,
 ):
     """
     Overlay data vs (signal+background) with:
@@ -798,7 +807,9 @@ def plot_overlay_with_cov(
     ax.step(
         edges, pred_step,
         where="post",
-        linewidth=1.5,
+        linewidth=2.0,
+        linestyle="--",
+        color="blue",
         label=sig_p_bkg_label,
     )
     ax.fill_between(
@@ -808,7 +819,7 @@ def plot_overlay_with_cov(
         step="post",
         facecolor="none",
         hatch="///",
-        edgecolor="black",
+        edgecolor="blue",
         linewidth=0.0,
         label=pred_unc_label,
     )
@@ -816,7 +827,7 @@ def plot_overlay_with_cov(
     # --- data on top ---
     ax.errorbar(
         centers, data,
-        xerr=xerr,
+        xerr=0,
         yerr=yerr_data,
         fmt="o",
         color="black",
@@ -825,7 +836,7 @@ def plot_overlay_with_cov(
         zorder=10,
     )
 
-    ax.set_ylabel("Events")
+    ax.set_ylabel(y_label_top)
     ax.set_title(title)
     ax.legend(fontsize='x-small')
 
@@ -873,19 +884,19 @@ def plot_overlay_with_cov(
 
         rax.errorbar(
             centers, ratio,
-            xerr=xerr,
+            xerr=0,
             yerr=ratio_yerr,
             fmt="o",
             color="black",
             capsize=2,
         )
-        rax.fill_between(edges, rlow_step, rhigh_step, step="post", alpha=0.25)
-        rax.axhline(1.0, linestyle="--")
+        rax.fill_between(edges, rlow_step, rhigh_step, step="post", alpha=0.5, facecolor="none", hatch="///", edgecolor="blue", linewidth=0.0)
+        rax.axhline(1.0, linestyle="--", color="blue")
 
         rax.set_ylabel("Data/Pred")
         rax.set_xlabel(varcfg.var_labels[0])
         rax.set_xlim(x_min, x_max)
-        rax.set_ylim(0.0, 2.0)
+        rax.set_ylim(ratio_y_min, ratio_y_max)
     else:
         ax.set_xlabel(varcfg.var_labels[0])
 
