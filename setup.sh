@@ -13,7 +13,7 @@ which samweb > /dev/null 2>&1 && echo "SAMWeb client set up" || echo "Warning: S
 
 SPACK_ROOT="/cvmfs/larsoft.opensciencegrid.org/spack-fnal-v1.0.0/setup-env.sh"
 if [[ $machine == *sbnd* ]]; then
-    echo "working on a sbnd machine"
+  echo "working on a sbnd machine"
   source "${SPACK_ROOT}"
   export CAFPYANA_GRID_OUT_DIR="/pnfs/sbnd/scratch/users/$USER/cafpyana_out"
   export CAFPYANA_TMP_SCRATCH="/pnfs/sbnd/scratch/users/$USER/cafpyana_tmp"
