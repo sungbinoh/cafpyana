@@ -23,6 +23,7 @@ hdrbranches = [
     "rec.hdr.cluster",
     "rec.hdr.fno",
     "rec.hdr.noffbeambnb",
+    "rec.hdr.nbnbinfo",
 ]
 
 trigger_info_branches = [
