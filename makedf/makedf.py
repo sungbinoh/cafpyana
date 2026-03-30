@@ -485,26 +485,6 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
     #print(slcdf.pfp.trk.chi2pid.head(50))
     return slcdf
 
-def make_spine_df(f, trkDistCut=-1, requireFiducial=True, **trkArgs):
-    # load
-    partdf = make_spinepartdf(f, **trkArgs)
-    partdf.columns = pd.MultiIndex.from_tuples([tuple(["particle"] + list(c)) for c in partdf.columns])
-    eslcdf = make_spineslcdf(f)
-
-    # merge in tracks
-    eslcdf = multicol_merge(eslcdf, partdf, left_index=True, right_index=True, how="right", validate="one_to_many")
-
-    #print(*eslcdf.columns, sep="\n")
-    eslcdf = multicol_add(eslcdf, dmagdf(eslcdf.vertex, eslcdf.particle.start_point).rename("dist_to_vertex"))
-
-    if trkDistCut > 0:
-        eslcdf = eslcdf[eslcdf.dist_to_vertex < trkDistCut]
-    # require fiducial verex
-    if requireFiducial:
-        eslcdf = eslcdf[InFV(eslcdf.vertex, 50)]
-
-    return eslcdf
-
 def make_stubs(f, det="ICARUS"):
     stubdf = loadbranches(f["recTree"], stubbranches)
     stubdf = stubdf.rec.slc.reco.stub
@@ -602,6 +582,26 @@ def make_stubs(f, det="ICARUS"):
 
     #return pd.concat(df_tosave, axis=1)
 
+def make_spine_df(f, trkDistCut=-1, requireFiducial=True, **trkArgs):
+    # load
+    partdf = make_spinepartdf(f, **trkArgs)
+    partdf.columns = pd.MultiIndex.from_tuples([tuple(["particle"] + list(c)) for c in partdf.columns])
+    eslcdf = make_spineslcdf(f)
+
+    # merge in tracks
+    eslcdf = multicol_merge(eslcdf, partdf, left_index=True, right_index=True, how="right", validate="one_to_many")
+
+    #print(*eslcdf.columns, sep="\n")
+    eslcdf = multicol_add(eslcdf, dmagdf(eslcdf.vertex, eslcdf.particle.start_point).rename("dist_to_vertex"))
+
+    if trkDistCut > 0:
+        eslcdf = eslcdf[eslcdf.dist_to_vertex < trkDistCut]
+    # require fiducial verex
+    if requireFiducial:
+        eslcdf = eslcdf[InFV(eslcdf.vertex, 50)]
+
+    return eslcdf
+
 def make_spineslcdf(f):
     eslcdf = loadbranches(f["recTree"], eslcbranches)
     eslcdf = eslcdf.rec.dlp
@@ -625,7 +625,6 @@ def make_spineslcdf(f):
     eslc_matchdf = eslc_matchdf.rec.dlp
 
     # Then use bestmatch.match to get the nu ids in etintdf
-    #eslc_matchdf_wids = pd.merge(eslc_matchdf, etintdf, left_on=["entry", "match"], right_on=["entry", "id"], how="left")
     eslc_matchdf_wids = pd.merge(eslc_matchdf, etintdf, left_on=["entry", "match_ids"], right_on=["entry", "id"], how="left")
     eslc_matchdf_wids.index = eslc_matchdf.index
 
@@ -634,7 +633,6 @@ def make_spineslcdf(f):
     eslc_matchdf_trueints.index = eslc_matchdf_wids.index
 
     # delete unnecesary matching branches
-    #del eslc_matchdf_trueints[("match", "")]
     del eslc_matchdf_trueints[("match_ids", "")]
     del eslc_matchdf_trueints[("nu_id", "")]
     del eslc_matchdf_trueints[("id", "")]
@@ -690,30 +688,25 @@ def make_spinepartdf(f):
     bestmatch.columns = [s for s in bestmatch.columns]
 
     # Then use betmatch.match to get the G4 track IDs in etpartdf
-    #bestmatch_wids = pd.merge(bestmatch, etpartdf, left_on=["entry", "match"], right_on=["entry", "id"], how="left")
     bestmatch_wids = pd.merge(bestmatch, etpartdf, left_on=["entry", "match_ids"], right_on=["entry", ("id", "")], how="left")
     bestmatch_wids.index = bestmatch.index
 
     # Now use the G4 track IDs to get the true particle information
-    #bestmatch_trueparticles = multicol_merge(bestmatch_wids, tpartdf, left_on=["entry", "track_id"], right_on=["entry", ("G4ID", "")], how="left")
     bestmatch_trueparticles = multicol_merge(bestmatch_wids, tpartdf, left_on=["entry", ("track_id", "")], right_on=["entry", ("G4ID", "")], how="left")
     bestmatch_trueparticles.index = bestmatch_wids.index
 
     # delete unnecesary matching branches
-    #del bestmatch_trueparticles[("match", "")]
     del bestmatch_trueparticles[("match_ids", "")]
     del bestmatch_trueparticles[("track_id", "")]
     del bestmatch_trueparticles[("id", "")]
 
     # add extra level to epartdf columns
-    #epartdf.columns = pd.MultiIndex.from_tuples([tuple(list(c) + [""]) for c in epartdf.columns])
     epartdf.columns = pd.MultiIndex.from_tuples(
         [tuple(list(c) + [""] * (5 - len(c))) for c in epartdf.columns]
     ) 
 
     # put everything in epartdf
     for c in bestmatch_trueparticles.columns:
-    #    epartdf[tuple(["truth"] + list(c))] = bestmatch_trueparticles[c]
         tuple_key = ("truth",) + c
         epartdf[tuple_key] = bestmatch_trueparticles[c]
     # Fix position names (I0, I1, I2) -> (x, y, z)
@@ -723,7 +716,6 @@ def make_spinepartdf(f):
         if s == "I2": return "z"
         return s
     def fixpos(c):
-        #if c[0] not in ["end_point", "start_point", "start_dir", "vertex"]: return c
         rename = False
         new_tuple = c
         sub_columns = ["momentum", "end_point", "start_point", "start_dir", "end_dir", "vertex"]
