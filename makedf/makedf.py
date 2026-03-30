@@ -603,10 +603,10 @@ def make_spine_df(f, trkDistCut=-1, requireFiducial=True, **trkArgs):
     return eslcdf
 
 def make_spineslcdf(f):
-    eslcdf = loadbranches(f["recTree"], eslcbranches)
+    eslcdf = loadbranches(f["recTree"], spineintbranches)
     eslcdf = eslcdf.rec.dlp
 
-    etintdf = loadbranches(f["recTree"], etruthintbranches)
+    etintdf = loadbranches(f["recTree"], spinetintbranches)
     etintdf = etintdf.rec.dlp_true
     
     # match to the truth info
@@ -617,8 +617,8 @@ def make_spineslcdf(f):
     # Do matching
     # 
     # First get the ML true particle IDs matched to each reco particle
-    eslc_matchdf = loadbranches(f["recTree"], eslcmatchedbranches)
-    eslc_match_overlap_df = loadbranches(f["recTree"], eslcmatchovrlpbranches)
+    eslc_matchdf = loadbranches(f["recTree"], spineintmatchedbranches)
+    eslc_match_overlap_df = loadbranches(f["recTree"], spineintmatchovrlpbranches)
     eslc_match_overlap_df.index.names = eslc_matchdf.index.names
 
     eslc_matchdf = multicol_merge(eslc_matchdf, eslc_match_overlap_df, left_index=True, right_index=True, how="left", validate="one_to_one")
@@ -660,7 +660,7 @@ def make_spineslcdf(f):
     return eslcdf_withmc
 
 def make_spinepartdf(f):
-    epartdf = loadbranches(f["recTree"], eparticlebranches)
+    epartdf = loadbranches(f["recTree"], spinepartbranches)
     epartdf = epartdf.rec.dlp.particles
 
     tpartdf = loadbranches(f["recTree"], trueparticlebranches)
@@ -668,15 +668,15 @@ def make_spinepartdf(f):
     # cut out EMShowerDaughters
     # tpartdf = tpartdf[(tpartdf.parent == 0)]
 
-    etpartdf = loadbranches(f["recTree"], etrueparticlebranches)
+    etpartdf = loadbranches(f["recTree"], spinetpartbranches)
     etpartdf = etpartdf.rec.dlp_true.particles
     etpartdf.columns = [s for s in etpartdf.columns]
      
     # Do matching
     # 
     # First get the ML true particle IDs matched to each reco particle
-    epart_matchdf = loadbranches(f["recTree"], eparticlematchedbranches)
-    epart_match_overlap_df = loadbranches(f["recTree"], eparticlematchovrlpbranches)
+    epart_matchdf = loadbranches(f["recTree"], spinepartmatchedbranches)
+    epart_match_overlap_df = loadbranches(f["recTree"], spinepartmatchovrlpbranches)
     epart_match_overlap_df.index.names = epart_matchdf.index.names
 
     epart_matchdf = multicol_merge(epart_matchdf, epart_match_overlap_df, left_index=True, right_index=True, how="left", validate="one_to_one")

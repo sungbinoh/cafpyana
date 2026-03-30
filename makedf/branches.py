@@ -384,146 +384,140 @@ stubhitbranches = [
     "rec.slc.reco.stub.planes.hits.wire",
 ]
 
-eslc = "rec.dlp."
-
-eslcbranches = [
-#    eslc + "is_neutrino",
-#    eslc + "nu_id",
-    eslc + "num_particles",
-#    eslc + "num_primaries",
-    eslc + "vertex.0",
-    eslc + "vertex.1",
-    eslc + "vertex.2",
+# SPINE branches
+# - SPINE reco interaction branches
+spineint = "rec.dlp."
+spineintbranches = [
+    spineint + b for b in [
+    #    "is_neutrino",
+    #    "nu_id",
+    #    "id",
+        "num_particles",
+    #    "num_primaries",
+        "vertex.0",
+        "vertex.1",
+        "vertex.2",
+    #    "is_cathode_crosser",
+    #    "is_time_contained",
+    #    "is_fiducial",
+    #    "is_flash_matched",
+    #    "is_truth",
+    #    "num_particles",
+    #    "num_primary_particles",
+    #    "flash_hypo_pe",
+    #    "flash_total_pe",
+    ]
 ]
 
-eslcmatchedbranches = [
-    eslc + "match_ids", # "match"
+spineintflashbranches = [
+    spineint + b for b in [
+        "flash_scores",
+        "flash_times"
+    ]
 ]
 
-eslcmatchovrlpbranches = [
-    eslc + "match_overlaps", # "match_overlap"
+spineintmatchedbranches = [
+    spineint + "match_ids",
 ]
 
-inter = "rec.dlp."
-
-interbranches = [
-    inter + "id",
-    inter + "is_cathode_crosser",
-    inter + "is_time_contained",
-    inter + "is_contained",
-    inter + "is_fiducial",
-    inter + "is_flash_matched",
-    inter + "is_truth",
-    inter + "num_particles",
-    inter + "num_primary_particles",
-    inter + "vertex.0",
-    inter + "vertex.1",
-    inter + "vertex.2",
-    inter + "flash_hypo_pe",
-    inter + "flash_total_pe",
+spineintmatchovrlpbranches = [
+    spineint + "match_overlaps",
 ]
 
-flashinterbranches = [
-    inter + "flash_scores",
-    inter + "flash_times",
+# - SPINE true interaction branches
+spinetint = "rec.dlp_true."
+
+spinetintbranches = [
+    spinetint + b for b in [
+        "id",
+        "nu_id",
+        "current_type",
+        "energy_init",
+        "energy_transfer",
+        "num_particles",
+        "num_primary_particles",
+        "inelasticity",
+        "interaction_mode",
+        "interaction_type",
+        "is_cathode_crosser",
+        "is_time_contained",
+        "is_contained",
+        "is_fiducial",
+        "lepton_p",
+        "lepton_pdg_code",
+        "mct_index"
+    ]
 ]
 
-intermatchedbranches = [
-    inter + "match_ids",
+# - SPINE reco particle branches
+spinepart = "rec.dlp.particles."
+
+spinepartbranches = [
+    spinepart + b for b in [
+        "calo_ke",
+        "cathode_offset",
+        # "chi2_per_pid.0",
+        # "chi2_per_pid.1",
+        # "chi2_per_pid.2",
+        # "chi2_per_pid.3",
+        # "chi2_per_pid.4",
+        # "chi2_per_pid.5",
+        # "chi2_pid",
+        "end_point.0",
+        "end_point.1",
+        "end_point.2",
+        "end_dir.0",
+        "end_dir.1",
+        "end_dir.2",
+        "interaction_id",
+        "id",
+        "is_contained",
+        "is_primary",
+        "is_valid",
+        "length",
+        "csda_ke",
+        "csda_ke_per_pid.0",
+        "csda_ke_per_pid.1",
+        "csda_ke_per_pid.2",
+        "csda_ke_per_pid.3",
+        "csda_ke_per_pid.4",
+        "csda_ke_per_pid.5",
+        "ke",
+        "p",
+        "momentum.0",
+        "momentum.1",
+        "momentum.2",
+        "mcs_ke",
+        "mcs_ke_per_pid.0",
+        "mcs_ke_per_pid.1",
+        "mcs_ke_per_pid.2",
+        "mcs_ke_per_pid.3",
+        "mcs_ke_per_pid.4",
+        "mcs_ke_per_pid.5",
+        "pid",
+        "pid_scores.0",
+        "pid_scores.1",
+        "pid_scores.2",
+        "pid_scores.3",
+        "pid_scores.4",
+        "start_point.0",
+        "start_point.1",
+        "start_point.2",
+        "start_dir.0",
+        "start_dir.1",
+        "start_dir.2",
+        "start_dedx"
+    ]
 ]
 
-intermatchovrlpbranches = [
-    inter + "match_overlaps",
+spinepartmatchedbranches = [
+    spinepart + "match_ids",
 ]
 
-etruthint = "rec.dlp_true."
-
-etruthintbranches = [
-    etruthint + "id",
-    etruthint + "nu_id",
-    etruthint + "current_type",
-    etruthint + "energy_init",
-    etruthint + "energy_transfer",
-    etruthint + "num_particles",
-    etruthint + "num_primary_particles",
-    etruthint + "inelasticity",
-    etruthint + "interaction_mode",
-    etruthint + "interaction_type",
-    etruthint + "is_cathode_crosser",
-    etruthint + "is_time_contained",
-    etruthint + "is_contained",
-    etruthint + "is_fiducial",
-    etruthint + "lepton_p",
-    etruthint + "lepton_pdg_code",
-    etruthint + "mct_index",
+spinepartmatchovrlpbranches = [
+    spinepart + "match_overlaps"
 ]
 
-epart = "rec.dlp.particles."
-
-eparticlebranches = [
-    epart + "calo_ke",
-    epart + "cathode_offset",
-    # epart + "chi2_per_pid.0",
-    # epart + "chi2_per_pid.1",
-    # epart + "chi2_per_pid.2",
-    # epart + "chi2_per_pid.3",
-    # epart + "chi2_per_pid.4",
-    # epart + "chi2_per_pid.5",
-    # epart + "chi2_pid",
-    epart + "end_point.0",
-    epart + "end_point.1",
-    epart + "end_point.2",
-    epart + "end_dir.0",
-    epart + "end_dir.1",
-    epart + "end_dir.2",
-    epart + "interaction_id",
-    epart + "id",
-    epart + "is_contained",
-    epart + "is_primary",
-    epart + "is_valid",
-    epart + "length",
-    epart + "csda_ke",
-    epart + "csda_ke_per_pid.0",
-    epart + "csda_ke_per_pid.1",
-    epart + "csda_ke_per_pid.2",
-    epart + "csda_ke_per_pid.3",
-    epart + "csda_ke_per_pid.4",
-    epart + "csda_ke_per_pid.5",
-    epart + "ke",
-    epart + "p",
-    epart + "momentum.0",
-    epart + "momentum.1",
-    epart + "momentum.2",
-    epart + "mcs_ke",
-    epart + "mcs_ke_per_pid.0",
-    epart + "mcs_ke_per_pid.1",
-    epart + "mcs_ke_per_pid.2",
-    epart + "mcs_ke_per_pid.3",
-    epart + "mcs_ke_per_pid.4",
-    epart + "mcs_ke_per_pid.5",
-    epart + "pid",
-    epart + "pid_scores.0",
-    epart + "pid_scores.1",
-    epart + "pid_scores.2",
-    epart + "pid_scores.3",
-    epart + "pid_scores.4",
-    epart + "start_point.0",
-    epart + "start_point.1",
-    epart + "start_point.2",
-    epart + "start_dir.0",
-    epart + "start_dir.1",
-    epart + "start_dir.2",
-    epart + "start_dedx"
-]
-
-etruthpart = "rec.dlp_true.particles."
-etrueparticlebranches = [etruthpart + "track_id"] + [k.replace(epart, etruthpart) for k in eparticlebranches if "pid_scores" not in k and "start_dedx" not in k]
-
-eparticlematchedbranches = [
-    epart + "match_ids",
-#    epart + "match_overlaps",
-]
-
-eparticlematchovrlpbranches = [
-    epart + "match_overlaps"
-]
+# - SPINE true particle branches
+spinetpart = "rec.dlp_true.particles."
+spinetpartbranches = [spinetpart + "track_id"] + [k.replace(spinepart, spinetpart) for k in spinepartbranches if "pid_scores" not in k and "start_dedx" not in k]
