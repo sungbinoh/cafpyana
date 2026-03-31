@@ -583,26 +583,28 @@ def make_stubs(f, det="ICARUS"):
     #return pd.concat(df_tosave, axis=1)
 
 def make_spine_df(f, trkDistCut=-1, requireFiducial=True, **trkArgs):
-    # load
-    partdf = make_spinepartdf(f, **trkArgs)
-    partdf.columns = pd.MultiIndex.from_tuples([tuple(["particle"] + list(c)) for c in partdf.columns])
-    eslcdf = make_spineslcdf(f)
+    # Load SPINE interactions dataframe
+    spine_int_df = make_spine_int_df(f)
 
-    # merge in tracks
-    eslcdf = multicol_merge(eslcdf, partdf, left_index=True, right_index=True, how="right", validate="one_to_many")
+    # Load SPINE particles dataframe
+    spine_part_df = make_spine_part_df(f, **trkArgs)
+    spine_part_df.columns = pd.MultiIndex.from_tuples([tuple(["particle"] + list(c)) for c in spine_part_df.columns])
 
-    #print(*eslcdf.columns, sep="\n")
-    eslcdf = multicol_add(eslcdf, dmagdf(eslcdf.vertex, eslcdf.particle.start_point).rename("dist_to_vertex"))
+    # Merge both dataframes
+    spine_df = multicol_merge(spine_int_df, spine_part_df, left_index=True, right_index=True, how="right", validate="one_to_many")
 
+    # Add distance-to-vertex particle column to SPINE dataframe
+    spine_df = multicol_add(spine_df, dmagdf(spine_df.vertex, spine_df.particle.start_point).rename("dist_to_vertex"))
+
+    # Check and apply cuts
     if trkDistCut > 0:
-        eslcdf = eslcdf[eslcdf.dist_to_vertex < trkDistCut]
-    # require fiducial verex
+        spine_df = spine_df[spine_df.dist_to_vertex < trkDistCut]
     if requireFiducial:
-        eslcdf = eslcdf[InFV(eslcdf.vertex, 50)]
+        spine_df = spine_df[InFV(spine_df.vertex, 50)]
 
-    return eslcdf
+    return spine_df
 
-def make_spineslcdf(f):
+def make_spine_int_df(f):
     eslcdf = loadbranches(f["recTree"], spineintbranches)
     eslcdf = eslcdf.rec.dlp
 
@@ -632,11 +634,6 @@ def make_spineslcdf(f):
     eslc_matchdf_trueints = multicol_merge(eslc_matchdf_wids, mcdf, left_on=["entry", "nu_id"], right_index=True, how="left")
     eslc_matchdf_trueints.index = eslc_matchdf_wids.index
 
-    # delete unnecesary matching branches
-    del eslc_matchdf_trueints[("match_ids", "")]
-    del eslc_matchdf_trueints[("nu_id", "")]
-    del eslc_matchdf_trueints[("id", "")]
-
     # first match is best match
     bestmatch = eslc_matchdf_trueints.groupby(level=list(range(eslc_matchdf_trueints.index.nlevels-1))).first()
 
@@ -659,56 +656,79 @@ def make_spineslcdf(f):
 
     return eslcdf_withmc
 
-def make_spinepartdf(f):
-    epartdf = loadbranches(f["recTree"], spinepartbranches)
-    epartdf = epartdf.rec.dlp.particles
+def make_spine_part_df(f):
+    # Load SPINE reco particle (rec.dlp.particle.) branches
+    spine_part_df = loadbranches(f["recTree"], spinepartbranches)
+    spine_part_df = spine_part_df.rec.dlp.particles
+    #print("\nSPINE_PART_DF")
+    #print("\n".join(str(col) for col in spine_part_df.columns))
 
-    tpartdf = loadbranches(f["recTree"], trueparticlebranches)
-    tpartdf = tpartdf.rec.true_particles
-    # cut out EMShowerDaughters
-    # tpartdf = tpartdf[(tpartdf.parent == 0)]
+    # Load SPINE true particle (rec.dlp_true.particle.) branches
+    spine_true_part_df = loadbranches(f["recTree"], spinetpartbranches)
+    spine_true_part_df = spine_true_part_df.rec.dlp_true.particles
+    spine_true_part_df_prefix = "strue" # SPINE true
+    add_upper_level_to_df(spine_true_part_df_prefix, spine_true_part_df)
+    #spine_true_part_df.columns = pd.MultiIndex.from_tuples(
+    #    [(spine_true_part_df_prefix,) + col for col in spine_true_part_df.columns]
+    #)
+    spine_true_part_df.columns = [s for s in spine_true_part_df.columns]
+    #print("\nSPINE_TRUE_PART_DF")
+    #print("\n".join(str(col) for col in spine_true_part_df.columns))
 
-    etpartdf = loadbranches(f["recTree"], spinetpartbranches)
-    etpartdf = etpartdf.rec.dlp_true.particles
-    etpartdf.columns = [s for s in etpartdf.columns]
-     
-    # Do matching
-    # 
-    # First get the ML true particle IDs matched to each reco particle
-    epart_matchdf = loadbranches(f["recTree"], spinepartmatchedbranches)
-    epart_match_overlap_df = loadbranches(f["recTree"], spinepartmatchovrlpbranches)
-    epart_match_overlap_df.index.names = epart_matchdf.index.names
+    # Load true particle branches
+    true_part_df = loadbranches(f["recTree"], trueparticlebranches)
+    true_part_df = true_part_df.rec.true_particles
+    true_part_df_prefix = "true"
+    add_upper_level_to_df(true_part_df_prefix, true_part_df)
+    #true_part_df.columns = pd.MultiIndex.from_tuples(
+    #    [(true_part_df_prefix,) + col for col in true_part_df.columns]
+    #)
+    #print("\nTRUE_PART_DF")
+    #print("\n".join(str(col) for col in true_part_df))
 
-    epart_matchdf = multicol_merge(epart_matchdf, epart_match_overlap_df, left_index=True, right_index=True, how="left", validate="one_to_one")
+    # ============ Do matching between SPINE true particles and reco ID matched ============ #
+    # - Load match_ids and overlaps branches
+    spine_part_match_df = loadbranches(f["recTree"], spinepartmatchedbranches)
+    spine_part_match_overlap_df = loadbranches(f["recTree"], spinepartmatchovrlpbranches)
+    # - Dataframe with match ids and overlaps
+    spine_part_match_overlap_df.index.names = spine_part_match_df.index.names
+    spine_part_match_df = multicol_merge(spine_part_match_df, spine_part_match_overlap_df, left_index=True, right_index=True, how="left", validate="one_to_one")
+    spine_part_match_df = spine_part_match_df.rec.dlp.particles 
+    # - Get the best match (highest match_overlap), assume it's sorted
+    spine_bestmatch_df = spine_part_match_df.groupby(level=list(range(spine_part_match_df.index.nlevels-1))).first()
+    spine_bestmatch_df.columns = [s for s in spine_bestmatch_df.columns]
+    #print("\nSPINE_BESTMATCH_DF")
+    #print("\n".join(str(col) for col in spine_bestmatch_df.columns))
+    # - Match SPINE true particles with their pair (match id - overlap)
+    spine_bestmatch_wids_df = pd.merge(spine_bestmatch_df, spine_true_part_df, 
+                                       left_on=["entry", "match_ids"], 
+                                       right_on=["entry", (spine_true_part_df_prefix, "id", "")], 
+                                       how="left")
+    spine_bestmatch_wids_df.index = spine_bestmatch_df.index
+    #print("\nSPINE_BESTMATCH_WIDS_DF")
+    #print("\n".join(str(col) for col in spine_bestmatch_wids_df.columns))
+    
+    # ============ Match SPINE true particles dataframe with true particles dataframe ============ #
+    bestmatch_true_particles_df = multicol_merge(spine_bestmatch_wids_df, true_part_df, 
+                                                 left_on=["entry", (spine_true_part_df_prefix, "track_id", "")], 
+                                                 right_on=["entry", (true_part_df_prefix, "G4ID", "")],
+                                                 how="left")
+    bestmatch_true_particles_df.index = spine_bestmatch_wids_df.index
+    #print("\nBESTMATCH_TRUE_PARTICLES_DF")
+    #print("\n".join(str(col) for col in bestmatch_true_particles_df.columns))
 
-    epart_matchdf = epart_matchdf.rec.dlp.particles
-    # get the best match (highest match_overlap), assume it's sorted
-
-    bestmatch = epart_matchdf.groupby(level=list(range(epart_matchdf.index.nlevels-1))).first()
-    bestmatch.columns = [s for s in bestmatch.columns]
-
-    # Then use betmatch.match to get the G4 track IDs in etpartdf
-    bestmatch_wids = pd.merge(bestmatch, etpartdf, left_on=["entry", "match_ids"], right_on=["entry", ("id", "")], how="left")
-    bestmatch_wids.index = bestmatch.index
-
-    # Now use the G4 track IDs to get the true particle information
-    bestmatch_trueparticles = multicol_merge(bestmatch_wids, tpartdf, left_on=["entry", ("track_id", "")], right_on=["entry", ("G4ID", "")], how="left")
-    bestmatch_trueparticles.index = bestmatch_wids.index
-
-    # delete unnecesary matching branches
-    del bestmatch_trueparticles[("match_ids", "")]
-    del bestmatch_trueparticles[("track_id", "")]
-    del bestmatch_trueparticles[("id", "")]
-
-    # add extra level to epartdf columns
-    epartdf.columns = pd.MultiIndex.from_tuples(
-        [tuple(list(c) + [""] * (5 - len(c))) for c in epartdf.columns]
+    # Fill column levels
+    max_num_levels = max(bestmatch_true_particles_df.columns.nlevels, spine_part_df.columns.nlevels)
+    spine_part_df.columns = pd.MultiIndex.from_tuples(
+        [tuple(list(c) + [""] * (max_num_levels - len(c))) for c in spine_part_df.columns]
     ) 
+    #print("\nSPINE_PART_DF_AFTER_MERGING")
+    #print("\n".join(str(col) for col in bestmatch_true_particles_df.columns))
 
-    # put everything in epartdf
-    for c in bestmatch_trueparticles.columns:
-        tuple_key = ("truth",) + c
-        epartdf[tuple_key] = bestmatch_trueparticles[c]
+    # Add true information to SPINE reco particle dataframe
+    for c in bestmatch_true_particles_df.columns:
+        spine_part_df[c] = bestmatch_true_particles_df[c]
+
     # Fix position names (I0, I1, I2) -> (x, y, z)
     def mappos(s):
         if s == "I0": return "x"
@@ -716,10 +736,10 @@ def make_spinepartdf(f):
         if s == "I2": return "z"
         return s
     def fixpos(c):
-        rename = False
         new_tuple = c
         sub_columns = ["momentum", "end_point", "start_point", "start_dir", "end_dir", "vertex"]
-        if c[0] == "truth":
+        true_prefixes = [spine_true_part_df_prefix, true_part_df_prefix]
+        if c[0] in true_prefixes:
             if c[1] in sub_columns:
                 new_tuple = tuple([c[0]] + [c[1]] + [mappos(c[2])] + list(c[3:]))
         else:
@@ -727,7 +747,8 @@ def make_spinepartdf(f):
                 new_tuple = tuple([c[0]] + [mappos(c[1])] + list(c[2:]))
         return new_tuple
 
+    spine_part_df.columns = pd.MultiIndex.from_tuples(
+        [fixpos(c) for c in spine_part_df.columns]
+    )
 
-    epartdf.columns = pd.MultiIndex.from_tuples([fixpos(c) for c in epartdf.columns])
-
-    return epartdf
+    return spine_part_df
