@@ -182,5 +182,20 @@ def pad_column_name(col, pad_ref): # TODO: merge with the above "pad" function
     extended_name = col + ("",) * ndummies
     return extended_name
 
+def add_upper_level_to_df(level_name, df):
+    """
+    Prepend a new top level to all columns of a DataFrame, handling both string and MultiIndex columns.
 
+    :param level_name: Name of the new top-level column label.
+    :type level_name: str
+    :param df: Input DataFrame.
+    :type df: pandas.DataFrame
+    :return: DataFrame with ``level_name`` prepended to all column levels.
+    :rtype: pandas.DataFrame
+    """
+    df.columns = pd.MultiIndex.from_tuples(
+        [(level_name,) + (col if isinstance(col, tuple) else (col,)) 
+         for col in df.columns]
+    )
+    return df
 
