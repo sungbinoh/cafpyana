@@ -150,7 +150,6 @@ def run_grid(inputfiles):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        #out.write('rpm -q libuuid-devel\n')
         cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu 7 -i'
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
@@ -167,8 +166,6 @@ def run_grid(inputfiles):
 
     # 5) prepare a package for xrootd
     CAFPYANA_WD = os.environ['CAFPYANA_WD']
-    #cp_XRootD = "cp -r /exp/sbnd/app/users/nrowe/cafpyana/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/XRootD " + MasterJobDir
-    #cp_pyxrootd = "cp -r /exp/sbnd/app/users/nrowe/cafpyana/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/pyxrootd " + MasterJobDir
     cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/XRootD " + MasterJobDir
     cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/pyxrootd " + MasterJobDir
     os.system(cp_XRootD)
