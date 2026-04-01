@@ -86,6 +86,14 @@ def _fv_cut(df, det, inx=10, iny=10, inzfront=10, inzback=50):
     else:
         raise NameError("DETECTOR not valid, should be SBND or ICARUS")
 
+def flash_cut(df, det):
+    if det == "SBND":
+        return df.flash_maxpe > 2000.
+    elif det == "ICARUS":
+        return df.flash_maxpe > 3000.
+    elif det == "ICARUS Run4":
+        return df.flash_maxpe > 3000.
+
 def cosmic_cut(df):
     return (df.nu_score > 0.4)
 

@@ -34,6 +34,7 @@ WGT = "wgt_%i"
 HDR = "hdr_%i"
 MC  = "mcnu_%i"
 CRT = "crt_%i"
+FLASH = "flash_%i"
 
 xsec_syst = [
     # CCQE
@@ -44,18 +45,24 @@ xsec_syst = [
     "ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b2",
     "ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b3",
     "ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b4",
+
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin1',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin2',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin3',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin4',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin5',
     
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin1',
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin2',
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin3',
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin4',
-    # 'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin5',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin5',
 
     'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin1',
     'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin2',
     'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin3',
     'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin4',
-    # 'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin5',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin5',
     
     'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_0',
     'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_1',
@@ -168,14 +175,35 @@ def scale_pot(df, pot, desired_pot):
     return pot, scale
 
 def load_one(fname, idf, 
+    detector=None, # One of SBND, ICARUS, ICARUS Run4
     include_syst=True, nuniv=100, spline=False, xsec_univ=False, # systematic handling
     reweight_aFF=False,
-    load_truth=True, load_crt=False, match_Enu=True, # load extra information
-    offbeampot_SBND=False, offbeampot_ICARUS=False, # POT handling
+    load_flashes=True, load_truth=True, load_crt=False, match_Enu=True, # load extra information
+    offbeampot=False, # POT handling
     preselection=None, # apply preselection cut
-    hdrname=HDR, evtname=EVT, wgtname=WGT, mcname=MC, crtname=CRT): # override default table names
+    flashname=FLASH, hdrname=HDR, evtname=EVT, wgtname=WGT, mcname=MC, crtname=CRT): # override default table names
+
+    assert(detector == "SBND" or detector == "ICARUS" or detector == "ICARUS Run4")
 
     df =  pd.read_hdf(fname, evtname % idf)
+
+    # LOAD FLASHES
+    if load_flashes:
+        if "flash_maxpe" in df.columns:
+          del df["flash_maxpe"]
+
+        flashes = pd.read_hdf(fname, flashname % idf)
+
+        time_name = "firsttime" if detector == "SBND" else "time"
+        if detector == "SBND": pe_scale = 0.66
+        elif detector == "ICARUS": pe_scale = 0.6
+        elif detector == "ICARUS Run4": pe_scale = 0.4
+
+        intime = (flashes[time_name] > -5) & (flashes[time_name] < 5)
+        maxpe = (flashes.totalpe*intime).groupby(level=[0, 1]).max().rename("flash_maxpe")*pe_scale
+        df = df.join(maxpe)
+
+    # Apply preselection
     if preselection is not None:
         df = df[preselection(df)]
 
@@ -203,16 +231,16 @@ def load_one(fname, idf,
     match = match.set_index(match_ind, append=True).droplevel([0,1]).sort_index()
 
     # LOAD POT
-    if offbeampot_SBND:
-        N_GATES_ON_PER_5e12POT = 1.05104 # TODO: update
-        pot = hdr.noffbeambnb.sum()*N_GATES_ON_PER_5e12POT*5e12
-    elif offbeampot_ICARUS:
-        trig = pd.read_hdf(fname, "trig_%i" % idf)
-        N_GATES_ON_PER_5e12POT = 1.3886218026202426 # TODO: update
-        pot = trig.gate_delta.sum()*(1-1/20.)*N_GATES_ON_PER_5e12POT*5e12
+    if offbeampot:
+        if detector == "SBND":
+            N_GATES_ON_PER_5e12POT = 1.05104 # TODO: update
+            pot = hdr.noffbeambnb.sum()*N_GATES_ON_PER_5e12POT*5e12
+        else:
+            trig = pd.read_hdf(fname, "trig_%i" % idf)
+            N_GATES_ON_PER_5e12POT = 1.3886218026202426 # TODO: update
+            pot = trig.gate_delta.sum()*(1-1/20.)*N_GATES_ON_PER_5e12POT*5e12
     else:
         pot = hdr.pot.sum()
-
     # LOAD TRUTH
     if load_truth:
         mcdf = pd.read_hdf(fname, mcname % idf)
@@ -297,14 +325,17 @@ def load_one(fname, idf,
     return mrg, match, pot
 
 
-def load(fname, **kwargs):
+def load(fname, maxdf=None, **kwargs):
     with h5py.File(fname, "r") as f:
         ndf = len([k for k in f.keys() if k.startswith("hdr")])
+
+    if maxdf is None:
+        maxdf = ndf
 
     pots = 0
     dfs = []
     matches = []
-    for idf in range(ndf):
+    for idf in range(min(ndf, maxdf)):
         df, match, pot = load_one(fname, idf, **kwargs)
         pots += pot
         dfs.append(df)
