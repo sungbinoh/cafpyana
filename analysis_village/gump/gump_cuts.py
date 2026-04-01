@@ -29,7 +29,20 @@ SBNDFVCuts = {
     }
 }
 
-ICARUSFVCuts = {
+ICARUSRun2FVCuts = {
+    "C0": {
+        "x": {"min": -210.22, "max": -61.94}, # exluce EE in Run 2
+        "y": {"min": -181.86, "max": 134.96},
+        "z": {"min": -894.950652270838, "max": 894.950652270838}
+    },
+    "C1": {
+        "x": {"min": 61.94, "max": 358.49},
+        "y": {"min": -181.86, "max": 134.96},
+        "z": {"min": -894.950652270838, "max": 894.950652270838}
+    }
+}
+
+ICARUSRun4FVCuts = {
     "C0": {
         "x": {"min": -358.49, "max": -61.94},
         "y": {"min": -181.86, "max": 134.96},
@@ -46,7 +59,9 @@ def vtxfv_cut(df, det):
     return _fv_cut(df, det, inzback=50)
 
 def slcfv_cut(df, det):
-    vtx = pd.DataFrame({'x': df.slc_vtx_x,
+    vtx = pd.DataFrame({
+                           'Run': df.Run,
+                           'x': df.slc_vtx_x,
                            'y': df.slc_vtx_y,
                            'z': df.slc_vtx_z}, index=df.index)
     return vtxfv_cut(vtx, det)
@@ -55,27 +70,42 @@ def trkfv_cut(df, det):
     return _fv_cut(df, det, inzback=10)
 
 def mufv_cut(df, det):
-    vtx = pd.DataFrame({'x': df.mu_end_x,
+    vtx = pd.DataFrame({
+                           'Run': df.Run,
+                           'x': df.mu_end_x,
                            'y': df.mu_end_y,
                            'z': df.mu_end_z}, index=df.index)
     return trkfv_cut(vtx, det)
 
 def pfv_cut(df, det):
-    vtx = pd.DataFrame({'x': df.p_end_x,
+    vtx = pd.DataFrame({
+                           'Run': df.Run,
+                           'x': df.p_end_x,
                            'y': df.p_end_y,
                            'z': df.p_end_z}, index=df.index)
     return trkfv_cut(vtx, det)
 
 def _fv_cut(df, det, inx=10, iny=10, inzfront=10, inzback=50):
-    if det == "ICARUS":
-        return (((df.x < (ICARUSFVCuts['C0']['x']['max'] - inx)) & (df.x > (ICARUSFVCuts['C0']['x']['min'] + inx))) |\
-                ((df.x < (ICARUSFVCuts['C1']['x']['max'] - inx)) & (df.x > (ICARUSFVCuts['C1']['x']['min'] + inx)))) &\
-                 (df.y < (ICARUSFVCuts['C0']['y']['max'] - iny)) & (df.y > (ICARUSFVCuts['C0']['y']['min'] + iny)) &\
-                 (df.z < (ICARUSFVCuts['C0']['z']['max'] - inzback)) & (df.z > (ICARUSFVCuts['C0']['z']['min'] + inzfront))
-
-
+    if "ICARUS" in det:
+        FVRun2 = (((df.x < (ICARUSRun2FVCuts['C0']['x']['max'] - inx)) & (df.x > (ICARUSRun2FVCuts['C0']['x']['min'] + inx))) |\
+                ((df.x < (ICARUSRun2FVCuts['C1']['x']['max'] - inx)) & (df.x > (ICARUSRun2FVCuts['C1']['x']['min'] + inx)))) &\
+                 (df.y < (ICARUSRun2FVCuts['C0']['y']['max'] - iny)) & (df.y > (ICARUSRun2FVCuts['C0']['y']['min'] + iny)) &\
+                 (df.z < (ICARUSRun2FVCuts['C0']['z']['max'] - inzback)) & (df.z > (ICARUSRun2FVCuts['C0']['z']['min'] + inzfront))
+        FVRun4 = (((df.x < (ICARUSRun4FVCuts['C0']['x']['max'] - inx)) & (df.x > (ICARUSRun4FVCuts['C0']['x']['min'] + inx))) |\
+                ((df.x < (ICARUSRun4FVCuts['C1']['x']['max'] - inx)) & (df.x > (ICARUSRun4FVCuts['C1']['x']['min'] + inx)))) &\
+                 (df.y < (ICARUSRun4FVCuts['C0']['y']['max'] - iny)) & (df.y > (ICARUSRun4FVCuts['C0']['y']['min'] + iny)) &\
+                 (df.z < (ICARUSRun4FVCuts['C0']['z']['max'] - inzback)) & (df.z > (ICARUSRun4FVCuts['C0']['z']['min'] + inzfront))
+        if det == "ICARUS":
+            ret = FVRun2
+            ret[df.Run == 4] = FVRun4[df.Run == 4]
+            return ret
+        elif det == "ICARUS Run2":
+            return FVRun2
+        elif det == "ICARUS Run4":
+            return FVRun4
+        else:
+            raise NameError("DETECTOR not valid, should be SBND or ICARUS Run2 or ICARUS Run4")
     elif det == "SBND":
-
         return ((df.x < SBNDFVCuts['lowYZ']['x']['max'] - inx) & (df.x > SBNDFVCuts['lowYZ']['x']['min'] + inx) &\
                 (df.y < SBNDFVCuts['lowYZ']['y']['max'] - iny) & (df.y > SBNDFVCuts['lowYZ']['y']['min'] + iny) &\
                 (df.z < SBNDFVCuts['lowYZ']['z']['max']) & (df.z > SBNDFVCuts['lowYZ']['z']['min'] + inzfront)) |\
@@ -84,12 +114,14 @@ def _fv_cut(df, det, inx=10, iny=10, inzfront=10, inzback=50):
                 (df.z < SBNDFVCuts['highYZ']['z']['max'] - inzback) & (df.z > SBNDFVCuts['highYZ']['z']['min']))
 
     else:
-        raise NameError("DETECTOR not valid, should be SBND or ICARUS")
+        raise NameError("DETECTOR not valid, should be SBND or ICARUS Run2 or ICARUS Run4")
 
 def flash_cut(df, det):
     if det == "SBND":
         return df.flash_maxpe > 2000.
     elif det == "ICARUS":
+        return df.flash_maxpe > 3000.
+    elif det == "ICARUS Run2":
         return df.flash_maxpe > 3000.
     elif det == "ICARUS Run4":
         return df.flash_maxpe > 3000.
