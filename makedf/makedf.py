@@ -440,15 +440,15 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
         chi2_pids = []
         for plane in range(0, 3):
             trkhitdf = make_trkhitdf(f, plane)
-            if det == "SBND": ## FIXME
-                trkhitdf = trkhitdf[InFV(df = trkhitdf, inzback = 0., det = "SBND_nohighyz")]
-            #dqdx_redo = chi2pid.dqdx(trkhitdf, gain=det, calibrate=det, isMC=ismc)
+            #if det == "SBND": ## FIXME
+            #    trkhitdf = trkhitdf[InFV(df = trkhitdf, inzback = 0., det = "SBND_nohighyz")]
+            #dqdx_redo = chi2pid.dqdx(trkhitdf, gain=None, calibrate=det, isMC=ismc)
             dedx_redo = chi2pid.dedx(trkhitdf, gain=det, calibrate=det, plane=plane, isMC=ismc)
-            dedx_bias = (dedx_redo - trkhitdf.dedx) / trkhitdf.dedx
+            #dedx_bias = (dedx_redo - trkhitdf.dedx) / trkhitdf.dedx
             trkhitdf["dedx_redo"] = dedx_redo
             #trkhitdf["dqdx_redo"] = dqdx_redo
             #trkhitdf["dedx_bias"] = dedx_bias
-            #print(trkhitdf[trkhitdf.rr < 26.].head(50))
+            #print(trkhitdf[trkhitdf.rr < 26.][['dedx', 'dedx_redo', 'dedx_bias', 'dqdx', 'dqdx_redo', 'tpc', 'etau', 'run', 'iov', 'rho']].head(50))
             for par in ['muon', 'proton']:
                 this_chi2_new, this_chi2_ndof = chi2pid.chi2par(trkhitdf, dedxname="dedx_redo", par=par)
                 this_chi2_col = ('pfp', 'trk', 'chi2pid', 'I' + str(plane), 'chi2_' + par + '_new', '')
