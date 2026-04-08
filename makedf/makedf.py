@@ -1,3 +1,4 @@
+from functools import reduce
 from pyanalib.pandas_helpers import *
 from .branches import *
 from .util import *
@@ -702,3 +703,40 @@ def make_spine_part_df(f):
 
     rename_to_XYZ(spine_part_df, cols_to_rename)
     return spine_part_df
+
+def make_spine_flash_df(f):
+    """
+    SPINE dataframe maker which containes flash branches from true and reco SPINE interactions.
+
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
+
+    :return: SPINE flashes dataframe
+    :rtype: pd.DataFrame   
+    """
+
+    rec_tree = f["recTree"]
+
+    # Load SPINE flash branches for reco interactions.
+    spineint_flashids_df        = loadbranches(rec_tree, spineint_flashids_branches)
+    spineint_flashscores_df     = loadbranches(rec_tree, spineint_flashscores_branches)
+    spineint_flashtimes_df      = loadbranches(rec_tree, spineint_flashtimes_branches)
+    spineint_flashvolumeids_df  = loadbranches(rec_tree, spineint_flashvolumeids_branches)
+
+    # Load SPINE flash branches for true interactions.
+    spinetint_flashids_df       = loadbranches(rec_tree, spinetint_flashids_branches)
+    spinetint_flashscores_df    = loadbranches(rec_tree, spinetint_flashscores_branches)
+    spinetint_flashtimes_df     = loadbranches(rec_tree, spinetint_flashtimes_branches)
+    spinetint_flashvolumeids_df = loadbranches(rec_tree, spinetint_flashvolumeids_branches)
+
+    # Unify column index names across all flash dataframes.
+    dfs = [spineint_flashids_df, spineint_flashscores_df, spineint_flashtimes_df, spineint_flashvolumeids_df,
+        spinetint_flashids_df, spinetint_flashscores_df, spinetint_flashtimes_df, spinetint_flashvolumeids_df]
+    for df in dfs:
+        assert df.index.nlevels == 3, f"Unexpected index depth: {df.index.nlevels}"
+        df.index.names = ["entry", "rec.dlp..index", "rec.dlp.flash..index"]
+
+    # Join reco and true flash dataframes.
+    spine_flash_df = reduce(lambda l, r: l.join(r, how='outer'), dfs)
+
+    return spine_flash_df
