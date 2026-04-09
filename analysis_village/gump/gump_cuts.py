@@ -126,10 +126,12 @@ def flash_cut(df, det):
     elif det == "ICARUS Run4":
         return df.flash_maxpe > 3000.
 
-def cosmic_cut(df):
-    df = add_opening_angle_mu_p(df)
-
-    return (df.nu_score > 0.4) & (df["mu_p_opening_angle_deg"] < 155)
+def cosmic_cut(df, is_old=False):
+    if is_old:
+        return (df.nu_score >0.4)
+    else:
+        df = add_opening_angle_mu_p(df)
+        return (df.nu_score > 0.4) & (df["mu_p_opening_angle_deg"] < 155)
 
 def add_opening_angle_mu_p(df, out_col="mu_p_opening_angle_deg", degrees=True):
     mu = df[["mu_dir_x", "mu_dir_y", "mu_dir_z"]].to_numpy(dtype=float)
@@ -163,9 +165,12 @@ def pid_cut_df(df):
         df.prot_chi2_of_mu_cand, df.prot_chi2_of_prot_cand, df.mu_len)
 
 def pid_cut(mu_chi2_mu_cand, mu_chi2_prot_cand, prot_chi2_mu_cand,
-            prot_chi2_prot_cand, mu_len):
+            prot_chi2_prot_cand, mu_len, is_old=False):
+    if is_old:
+        MUSEL_MUSCORE_TH, MUSEL_PSCORE_TH, MUSEL_LEN_TH = 15, 90, 50
+    else:
+        MUSEL_MUSCORE_TH, MUSEL_PSCORE_TH, MUSEL_LEN_TH = 30, 80, 25
 
-    MUSEL_MUSCORE_TH, MUSEL_PSCORE_TH, MUSEL_LEN_TH = 30, 80, 25 #old: 15, 90, 50
     mu_cut = (mu_chi2_mu_cand < MUSEL_MUSCORE_TH) & \
              (prot_chi2_mu_cand > MUSEL_PSCORE_TH) & \
              (mu_len > MUSEL_LEN_TH)
@@ -218,12 +223,40 @@ def breakdown_top(var, df):
            ]
     return ret
 
-def all_cuts(recodf, DETECTOR):
+def old_cuts(recodf, DETECTOR):
     ## fv cut
     recodf = recodf[slcfv_cut(recodf, DETECTOR)]
 
     ### NuScore cut
+    recodf = recodf[cosmic_cut(recodf, is_old=True)]
+
+    ### Two prong cut
+    recodf = recodf[twoprong_cut(recodf)]
+
+    ### containment cut
+    recodf = recodf[mufv_cut(recodf, DETECTOR)]
+    recodf = recodf[pfv_cut(recodf, DETECTOR)]
+
+    ### PID cut
+    recodf = recodf[pid_cut(recodf.mu_chi2_of_mu_cand, recodf.mu_chi2_of_prot_cand,
+                            recodf.prot_chi2_of_mu_cand, recodf.prot_chi2_of_prot_cand,
+                            recodf.mu_len, is_old=True)]
+
+    ### crthitveto cut
+    if DETECTOR == "ICARUS":
+        recodf = recodf[crthitveto_cut(recodf)]
+
+    return recodf
+
+def all_cuts(recodf, DETECTOR):
+    ## fv cut
+    recodf = recodf[slcfv_cut(recodf, DETECTOR)]
+
+    ### cosmic cut
     recodf = recodf[cosmic_cut(recodf)]
+
+    ### flash cut
+    recodf = recodf[flash_cut(recodf, DETECTOR, det_run)]
 
     ### Two prong cut
     recodf = recodf[twoprong_cut(recodf)]
@@ -236,10 +269,6 @@ def all_cuts(recodf, DETECTOR):
     recodf = recodf[pid_cut(recodf.mu_chi2_of_mu_cand, recodf.mu_chi2_of_prot_cand,
                             recodf.prot_chi2_of_mu_cand, recodf.prot_chi2_of_prot_cand,
                             recodf.mu_len)]
-
-    ### crthitveto cut
-    if DETECTOR == "ICARUS":
-        recodf = recodf[crthitveto_cut(recodf)]
 
     return recodf
 

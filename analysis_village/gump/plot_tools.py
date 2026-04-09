@@ -27,6 +27,73 @@ HAWKS_COLORS = ["#315031", "#d54c28", "#1e3f54", "#c89648", "#43140b", "#95af8b"
 FONTSIZE = 14
 plt.style.use('/exp/sbnd/app/users/nrowe/cafpyana/analysis_village/gump/dune.mplstyle')
 
+def bin_centers(b):
+    return 0.5 * (b[:-1] + b[1:])
+
+def plot_arrows(df, n=None, mask_bool=True, x='z', y='x', title_str=''):
+    """
+    Plots muon trajectories as arrows to show direction.
+    """
+    # Filter for phi range and limit to 100
+    if n:
+        df = df.head(n)
+    mask = (df['mu_phi'] > -120) & (df['mu_phi'] < -50)
+
+    if mask_bool:
+        df_sub = df[mask]
+    else:
+        df_sub = df
+    if len(df_sub) > 0:
+        plt.figure(figsize=(10, 8))
+        
+        # Calculate displacement vectors
+        mu_dz = df_sub[f'mu_end_{x}'] - df_sub[f'slc_vtx_{x}']
+        mu_dx = df_sub[f'mu_end_{y}'] - df_sub[f'slc_vtx_{y}']
+        
+        p_dz = df_sub[f'p_end_{x}'] - df_sub[f'slc_vtx_{x}']
+        p_dx = df_sub[f'p_end_{y}'] - df_sub[f'slc_vtx_{y}']
+        
+        # quiver(x_start, y_start, dx, dy)
+        # angles='xy', scale_units='xy', scale=1 ensures the arrows 
+        # point exactly to the end coordinates.
+        mu_q = plt.quiver(df_sub[f'slc_vtx_{x}'], df_sub[f'slc_vtx_{y}'], mu_dz, mu_dx, 
+                       color='blue', alpha=0.6, 
+                       angles='xy', scale_units='xy', scale=1,
+                       width=0.003, headwidth=5, headlength=7, label='Muons')
+    
+        p_q = plt.quiver(df_sub[f'slc_vtx_{x}'], df_sub[f'slc_vtx_{y}'], p_dz, p_dx, 
+                       color='purple', alpha=0.6, 
+                       angles='xy', scale_units='xy', scale=1,
+                       width=0.003, headwidth=5, headlength=7, label='Protons')
+        
+        # Optional: Scatter the vertex points for clarity
+        plt.scatter(df_sub[f'slc_vtx_{x}'], df_sub[f'slc_vtx_{y}'], 
+                    color='red', s=10, label='Vertex', zorder=3)
+
+        if x == "z":
+            plt.xlim(0., 500.)
+        else:
+            plt.xlim(-200., 200.)
+
+        if y == "z":
+            plt.ylim(0., 500.)
+        else:
+            plt.ylim(-200., 200.) 
+        
+        plt.xlabel(f'{x} Position [cm]')
+        plt.ylabel(f'{y} Position [cm]')
+        first_str=''
+        if n:
+            first_str = f"(First {n}) "
+        if mask_bool:
+            plt.title(f'Muon Directionality {first_str}\n$\phi \in [-120, -50]$ '+title_str)
+        else:
+            plt.title(f'Muon Directionality {first_str}'+title_str)
+            
+        plt.legend()
+        plt.grid(True, linestyle=':', alpha=0.6)
+        plt.show()
+
 def make_all_plots(df_nd, df_fd, cut_stage, mode_labels, top_labels, det_labels):
     sbnd_title = f"{cut_stage}"
     icarus_title = f"{cut_stage}"
