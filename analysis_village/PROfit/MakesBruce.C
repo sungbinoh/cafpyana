@@ -140,6 +140,15 @@ void MakesBruce(const char* fileName = "input.root", const char* output_filename
                     for (size_t j = 0; j < 7; j++) {
                         std::cout << "multisigma Entry[" << i << "]:" << " Element[" << j << "]: " << weights_multisigma[j] << std::endl;
                         temp.at(j) = weights_multisigma[j];
+			if (weights_multisigma[j] > 0.0 and weights_multisigma[j] < 1.1){
+                            temp.at(j) = weights_multisigma[j];
+			}
+			else if (weights_multisigma[j] < 0.0){
+                            temp.at(j) = 0.0;
+			}
+			else if (weights_multisigma[j] > 10.0){
+                            temp.at(j) = 10.0;
+			}
                     }
                     filler_map[branchName] = temp;
                     filler_sigmas_map[branchName] = temp_sigmas;
