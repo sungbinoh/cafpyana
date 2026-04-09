@@ -81,10 +81,28 @@ def save_histogram(filename, hist_values, x_edges, y_edges):
 def make_hists_from_files(files, output):
     b_E = np.array([0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.25, 1.5, 3.0])
     b_p = np.array([0.0, 0.2, 0.4, 0.6])
+    
+    if sum([isinstance(f, list) for f in files]) > 0:
+        print("Stacked files detected! Will split the matching.")
+        batched_dataframes = []
+        for batch in files:
+            batched_dataframes.append(match_across_detvar(batch))
 
-    dataframes = match_across_detvar(files)
+        first_set = []
+        second_set = []
 
+        for df in batched_dataframes:
+            first_set.append(df[0])
+
+        for df in batched_dataframes:
+            second_set.append(df[1])
+
+        dataframes = [pd.concat(first_set), pd.concat(second_set)]    
+    else:
+        dataframes = match_across_detvar(files)
+    
     hist2ds = []
+
     for df in dataframes:
         p = df['pot'].astype('float64').sum()
         df = all_cuts(df, df.detector.iloc[0])
@@ -138,20 +156,43 @@ def match_across_detvar(files):
 
     keep_cols = ['slc_vtx_x', 'slc_vtx_y', 'slc_vtx_z', 'nu_E_calo', 'detector', 'tmatch_idx', 'del_p', 'nu_score',
                  'mu_chi2_of_mu_cand', 'mu_chi2_of_prot_cand', 'prot_chi2_of_mu_cand', 'prot_chi2_of_prot_cand', 'mu_len',
-                 'other_trk_length', 'other_shw_length', 'mu_end_x', 'mu_end_y', 'mu_end_z', 'p_end_x', 'p_end_y', 'p_end_z', 'crthit', 'nu_E_true']
+                 'other_trk_length', 'other_shw_length', 'mu_end_x', 'mu_end_y', 'mu_end_z', 'p_end_x', 'p_end_y', 'p_end_z', 'crthit', 'nu_E_true', 'mu_dir_x', 'mu_dir_y', 'mu_dir_z', 'p_dir_x', 'p_dir_y', 'p_dir_z']
     dataframes = []
     unfilt_mcdataframes = []
     unfilt_recodataframes = []
     
     for f in files:
-        dfs = load_dfs(f, ['evt', 'mcnu', 'hdr']) 
-        mcdf = dfs['mcnu']
-        recodf = dfs['evt']
-        recodf = recodf[keep_cols]
-        hdrdf = dfs['hdr']
+        if isinstance(f, list):
+            sub_mcdfs = []
+            sub_recodfs = []
+            sub_hdrdfs = []
+            for sub_f in f:
+                sub_dfs = load_dfs(sub_f, ['evt', 'mcnu', 'hdr']) 
+                sub_mcdf = sub_dfs['mcnu']
+                sub_recodf = sub_dfs['evt']
+                sub_recodf = sub_recodf[keep_cols]
+                sub_hdrdf = sub_dfs['hdr']
+                sub_mcdfs.append(sub_mcdf)
+                sub_recodfs.append(sub_recodf)
+                sub_hdrdfs.append(sub_hdrdf)
 
-        if 'del_p' in mcdf.columns:
-            mcdf.rename(columns={'del_p':'del_p_true'}, inplace=True)
+            mcdf = pd.concat(sub_mcdfs)
+            print(f"mcdf: {sys.getsizeof(mcdf)}")
+            recodf = pd.concat(sub_recodfs)
+            print(f"recodf: {sys.getsizeof(recodf)}")
+            hdrdf = pd.concat(sub_hdrdfs)
+            print(f"hdrdf: {sys.getsizeof(hdrdf)}")
+
+        else:
+            dfs = load_dfs(f, ['evt', 'mcnu', 'hdr']) 
+            mcdf = dfs['mcnu']
+            recodf = dfs['evt']
+            recodf = recodf[keep_cols]
+            hdrdf = dfs['hdr']
+
+        for c in ['del_p', 'mu_end_x', 'mu_end_y', 'mu_end_z', 'p_end_x', 'p_end_y', 'p_end_z', 'mu_dir_x', 'mu_dir_y', 'mu_dir_z', 'p_dir_x', 'p_dir_y', 'p_dir_z']:
+            if c in mcdf.columns:
+                mcdf.rename(columns={c:c+'_true'}, inplace=True)
 
         DETECTOR = recodf.detector.iloc[0]
         
@@ -173,7 +214,6 @@ def match_across_detvar(files):
 
     # now match up all of our mc dfs with hdr info added
     filt_mcdataframes = filter_n_common_events(unfilt_mcdataframes, keys=["run", "subrun", "evt", "nu_E"])    
-
     dataframes = [apply_mc_filt_to_reco(filt_mc, reco) for filt_mc, reco in zip(filt_mcdataframes, unfilt_recodataframes)]
     return dataframes
 
@@ -268,7 +308,7 @@ def filter_n_common_events(dfs, keys=['run', 'subrun', 'evt', 'nu_E_true']):
 
     return filtered_dfs
 
-def make_plots(dataframes, norms=[], file_titles=["0xSCE", "CV", "2xSCE"], global_title="GUMP Selection SCE Detector Variations", output_tag='SCE'):
+def make_plots(dataframes, norms=[], wgts=[], file_titles=["0xSCE", "CV", "2xSCE"], global_title="GUMP Selection SCE Detector Variations", output_tag='SCE'):
     if len(norms) == 0:
         norms = np.ones(len(dataframes))
 
@@ -279,14 +319,14 @@ def make_plots(dataframes, norms=[], file_titles=["0xSCE", "CV", "2xSCE"], globa
     reco_vars = ['nu_E_calo', 'del_p']
 
     # 1D dists
-
     colors = ['red', 'blue', 'green']
     for var, b in zip(reco_vars, bins):
         plt.figure(figsize=(10, 6))
         plt.ticklabel_format(axis='y', style='sci', scilimits=(0,0))
-        for df, t, norm, c in zip(dataframes, file_titles, norms, colors):
-            n, _, _ = plt.hist(df[var], bins=b, label=t, weights=(1/norm)*np.ones(len(df.nu_E_calo)), histtype='step', linewidth=1, color=c)
-            nerr, _ = np.histogram(df[var], bins=b, weights=(1/(norm)**2)*np.ones(len(df.nu_E_calo)))
+        for df, t, norm, c, w in zip(dataframes, file_titles, norms, colors, wgts):
+            print(norm)
+            n, _, _ = plt.hist(df[var], bins=b, label=t, weights=(1/norm)*w, histtype='step', linewidth=1, color=c)
+            nerr, _ = np.histogram(df[var], bins=b, weights=(1/(norm)**2)*w)
             mcstaterr = np.sqrt(nerr)
             plt.bar(b[:-1], height=2*mcstaterr, bottom=n-mcstaterr, width=(b[1:]-b[:-1]), align='edge', color=c, alpha=0.5)[0]
 
@@ -299,15 +339,15 @@ def make_plots(dataframes, norms=[], file_titles=["0xSCE", "CV", "2xSCE"], globa
 
     # 2D dist
     max_counts = []
-    for df, norm in zip(dataframes, norms):
-        counts, _, _ = np.histogram2d(df.nu_E_calo, df.del_p, weights=(1/norm)*np.ones(len(df.nu_E_calo)), bins=[b_E, b_p])
+    for df, norm, w in zip(dataframes, norms, wgts):
+        counts, _, _ = np.histogram2d(df.nu_E_calo, df.del_p, weights=(1/norm)*w, bins=[b_E, b_p])
         max_counts.append(counts.max())
     global_vmax = max(max_counts)
 
     fig, axes = plt.subplots(nrows=1, ncols=len(dataframes), figsize=(18, 5), constrained_layout=True)
     hist2ds = []
-    for df, a, t, norm in zip(dataframes, axes, file_titles, norms):
-        im = a.hist2d(df.nu_E_calo, df.del_p, bins=[b_E, b_p], vmin=0.0, vmax=global_vmax, weights = (1/norm)*np.ones((len(df.nu_E_calo))))
+    for df, a, t, norm, w in zip(dataframes, axes, file_titles, norms, wgts):
+        im = a.hist2d(df.nu_E_calo, df.del_p, bins=[b_E, b_p], vmin=0.0, vmax=global_vmax, weights = (1/norm)*w)
         hist2ds.append(np.transpose(im[0]))
 
         a.set_xlabel(r'Reconstructed Energy $E_{calo}$ [GeV]')
@@ -341,7 +381,7 @@ def plot_2d_hist_from_file(filename, plot_title, output_tag):
 
     plt.figure(figsize=(10, 6))
     X, Y = np.meshgrid(x_edges, y_edges)
-    mesh = plt.pcolormesh(x_edges, y_edges, z_values.T, cmap='seismic', linewidth=0.1, vmin=0.8, vmax=1.2)
+    mesh = plt.pcolormesh(x_edges, y_edges, z_values.T, cmap='seismic', linewidth=0.1, vmin=0.5, vmax=1.5)
     
     plt.colorbar(mesh, label='Value')
     plt.title(plot_title)
@@ -355,58 +395,57 @@ def plot_2d_hist_from_file(filename, plot_title, output_tag):
 def main():
     """Main analysis pipeline."""
 
-    make_hists_from_files(["/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_Nom.df", "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_WMYZ.df"], "rwt_outputs/YZ.txt")
-    make_hists_from_files(["/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_Nom.df", "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_WMXThetaXW.df"], "rwt_outputs/XThetaXW.txt")
+    prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/"
 
-    make_hists_from_files(["/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_Nom.df", "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_0xSCE.df"], "rwt_outputs/min_SCE.txt")
-    make_hists_from_files(["/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_Nom.df", "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_2xSCE.df"], "rwt_outputs/pls_SCE.txt")
+    WMYZ_inputs = [[prefix+"SBND_SpringMC_Nom.df", prefix+"SBND_SpringMC_WMYZ.df"]]
+    WMXThetaXW_inputs = [[prefix+"SBND_SpringMC_Nom.df", prefix+"SBND_SpringMC_WMXThetaXW.df"]]
+    for i in range(20):
+        WMYZ_inputs.append([f"/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/SBND_SpringMC_rewgt_5_{i}.df", prefix+"SBND_SpringMC_EXTRA_WMYZ.df"])
+        WMXThetaXW_inputs.append([f"/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/SBND_SpringMC_rewgt_5_{i}.df", prefix+"SBND_SpringMC_EXTRA_WMXThetaXW.df"])
+
+    #make_hists_from_files(WMYZ_inputs, "rwt_outputs/YZ.txt")
+    #make_hists_from_files(WMXThetaXW_inputs, "rwt_outputs/XThetaXW.txt")
+    #make_hists_from_files(["/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/SBND_SpringMC_Nom.df", "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/SBND_SpringMC_0xSCE.df"], "rwt_outputs/min_SCE.txt")
+    #make_hists_from_files(["/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/SBND_SpringMC_Nom.df", "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/SBND_SpringMC_2xSCE.df"], "rwt_outputs/pls_SCE.txt")
 
     dfs = []
     for i in range(20):
-        dfs.append(load_dfs(f"/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/no-flashes/SBND_SpringMC_rewgt_{i}.df", ['evt'])['evt'])
+        dfs.append(load_dfs(f"/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/SBND_SpringMC_rewgt_5_{i}.df", ['evt'])['evt'])
     recodf = pd.concat(dfs)
+
     recodf_precut = recodf.copy()
-    recodf = all_cuts(recodf, recodf.detector.iloc[0])
+    recodf = all_cuts(recodf, "SBND")
+
     make_hists_from_var(PID.get_smear_vars(recodf_precut), recodf.copy(), 'SBND_smear.txt')
     make_hists_from_var(PID.get_gain_vars(recodf_precut), recodf.copy(), 'SBND_gain.txt')
 
-    recodf = load_dfs(f"/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/ICARUS_SpringMCOverlay_rewgt.df", ['evt'])['evt']
+    dfs = []
+    for i in range(10):
+        dfs.append(all_cuts(load_dfs(f"/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/ICARUSRun4_SpringMCOverlay_rewgt_{i}.df", ['evt'])['evt'], "ICARUS"))
+
+    recodf = pd.concat(dfs)
     recodf_precut = recodf.copy()
     recodf = all_cuts(recodf, "ICARUS")
     make_hists_from_var(PID.get_smear_vars(recodf_precut), recodf.copy(), 'ICARUS_smear.txt')
     make_hists_from_var(PID.get_gain_vars(recodf_precut), recodf.copy(), 'ICARUS_gain.txt')
 
-    #just a random dataframe to test map with
-    apply_double_map(recodf.copy(), 'rwt_outputs/min_SCE.txt', 'rwt_outputs/pls_SCE.txt', 'CAFPYANA_SBN_v1_multisigma_SCE')
-    apply_map(recodf, 'rwt_outputs/YZ.txt', 'CAFPYANA_SBN_v1_multisigma_WMYZ')
-    apply_map(recodf, 'rwt_outputs/XThetaXW.txt', 'CAFPYANA_SBN_v1_multisigma_WMXThetaXW')
-
-
 def plot():
-    # SCE
-    prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
-    dataframes = match_across_detvar([prefix+"SBND_SpringMC_0xSCE.df", prefix+"SBND_SpringMC_Nom.df", prefix+"SBND_SpringMC_2xSCE.df"])
-    pots = []
+    dfs = []
+    for i in range(2):
+        print(i)
+        dfs.append(load_dfs(f"/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/SBND_SpringMC_rewgt_5_{i}.df", ['evt'])['evt'])
 
-    for i in range(len(dataframes)):
-        pots.append(dataframes[i]['pot'].astype('float64').sum())
-        dataframes[i] = all_cuts(dataframes[i], dataframes[i].detector.iloc[0])
+    recodf = all_cuts(pd.concat(dfs), "SBND")
+    SCEdf = apply_double_map(recodf.copy(), 'rwt_outputs/min_SCE.txt', 'rwt_outputs/pls_SCE.txt', 'CAFPYANA_SBN_v1_multisigma_SCE')
+    YZdf = apply_map(recodf.copy(), 'rwt_outputs/YZ.txt', 'CAFPYANA_SBN_v1_multisigma_WMYZ')
+    XThetaXWdf = apply_map(recodf.copy(), 'rwt_outputs/XThetaXW.txt', 'CAFPYANA_SBN_v1_multisigma_WMXThetaXW')
 
-    make_plots(dataframes, norms=pots, file_titles=["0xSCE", "CV", "2xSCE"], global_title="SCE Detector Variations", output_tag='SCE')
+    make_plots([recodf, recodf, recodf], norms=[], wgts=[SCEdf['CAFPYANA_SBN_v1_multisigma_SCE']['ms1'], np.ones_like(SCEdf['CAFPYANA_SBN_v1_multisigma_SCE']['ps1']), SCEdf['CAFPYANA_SBN_v1_multisigma_SCE']['ps1']], file_titles=["0xSCE", "CV", "2xSCE"], global_title="SCE Detector Variations", output_tag='SCE')
+
+    make_plots([recodf, recodf, recodf], norms=[], wgts=[np.ones_like(YZdf['CAFPYANA_SBN_v1_multisigma_WMYZ']['ps1']), YZdf['CAFPYANA_SBN_v1_multisigma_WMYZ']['ps1'], XThetaXWdf['CAFPYANA_SBN_v1_multisigma_WMXThetaXW']['ps1']], file_titles=["CV", "YZ", "XThetaXW"], global_title="WM Detector Variations", output_tag='WM')
 
     plot_2d_hist_from_file("rwt_outputs/min_SCE.txt", "0xSCE Reweight", 'min_SCE')
     plot_2d_hist_from_file("rwt_outputs/pls_SCE.txt", "2xSCE Reweight", 'pls_SCE')
-
-    # WireMod
-    prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
-    dataframes = match_across_detvar([prefix+"SBND_SpringMC_WMXThetaXW.df", prefix+"SBND_SpringMC_WMYZ.df", prefix+"SBND_SpringMC_Nom.df",])
-    pots = []
-    for i in range(len(dataframes)):
-        pots.append(dataframes[i]['pot'].astype('float64').sum())
-        dataframes[i] = all_cuts(dataframes[i], dataframes[i].detector.iloc[0])
-
-    make_plots(dataframes, norms=pots, file_titles=['XThetaXW', 'YZ', 'Nominal'], global_title="WireMod Detector Variations", output_tag="WM")
-
     plot_2d_hist_from_file("rwt_outputs/YZ.txt", "WireMod YZ Variation", 'WMYZ')
     plot_2d_hist_from_file("rwt_outputs/XThetaXW.txt", "WireMod XThetaXW", 'WMXThetaXW')
 
