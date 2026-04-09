@@ -25,7 +25,7 @@ def apply_truth(recodf, mcnudf):
     recodf['genie_mode'] = recodf['genie_mode'].fillna(0)
     return recodf
 
-def apply_systs(recodf, mcnuwgtdf, DETECTOR):
+def apply_systs(recodf, mcnuwgtdf, DETECTOR, det_run):
     # 1. Setup and Matching
     matchdf = recodf.copy()
     matchdf.columns = pd.MultiIndex.from_tuples([(col, '') for col in matchdf.columns])
@@ -38,9 +38,7 @@ def apply_systs(recodf, mcnuwgtdf, DETECTOR):
                 if any(k in c for k in ["GENIE", "Flux", "SBNNuSyst", "InterpWeighting"])]
 
     for col in wgt_cols:
-        print(col)
         newcol = f"multisigma{col}" if "MECq0q3InterpWeighting" in col else col
-        print(np.shape(np.array([matchdf[col][u].values for u in matchdf[col].columns]).T.tolist()))
         recodf_wgt_out[newcol] = np.array([matchdf[col][u].values for u in matchdf[col].columns]).T.tolist()
 
     # 3. Load Mappings
@@ -80,12 +78,25 @@ def apply_systs(recodf, mcnuwgtdf, DETECTOR):
 
     # 6. POT Systematics
     pot_scales = {'ps1': 0.5, 'ms1': -0.525805, 'ps2': 1.0, 'ms2': -1.12726, 'ps3': 1.5, 'ms3': -1.7286, 'cv': 0.0}
-    recodf_wgt_out['pot_run4'] = [[1.0 + (v/100.0) for v in pot_scales.values()] for _ in range(len(recodf))]
+
+    for det in ["SBNDRun1", "ICARUSRun2", "ICARUSRun4"]:
+        if int(det[-1]) == det_run:
+            recodf_wgt_out["POT_multisigma_"+det] = [[1.0 + (v/100.0) for v in pot_scales.values()] for _ in range(len(recodf))]
+        else:
+            recodf_wgt_out["POT_multisigma_"+det] = [[1.0 for _ in pot_scales.values()] for _ in range(len(recodf))]
 
     return recodf_wgt_out
 
 
 def make_gump_ttree_mc(dfname, split):
+
+    # This should be replaced with reading from df later
+    if 'ICARUSRun4' in dfname:
+        det_run = 4
+    if 'ICARUSRun2' in dfname:
+        det_run = 2
+    elif 'SBND' in dfname:
+        det_run = 1
 
     with pd.HDFStore(dfname, mode='r') as store:
         keys = store.keys()
@@ -111,16 +122,20 @@ def make_gump_ttree_mc(dfname, split):
         recodf = pd.read_hdf(dfname)
         mcnuwgtdf  = recodf.copy()
 
+    for c in hdrdf.columns:
+        print(c)
+        print(hdrdf[c])
+
     mcnudf = pd.read_hdf(dfname, key=mcnudf_key)
 
     ## Figure out which detector this is
     DETECTOR = recodf.detector.iloc[0]
 
     ## apply selection
-    recodf = all_cuts(recodf, DETECTOR)
+    recodf = all_cuts(recodf, DETECTOR, det_run)
 
     ## add in systematics
-    recodf_wgt_out = apply_systs(recodf, mcnuwgtdf, DETECTOR)
+    recodf_wgt_out = apply_systs(recodf, mcnuwgtdf, DETECTOR, det_run)
 
     ## grab some truth level information
     recodf = apply_truth(recodf, mcnudf)
@@ -132,6 +147,14 @@ def make_gump_ttree_mc(dfname, split):
     return recodf
 
 def make_gump_ttree_data(dfname, split):
+
+    # This should be replaced with reading from df later
+    if 'ICARUSRun4' in dfname:
+        det_run = 4
+    if 'ICARUSRun2' in dfname:
+        det_run = 2
+    elif 'SBND' in dfname:
+        det_run = 1
 
     with pd.HDFStore(dfname, mode='r') as store:
         keys = store.keys()
@@ -151,6 +174,6 @@ def make_gump_ttree_data(dfname, split):
     DETECTOR = recodf.detector.iloc[0]
 
     ## apply selection
-    recodf = all_cuts(recodf, DETECTOR)
+    recodf = all_cuts(recodf, DETECTOR, det_run)
 
     return recodf
