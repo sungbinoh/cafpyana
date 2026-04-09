@@ -73,36 +73,44 @@ def grab_pot(files, mc_bools, sep_bool=True):
         return sum(pot)
 
 def test():
-    pac_prefix = "/exp/sbnd/data/users/nrowe/"
+    # pac_prefix = "/exp/sbnd/data/users/nrowe/"
 
-    pac_files = []
-    for i in range(7):
-        pac_files.append(pac_prefix+f"SBND_Run1_MC_{i:02d}.df")
-    grab_pot(pac_files, True, False)
+    # pac_files = []
+    # for i in range(7):
+    #     pac_files.append(pac_prefix+f"SBND_Run1_MC_{i:02d}.df")
+    # grab_pot(pac_files, True, False)
 
-    pac_prefix = "/exp/sbnd/data/users/nrowe/PAC/df/"
-    pac_files = []
-    for i in range(35):
-        pac_files.append(pac_prefix+f"ICARUS_Run4_MC_{i:02d}.df")
-    grab_pot(pac_files, True, False)
+    # pac_prefix = "/exp/sbnd/data/users/nrowe/PAC/df/"
+    # pac_files = []
+    # for i in range(35):
+    #     pac_files.append(pac_prefix+f"ICARUS_Run4_MC_{i:02d}.df")
+    # grab_pot(pac_files, True, False)
 
-    prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
+    # prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
 
-    cv_files = []
-    for i in range(19):
-        cv_files.append(prefix+f"SBND_SpringMC_rewgt_{i}.df")
+    # cv_files = []
+    # for i in range(19):
+    #     cv_files.append(prefix+f"SBND_SpringMC_rewgt_{i}.df")
 
-    grab_pot(cv_files, True)
-    grab_pot(prefix+"ICARUS_SpringMCOverlay_rewgt.df", True)
-    grab_pot(prefix+"SBND_SpringLowEMC.df", True)
-    grab_pot(prefix+"SBND_SpringBNBOffData_5000.df", False)
-    grab_pot(prefix+"ICARUS_SpringRun2BNBOff_unblind_prescaled.df", False)
+    # grab_pot(cv_files, True)
+    # grab_pot(prefix+"ICARUS_SpringMCOverlay_rewgt.df", True)
+    # grab_pot(prefix+"SBND_SpringLowEMC.df", True)
+    # grab_pot(prefix+"SBND_SpringBNBOffData_5000.df", False)
+    # grab_pot(prefix+"ICARUS_SpringRun2BNBOff_unblind_prescaled.df", False)
+    gray_prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/"
+    nate_prefix = "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-6/"
+    #grab_pot(gray_prefix+"SBND_SpringBNBOffData_5000.df", False)
+    #grab_pot(nate_prefix+"ICARUSRun4_SpringRun2BNBOff_unblind_prescaled.df", False)
+    #grab_pot(nate_prefix+"ICARUSRun2_SpringRun2BNBOff_unblind_prescaled.df", False)
+    grab_pot(nate_prefix+"ICARUSRun2_Spring_Overlay_Dirt.df", False)
+    grab_pot(nate_prefix+"ICARUSRun4_Spring_Overlay_Dirt.df", False)
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(prog = 'pot',
                                      description = 'POT grabber and related functions for gump analysis.')
     parser.add_argument('-i','--input', nargs='+', type=str)
+    parser.add_argument('-l','--list', type=str)
     parser.add_argument('-t','--test', action='store_true')
 
     args = parser.parse_args()
@@ -111,3 +119,7 @@ if __name__ == "__main__":
         test()
     elif args.input:
         grab_pot(args.input, True, False)
+    elif args.list:
+        with open(args.list, 'r') as file:
+                inputs = file.read().splitlines() 
+        grab_pot(inputs, True, False)
