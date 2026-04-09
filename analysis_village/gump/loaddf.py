@@ -1,3 +1,7 @@
+import os
+import hashlib
+import json
+
 import pandas as pd
 import numpy as np
 import h5py
@@ -38,6 +42,7 @@ WGT = "wgt_%i"
 HDR = "hdr_%i"
 MC  = "mcnu_%i"
 CRT = "crt_%i"
+FLASH = "flash_%i"
 
 xsec_syst = [
     # CCQE
@@ -48,18 +53,24 @@ xsec_syst = [
     "ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b2",
     "ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b3",
     "ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b4",
+
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin1',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin2',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin3',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin4',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin5',
     
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin1',
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin2',
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin3',
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin4',
-    # 'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin5',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin5',
 
     'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin1',
     'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin2',
     'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin3',
     'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin4',
-    # 'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin5',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin5',
     
     'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_0',
     'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_1',
@@ -171,19 +182,89 @@ def scale_pot(df, pot, desired_pot):
     df['glob_scale'] = scale * df.cvwgt
     return pot, scale
 
-def load_one(fname, idf, 
+def _cache_key(fname, idf, **kwargs):
+    """Build a deterministic hash from the input file path, split index, and all keyword args."""
+    key_dict = {"fname": os.path.abspath(fname), "idf": idf}
+    # Only include serializable kwargs (skip preselection function)
+    for k, v in sorted(kwargs.items()):
+        if callable(v):
+            # Use the function's qualified name so different preselections bust the cache
+            key_dict[k] = v.__module__ + "." + v.__qualname__
+        else:
+            key_dict[k] = v
+    raw = json.dumps(key_dict, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+def _write_cache(cache_file, df, match, pot):
+    """Write load_one output to an HDF5 cache file."""
+    os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+    df.to_hdf(cache_file, "df", mode="w")
+    match.to_hdf(cache_file, "match", mode="a")
+    with h5py.File(cache_file, "a") as cf:
+        cf.attrs["pot"] = pot
+
+def load_one(fname, idf,
+    detector=None, # One of SBND, ICARUS, ICARUS Run4
     include_syst=True, nuniv=100, spline=False, xsec_univ=False, # systematic handling
     reweight_aFF=False,
-    load_truth=True, load_crt=False, match_Enu=True, # load extra information
-    offbeampot_SBND=False, offbeampot_ICARUS=False, # POT handling
+    load_flashes=True, load_truth=True, load_crt=False, match_Enu=True, # load extra information
+    offbeampot=False, # POT handling
     preselection=None, # apply preselection cut
-    hdrname=HDR, evtname=EVT, wgtname=WGT, mcname=MC, crtname=CRT): # override default table names
+    cache_dir=None, # directory to cache output; None disables caching
+    flashname=FLASH, hdrname=HDR, evtname=EVT, wgtname=WGT, mcname=MC, crtname=CRT): # override default table names
+
+    assert(detector == "SBND" or detector == "ICARUS Run2" or detector == "ICARUS Run4")
+
+    # Check cache
+    if cache_dir is not None:
+        cache_hash = _cache_key(fname, idf, detector=detector, include_syst=include_syst,
+            nuniv=nuniv, spline=spline, xsec_univ=xsec_univ, reweight_aFF=reweight_aFF,
+            load_flashes=load_flashes, load_truth=load_truth, load_crt=load_crt,
+            match_Enu=match_Enu, offbeampot=offbeampot, preselection=preselection)
+        cache_file = os.path.join(cache_dir, cache_hash + ".h5")
+        if os.path.exists(cache_file):
+            df = pd.read_hdf(cache_file, "df")
+            match = pd.read_hdf(cache_file, "match")
+            with h5py.File(cache_file, "r") as cf:
+                pot = float(cf.attrs["pot"])
+            return df, match, pot
 
     df =  pd.read_hdf(fname, evtname % idf)
+    hdr = pd.read_hdf(fname, hdrname % idf)
+
+    ismc = hdr.ismc.iloc[0] == 1
+
+    # set run 
+    if "SBND" in fname:
+        df["Run"] = 1
+    elif "ICARUS" in fname and "Run4" in fname:
+        df["Run"] = 4
+    elif "ICARUS" in fname:
+        df["Run"] = 2
+    else: assert(False)
+
+    # LOAD FLASHES
+    if load_flashes:
+        if "flash_maxpe" in df.columns:
+          del df["flash_maxpe"]
+
+        flashes = pd.read_hdf(fname, flashname % idf)
+
+        time_name = "firsttime" if detector == "SBND" else "time"
+        if ismc: # Scale PE for MC-only
+            if detector == "SBND": pe_scale = 0.66
+            elif detector == "ICARUS Run2": pe_scale = 0.6
+            elif detector == "ICARUS Run4": pe_scale = 0.4
+        else:
+            pe_scale = 1.0
+
+        intime = (flashes[time_name] > -5) & (flashes[time_name] < 5)
+        maxpe = (flashes.totalpe*intime).groupby(level=[0, 1]).max().rename("flash_maxpe")*pe_scale
+        df = df.join(maxpe)
+
+    # Apply preselection
     if preselection is not None:
         df = df[preselection(df)]
-
-    hdr = pd.read_hdf(fname, hdrname % idf)
 
     match = hdr[["run", "evt"]]
     match_ind = list(match.columns)
@@ -199,7 +280,7 @@ def load_one(fname, idf,
           "y": mcdf.pos_y,
           "z": mcdf.pos_z,
         })
-        any_in_AV = gc._fv_cut(vtx, "ICARUS", 0, 0, 0, 0).groupby(level=[0,1]).any().rename("AVnu")
+        any_in_AV = gc._fv_cut(vtx, detector, 0, 0, 0, 0).groupby(level=[0,1]).any().rename("AVnu")
         match = match.merge(any_in_AV, on=["__ntuple", "entry"], how="left")
 
     df = df.merge(match, on=["__ntuple", "entry"], how="left")
@@ -207,16 +288,20 @@ def load_one(fname, idf,
     match = match.set_index(match_ind, append=True).droplevel([0,1]).sort_index()
 
     # LOAD POT
-    if offbeampot_SBND:
-        N_GATES_ON_PER_5e12POT = 1.05104 # TODO: update
-        pot = hdr.noffbeambnb.sum()*N_GATES_ON_PER_5e12POT*5e12
-    elif offbeampot_ICARUS:
-        trig = pd.read_hdf(fname, "trig_%i" % idf)
-        N_GATES_ON_PER_5e12POT = 1.3886218026202426 # TODO: update
-        pot = trig.gate_delta.sum()*(1-1/20.)*N_GATES_ON_PER_5e12POT*5e12
+    if offbeampot:
+        if detector == "SBND":
+            N_GATES_ON_PER_5e12POT = 1.05104
+            pot = hdr.noffbeambnb.sum()*N_GATES_ON_PER_5e12POT*5e12
+        elif detector == "ICARUS Run4":
+            trig = pd.read_hdf(fname, "trig_%i" % idf)
+            N_GATES_ON_PER_5e12POT = 1.0631936867739828
+            pot = trig.gate_delta.sum()*(1-1/20.)*N_GATES_ON_PER_5e12POT*5e12
+        elif detector == "ICARUS Run2":
+            trig = pd.read_hdf(fname, "trig_%i" % idf)
+            N_GATES_ON_PER_5e12POT = 1.3886218026202426
+            pot = trig.gate_delta.sum()*(1-1/20.)*N_GATES_ON_PER_5e12POT*5e12
     else:
         pot = hdr.pot.sum()
-
     # LOAD TRUTH
     if load_truth:
         mcdf = pd.read_hdf(fname, mcname % idf)
@@ -248,6 +333,8 @@ def load_one(fname, idf,
 
     # EARLY RETURN IF NOT LOADING WEIGHTS
     if not include_syst:
+        if cache_dir is not None:
+            _write_cache(cache_file, df, match, pot)
         return df, match, pot
 
     # LOAD WEIGHTS
@@ -298,17 +385,22 @@ def load_one(fname, idf,
             how="left") ## -- save all sllices
     mrg.loc[np.isnan(mrg[skim.columns[0]]), skim.columns] = 1
 
+    if cache_dir is not None:
+        _write_cache(cache_file, mrg, match, pot)
     return mrg, match, pot
 
 
-def load(fname, **kwargs):
+def load(fname, maxdf=None, **kwargs):
     with h5py.File(fname, "r") as f:
         ndf = len([k for k in f.keys() if k.startswith("hdr")])
+
+    if maxdf is None:
+        maxdf = ndf
 
     pots = 0
     dfs = []
     matches = []
-    for idf in range(ndf):
+    for idf in range(min(ndf, maxdf)):
         df, match, pot = load_one(fname, idf, **kwargs)
         pots += pot
         dfs.append(df)
