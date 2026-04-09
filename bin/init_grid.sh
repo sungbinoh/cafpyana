@@ -1,21 +1,6 @@
 #!/bin/bash 
 
 echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"
-#export machine=${HOSTNAME}
-#if [[ $machine == *sbnd* ]]; then
-#  echo "working on a sbnd machine"
-#  source /cvmfs/larsoft.opensciencegrid.org/spack-packages/setup-env.sh
-#  export CAFPYANA_GRID_OUT_DIR="/pnfs/sbnd/scratch/users/$USER/cafpyana_out"
-#  mkdir -p $CAFPYANA_GRID_OUT_DIR
-#fi
-#if [[ $machine == *icarus* ]]; then
-#  echo "working on a icarus machine"
-#  source /cvmfs/larsoft.opensciencegrid.org/spack-packages/setup-env.sh
-#  export CAFPYANA_GRID_OUT_DIR="/pnfs/icarus/scratch/users/$USER/cafpyana_out"
-#  mkdir -p $CAFPYANA_GRID_OUT_DIR
-#fi
-#spack load hdf5@1.14.3
-#spack load xrootd@5.6.1
 
 ######################################################
 #### setup virtual python env if it is not already set
@@ -44,8 +29,6 @@ pip install --upgrade pip
 pip install wheel setuptools
 cat pip_requirements.txt
 pip install -r pip_requirements.txt
-
-#htgettoken -a htvaultprod.fnal.gov -i sbnd
 
 # Deactivate virtual environment
 echo "Virtual environment '$VENV_NAME' set up successfully with Python $PYTHON_VERSION and required packages installed."
