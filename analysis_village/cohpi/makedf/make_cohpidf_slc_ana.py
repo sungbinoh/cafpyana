@@ -86,7 +86,7 @@ def reco_t(dir_x, dir_y, dir_z, range_P_muon, range_P_pion):
     py_sq = np.power(p_0 * dir_y.iloc[0] + p_1 * dir_y.iloc[1], 2.)
     pz_sq = np.power(E_0 + E_1 - p_0 * dir_z.iloc[0] - p_1 * dir_z.iloc[1], 2.)
     abs_t = px_sq + py_sq + pz_sq
-    
+
     #print(abs_t)
     return abs_t
 
@@ -114,7 +114,7 @@ def measure_opening_angle(group):
 
 def beam_totp_angle(n_trk_mupid, dir_x, dir_y, dir_z, range_P_muon, range_P_pion, mu_pid_pass):
     if n_trk_mupid != 2:
-        return -999.  
+        return -999.
     dir_x = dir_x[mu_pid_pass]
     dir_y = dir_y[mu_pid_pass]
     dir_z = dir_z[mu_pid_pass]
@@ -123,7 +123,7 @@ def beam_totp_angle(n_trk_mupid, dir_x, dir_y, dir_z, range_P_muon, range_P_pion
     if(range_P_muon.size != 2):
         print("error, dir_x.len != 2")
         return -888.
-    
+
     # -- assume first particle is muon and the other is pion
     p_0 = range_P_muon.iloc[0]
     p_1 = range_P_pion.iloc[1]
@@ -138,7 +138,7 @@ def beam_totp_angle(n_trk_mupid, dir_x, dir_y, dir_z, range_P_muon, range_P_pion
 
     totp_cos = totpz / np.power(np.power(totpx, 2.) + np.power(totpy, 2.) + np.power(totpz, 2.) , 0.5)
     return totp_cos
-    
+
 def measure_beam_totp_angle(group):
     n_trk_mupid = group[('n_trk_mupid', '', '')].iloc[0]
     dir_x = group[('trk', 'dir', 'x')]
@@ -161,7 +161,7 @@ def make_slc_var(df):
 
 ## -- data fram maker for cohpi analysis
 def make_cohpidf_slc(f):
-    
+
     #pandora_df = make_pandora_df(f)
     pandora_df = make_pandora_df_calo_update(f)
     barycenterFM_df = loadbranches(f["recTree"], barycenterFMbranches).rec
@@ -202,21 +202,21 @@ def make_cohpidf_slc(f):
     n_shower = (pandora_df.pfp.is_shower_candidate).groupby(level=[0,1]).sum()
 
     pass_n_trk_condition = (n_trk == 2) & (n_proton == 0) & (n_shower == 0)
-    
+
     two_trk_df_condition = (two_trk_df_condition) & (n_prong == 2) & (n_trk == 2) & (n_proton == 0) & (n_shower == 0)
 
     n_prong = make_slc_var(n_prong)
     n_trk = make_slc_var(n_trk)
     n_proton = make_slc_var(n_proton)
     n_shower = make_slc_var(n_shower)
-    
+
     tmatch_idx = pandora_df.slc.tmatch.idx
     tmatch_eff = pandora_df.slc.tmatch.eff
     tmatch_purity = pandora_df.slc.tmatch.pur
     tmatch_idx = make_slc_var(tmatch_idx)
     tmatch_eff = make_slc_var(tmatch_eff)
     tmatch_purity = make_slc_var(tmatch_purity)
-    
+
     slcdf = pd.DataFrame({
         'is_fv': is_fv,
         'is_not_clear_cosmic': is_not_clear_cosmic,
@@ -228,7 +228,7 @@ def make_cohpidf_slc(f):
         'tmatch_eff': tmatch_eff,
         'tmatch_purity': tmatch_purity,
     })
-    
+
     #### (4) dir Z cut
     longdf = pandora_df.sort_values(by=("pfp", "trk", "len", "", "", ""), ascending=False).groupby(level=[0,1]).nth(0)
     shortdf = pandora_df.sort_values(by=("pfp", "trk", "len", "", "", ""), ascending=False).groupby(level=[0,1]).nth(1)
@@ -254,7 +254,7 @@ def make_cohpidf_slc(f):
     slcdf['short_dirx'] = short_dirx
     slcdf['short_diry'] = short_diry
     slcdf['short_dirz'] = short_dirz
-    
+
     is_long_dirz_pass = make_slc_var(is_long_dirz_pass)
     is_short_dirz_pass = make_slc_var(is_short_dirz_pass)
 
@@ -342,7 +342,7 @@ def make_cohpidf_slc(f):
     range_p_cpi = make_slc_var(range_p_cpi)
     slcdf['range_p_mu'] = range_p_mu
     slcdf['range_p_cpi'] = range_p_cpi
-        
+
     #### (7) Add total pe for each entry
     opflash_df = make_opflashdf(f)
     opflash_df = opflash_df[(opflash_df.firsttime > -5.) & (opflash_df.firsttime < 5.)]
@@ -358,7 +358,7 @@ def make_cohpidf_slc(f):
     pfp_vtxdist_4cm_df = pandora_df[(pandora_df.pfp.dist_to_vertex < 50.) & (pandora_df.slc.is_clear_cosmic == 0)]
     hittrk_matched_df = multicol_merge(hitdf.reset_index(), pfp_vtxdist_4cm_df.reset_index(),
                                        left_on=[('entry', '', '', '', '', ''), ('rec.slc..index', '', '', '', '', ''), ('rec.slc.reco.pfp..index', '', '', '', '', '')],
-                                       right_on=[('entry', '', '', '', '', ''), ('rec.slc..index', '', '', '', '', ''), ('rec.slc.reco.pfp..index', '', '', '', '', '')], 
+                                       right_on=[('entry', '', '', '', '', ''), ('rec.slc..index', '', '', '', '', ''), ('rec.slc.reco.pfp..index', '', '', '', '', '')],
                                        how="right")
     hittrk_matched_df = hittrk_matched_df.set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index", "rec.slc.reco.pfp.trk.calo.2.points..index"], verify_integrity=True)
     hittrk_matched_df = multicol_add(hittrk_matched_df, dmagdf(hittrk_matched_df.slc.vertex, hittrk_matched_df.pfp.trk.hit).rename(("pfp", "trk", "hit", "dist_to_vertex", "", "")))
@@ -371,7 +371,7 @@ def make_cohpidf_slc(f):
     sum_integ_3cm = (hittrk_matched_df_3cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum()
     sum_integ_2cm = (hittrk_matched_df_2cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum()
     sum_integ_1cm = (hittrk_matched_df_1cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum()
-    
+
     #print(sum_integ_4cm)
     slcdf['sum_integ_4cm'] = sum_integ_4cm
     slcdf['sum_integ_3cm'] = sum_integ_3cm
@@ -406,7 +406,7 @@ def make_cohpi_nudf(f):
     genie_mode = nudf.genie_mode
     w = nudf.w
     E = nudf.E
-    
+
     try :
         nuint_categ = pd.Series(8, index=nudf.index)
     except Exception as e:
@@ -440,5 +440,5 @@ def make_cohpi_nudf(f):
         'true_t': true_t_series,
         'nuint_categ': nuint_categ
     })
- 
+
     return this_nudf
