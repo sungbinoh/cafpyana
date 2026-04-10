@@ -21,25 +21,6 @@ def InFV_nohiyz_trk(data):
     pass_y = ((data.z < 250) & (np.abs(data.y) < 190.)) | ((data.z > 250) & (data.y > -190.) & (data.y < ymax_highz))
     return pass_xz & pass_y
 
-def InFV_nohiyz(data):
-    xmin = 10.
-    xmax = 190.
-    zmin = 10.
-    zmax = 450.
-    ymax_highz = 100.
-    pass_xz = (np.abs(data.x) > xmin) & (np.abs(data.x) < xmax) & (data.z > zmin) & (data.z < zmax)
-    pass_y = ((data.z < 250) & (np.abs(data.y) < 190.)) | ((data.z > 250) & (data.y > -190.) & (data.y < ymax_highz))
-    return pass_xz & pass_y
-
-def InFV_nohiyz_trk(data):
-    xmax = 190.
-    zmin = 10.
-    zmax = 450.
-    ymax_highz = 100.
-    pass_xz = (np.abs(data.x) < xmax) & (data.z > zmin) & (data.z < zmax)
-    pass_y = ((data.z < 250) & (np.abs(data.y) < 190.)) | ((data.z > 250) & (data.y > -190.) & (data.y < ymax_highz))
-    return pass_xz & pass_y
-
 ## -- truth level flags
 def Signal(df): # definition
     is_fv = InFV_nohiyz(df.position)
@@ -161,12 +142,20 @@ def make_slc_var(df):
 
 ## -- data fram maker for cohpi analysis
 def make_cohpidf_slc(f):
-    
-    #pandora_df = make_pandora_df(f)
-    pandora_df = make_pandora_df_calo_update(f)
+
+    is_recalo = True
+    if is_recalo:
+        pandora_df = make_pandora_df_calo_update(f)
+    else:
+        pandora_df = make_pandora_df(f)
     barycenterFM_df = loadbranches(f["recTree"], barycenterFMbranches).rec
     pandora_df = multicol_merge(barycenterFM_df, pandora_df, left_index=True, right_index=True, how="right", validate="one_to_many")
-    #print(pandora_df)
+
+    #### (0) BCFM and nuscore
+    bcfm_score = pandora_df.slc.barycenterFM.score
+    bcfm_score = make_slc_var(bcfm_score)
+    nu_score = pandora_df.slc.nu_score
+    nu_score = make_slc_var(nu_score)
 
     #### (1) FV cut
     is_fv = InFV_nohiyz(pandora_df.slc.vertex)
@@ -187,7 +176,10 @@ def make_cohpidf_slc(f):
     def is_trk_candidate(df):
         return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5)
     def is_proton_candidate(df):
-        return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5) & (df.pfp.trk.chi2pid.I2.arctan_mu_over_p > 0.4)
+        if is_recalo:
+            return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5) & (df.pfp.trk.chi2pid.I2.chi2_muon_new > 25.)
+        else:
+            return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5) & (df.pfp.trk.chi2pid.I2.chi2_muon > 25.)
     def is_shower_candidate(df):
         return (df.pfp.trackScore < 0.50)
 
@@ -219,6 +211,8 @@ def make_cohpidf_slc(f):
     
     slcdf = pd.DataFrame({
         'is_fv': is_fv,
+        'bcfm_score': bcfm_score,
+        'nu_score': nu_score,
         'is_not_clear_cosmic': is_not_clear_cosmic,
         'n_prong': n_prong,
         'n_trk': n_trk,
@@ -228,7 +222,7 @@ def make_cohpidf_slc(f):
         'tmatch_eff': tmatch_eff,
         'tmatch_purity': tmatch_purity,
     })
-    
+
     #### (4) dir Z cut
     longdf = pandora_df.sort_values(by=("pfp", "trk", "len", "", "", ""), ascending=False).groupby(level=[0,1]).nth(0)
     shortdf = pandora_df.sort_values(by=("pfp", "trk", "len", "", "", ""), ascending=False).groupby(level=[0,1]).nth(1)
@@ -288,6 +282,34 @@ def make_cohpidf_slc(f):
     short_trk_pid = make_slc_var(short_trk_pid)
     slcdf['long_trk_pid'] = long_trk_pid
     slcdf['short_trk_pid'] = short_trk_pid
+
+    long_trk_chi2_mu = longdf.pfp.trk.chi2pid.I2.chi2_muon
+    long_trk_chi2_pro = longdf.pfp.trk.chi2pid.I2.chi2_proton
+    long_trk_chi2_mu = make_slc_var(long_trk_chi2_mu)
+    long_trk_chi2_pro = make_slc_var(long_trk_chi2_pro)
+    slcdf['long_trk_chi2_mu'] = long_trk_chi2_mu
+    slcdf['long_trk_chi2_pro'] = long_trk_chi2_pro
+    if is_recalo:
+        long_trk_chi2_mu_new = longdf.pfp.trk.chi2pid.I2.chi2_muon_new
+        long_trk_chi2_pro_new = longdf.pfp.trk.chi2pid.I2.chi2_proton_new
+        long_trk_chi2_mu_new = make_slc_var(long_trk_chi2_mu_new)
+        long_trk_chi2_pro_new = make_slc_var(long_trk_chi2_pro_new)
+        slcdf['long_trk_chi2_mu_new'] = long_trk_chi2_mu_new
+        slcdf['long_trk_chi2_pro_new'] = long_trk_chi2_pro_new
+
+    short_trk_chi2_mu = shortdf.pfp.trk.chi2pid.I2.chi2_muon
+    short_trk_chi2_pro = shortdf.pfp.trk.chi2pid.I2.chi2_proton
+    short_trk_chi2_mu = make_slc_var(short_trk_chi2_mu)
+    short_trk_chi2_pro = make_slc_var(short_trk_chi2_pro)
+    slcdf['short_trk_chi2_mu'] = short_trk_chi2_mu
+    slcdf['short_trk_chi2_pro'] = short_trk_chi2_pro
+    if is_recalo:
+        short_trk_chi2_mu_new = shortdf.pfp.trk.chi2pid.I2.chi2_muon_new
+        short_trk_chi2_pro_new = shortdf.pfp.trk.chi2pid.I2.chi2_proton_new
+        short_trk_chi2_mu_new = make_slc_var(short_trk_chi2_mu_new)
+        short_trk_chi2_pro_new = make_slc_var(short_trk_chi2_pro_new)
+        slcdf['short_trk_chi2_mu_new'] = short_trk_chi2_mu_new
+        slcdf['short_trk_chi2_pro_new'] = short_trk_chi2_pro_new
 
     #### (6) measure two-track variables
     two_trk_df = pandora_df[two_trk_df_condition]
@@ -400,7 +422,7 @@ def make_cohpi_nudf(f):
     true_t = get_true_t(nudf).fillna(999999)
     nudf['true_t'] = true_t
 
-    is_fv = InFV_nohiyz_trk(nudf.position)
+    is_fv = InFV_nohiyz(nudf.position)
     is_signal = Signal(nudf)
     is_cc = nudf.iscc
     genie_mode = nudf.genie_mode

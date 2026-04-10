@@ -22,12 +22,12 @@ ICARUS_CALO_PARAMS = {
 #### Default
 #### == For each element, the first entry is for MC and the second entry is for the data
 SBND_CALO_PARAMS = {
-    "alpha_emb": [0.904, 0.904],
-    "beta_90": [0.204, 0.204],
-    "R_emb": [1.25, 1.25],
+    "alpha_emb": [0.904, 0.9366111025888879],
+    "beta_90": [0.204, 0.1835451204193374],
+    "R_emb": [1.25, 1.567685536351266],
     "gains": [
         [0.0203521, 0.0202351, 0.0200727], ## MC
-        [0.02172 , 0.02150, 0.02103]], ## Data
+        [0.02, 0.02, 0.02]], ## Data
     "c_cal_frac": [1., 1., 1.],
     "etau": [35., 35.], ## first value for MC and second value for data
 }
@@ -146,9 +146,10 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
         yzdf = pd.DataFrame({"ybin": ybin, "zbin": zbin, "itpc": itpc, "plane": plane, "iov": iov})
         yzdf['iov'] = 0 ## yzdf iov ==0 for MC and data
         yz_scale = yzdf.merge(this_yz_cal_df, on=["iov", "itpc", "plane", "ybin", "zbin"], how="left", validate="many_to_one").scale
-        yz_scale[yz_scale < 1e-6] = 1.
+        yz_scale[yz_scale < 1e-3] = 1.
         yz_scale = yz_scale.fillna(1)
         yz_scale.index = dqdxdf.index
+        #dqdxdf['yz_scale'] = yz_scale ## FIXME
 
         #yzdf['rr'] = dqdxdf.rr
         #yzdf['scale'] = yz_scale
@@ -171,7 +172,7 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
         t0 = 0 # assume in time
         tdrift = dqdxdf.t / 2000. - 0.2
         etau_corr = np.exp(tdrift / etau)
-
+        #dqdxdf['etau_corr'] = etau_corr ## FIXME
         dqdx = dqdx * etau_corr * yz_scale
 
     else: # if not specified, rely on input calibration
