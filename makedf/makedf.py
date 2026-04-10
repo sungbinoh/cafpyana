@@ -448,7 +448,13 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
             trkhitdf["dedx_redo"] = dedx_redo
             #trkhitdf["dqdx_redo"] = dqdx_redo
             #trkhitdf["dedx_bias"] = dedx_bias
-            #print(trkhitdf[trkhitdf.rr < 26.][['dedx', 'dedx_redo', 'dedx_bias', 'dqdx', 'dqdx_redo', 'tpc', 'etau', 'run', 'iov', 'rho']].head(50))
+            #trkhitdf["integ_ov_pitch"] = trkhitdf.integral / trkhitdf.pitch
+            #print(trkhitdf[trkhitdf.rr < 26.][['dedx', 'dedx_redo', 'dedx_bias', 'tpc', 'run', 'iov', 'rho']].head(50))
+            #if plane == 2:
+            #    print(trkhitdf[trkhitdf.rr < 26.].loc[(3, 0, 0), ['dedx', 'dedx_redo', 'dedx_bias', 'dqdx', 'dqdx_redo', 'etau_corr', 'yz_scale', 'integ_ov_pitch', 'integral', 'pitch', 'tpc', 'x', 'y', 'z', 'run', 'iov', 'rho', 'rr']])
+            #    print(trkhitdf[trkhitdf.rr < 26.].loc[(3, 0, 1), ['dedx', 'dedx_redo', 'dedx_bias', 'dqdx', 'dqdx_redo', 'etau_corr', 'yz_scale', 'integ_ov_pitch', 'integral', 'pitch', 'tpc', 'x', 'y', 'z', 'run', 'iov', 'rho', 'rr']])
+            #    print(trkhitdf[trkhitdf.rr < 26.].loc[(4, 0, 1), ['dedx', 'dedx_redo', 'dedx_bias', 'dqdx', 'dqdx_redo', 'etau_corr', 'yz_scale', 'integ_ov_pitch', 'integral', 'pitch', 'tpc', 'x', 'y', 'z', 'run', 'iov', 'rho', 'rr']])
+            #    print(trkhitdf[trkhitdf.rr < 26.].loc[(5, 1, 0), ['dedx', 'dedx_redo', 'dedx_bias', 'dqdx', 'dqdx_redo', 'etau_corr', 'yz_scale', 'integ_ov_pitch', 'integral', 'pitch', 'tpc', 'x', 'y', 'z', 'run', 'iov', 'rho', 'rr']])
             for par in ['muon', 'proton']:
                 this_chi2_new, this_chi2_ndof = chi2pid.chi2par(trkhitdf, dedxname="dedx_redo", par=par)
                 this_chi2_col = ('pfp', 'trk', 'chi2pid', 'I' + str(plane), 'chi2_' + par + '_new', '')
@@ -462,6 +468,8 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
 
     # merge in tracks
     slcdf = multicol_merge(slcdf, trkdf, left_index=True, right_index=True, how="right", validate="one_to_many")
+    #print(slcdf[slcdf.slc.is_clear_cosmic==0].pfp.trk.chi2pid.I2.head(30))
+    #print(slcdf[slcdf.slc.is_clear_cosmic==0].pfp.trackScore.head(30))
 
     # distance from vertex to track start
     slcdf = multicol_add(slcdf, dmagdf(slcdf.slc.vertex, slcdf.pfp.trk.start).rename(("pfp", "dist_to_vertex")))

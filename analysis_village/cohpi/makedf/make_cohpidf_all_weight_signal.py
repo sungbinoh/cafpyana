@@ -1,6 +1,10 @@
 from makedf.makedf import *
 from pyanalib.pandas_helpers import *
 from makedf.util import *
+from makedf import getsyst
+
+# Define an empty global variable to hold all systematic weights
+all_systs_weights_df = None
 
 def InFV_nohiyz(data):
     xmin = 10.
@@ -140,8 +144,13 @@ def make_slc_var(df):
     out = df.groupby(level=['entry', 'rec.slc..index'], sort=False).first()
     return out
 
+## collect syst weights first
+
 ## -- data fram maker for cohpi analysis
 def make_cohpidf_slc(f):
+
+    hdrdf = make_mchdrdf(f)
+    ismc = hdrdf.ismc.iloc[0]
 
     is_recalo = True
     if is_recalo:
@@ -390,20 +399,79 @@ def make_cohpidf_slc(f):
     hittrk_matched_df_2cm = hittrk_matched_df[hittrk_matched_df.pfp.trk.hit.dist_to_vertex < 2.]
     hittrk_matched_df_1cm = hittrk_matched_df[hittrk_matched_df.pfp.trk.hit.dist_to_vertex < 1.]
 
-    sum_integ_4cm = (hittrk_matched_df_4cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum()
-    sum_integ_3cm = (hittrk_matched_df_3cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum()
-    sum_integ_2cm = (hittrk_matched_df_2cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum()
-    sum_integ_1cm = (hittrk_matched_df_1cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum()
+    sum_integ_4cm = (hittrk_matched_df_4cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum().fillna(0.)
+    sum_integ_3cm = (hittrk_matched_df_3cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum().fillna(0.)
+    sum_integ_2cm = (hittrk_matched_df_2cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum().fillna(0.)
+    sum_integ_1cm = (hittrk_matched_df_1cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum().fillna(0.)
+    sphere_3_over_4m3 = sum_integ_3cm / (sum_integ_4cm - sum_integ_3cm)
 
     #print(sum_integ_4cm)
     slcdf['sum_integ_4cm'] = sum_integ_4cm
     slcdf['sum_integ_3cm'] = sum_integ_3cm
     slcdf['sum_integ_2cm'] = sum_integ_2cm
     slcdf['sum_integ_1cm'] = sum_integ_1cm
+    slcdf['sphere_3_over_4m3'] = sphere_3_over_4m3
 
     #### (9) last moment evt selection
     slcdf = slcdf[(slcdf.is_not_clear_cosmic) & (slcdf.is_fv)]
 
+    ###### (9) - a: total PE, bcfm score
+    pe_cut = 1500.
+    bcfm_score_cut = 0.05
+    slcdf = slcdf[(slcdf.total_pe > pe_cut) & (slcdf.bcfm_score > bcfm_score_cut)]
+
+    ###### (9) - b: pfp multiplicities
+    slcdf = slcdf[(slcdf.n_prong == 2) & (slcdf.n_trk == 2) & (slcdf.n_proton == 0) & (slcdf.n_shower == 0)]
+
+    ###### (9) - c: dir Z and opening ang
+    long_dirz_cut = 0.7
+    short_dir_z_cut = 0.5
+    open_ang_cut = 0.5
+    slcdf = slcdf[(slcdf.long_dirz > long_dirz_cut) & (slcdf.short_dirz > short_dir_z_cut) & (slcdf.opening_angle > open_ang_cut)]
+
+    ###### (9) - d: further chi2pid cut
+    long_chi2_p_cut = 100.
+    short_chi2_p_cut = 75.
+    if is_recalo:
+        slcdf = slcdf[(slcdf.long_trk_chi2_pro_new > long_chi2_p_cut) & (slcdf.short_trk_chi2_pro_new > short_chi2_p_cut)]
+    else:
+        slcdf = slcdf[(slcdf.long_trk_chi2_pro > long_chi2_p_cut) & (slcdf.short_trk_chi2_pro > short_chi2_p_cut)]
+
+    ###### (9) - e: sphere 1cm : 4000, 2 cm : 7000, 3 cm : 10000, 4cm : 13000, and 3 / (4 - 3) ratio < 6
+    #sphere_1cm_cut = 4000.
+    #sphere_2cm_cut = 7000.
+    #sphere_3cm_cut = 10000.
+    #sphere_4cm_cut = 13000.
+    #sphere_ratio_cut = 6.
+    #slcdf = slcdf[(slcdf.sum_integ_1cm < sphere_1cm_cut) & (slcdf.sum_integ_2cm < sphere_2cm_cut) & (slcdf.sum_integ_3cm < sphere_3cm_cut) & (slcdf.sum_integ_4cm < sphere_4cm_cut) & (slcdf.sphere_3_over_4m3 < sphere_ratio_cut)]
+    #### do not apply sphere charge cut
+
+    slcdf.columns = pd.MultiIndex.from_tuples(
+        [(*col, '') if isinstance(col, tuple) else (col, '')
+         for col in slcdf.columns]
+    )
+
+    if not ismc:
+        return slcdf
+
+    this_nudf = make_cohpi_nudf(f)
+
+    valid_matches = slcdf['tmatch_idx'].dropna()
+    match_pairs = pd.MultiIndex.from_arrays([
+        valid_matches.index.get_level_values('entry'),
+        valid_matches.astype(int)
+    ])
+
+    # 3. Filter the second DataFrame where its (entry, rec.mc.nu..index) exists in our pairs
+    this_nudf_filtered = this_nudf[this_nudf.index.isin(match_pairs)]
+    global all_systs_weights_df
+    nudf_filtered_systs = getsyst.filter_systs_nuind(f, all_systs_weights_df, this_nudf_filtered.ind)
+    this_nudf_filtered = multicol_concat(this_nudf_filtered, nudf_filtered_systs)
+
+    slcdf = multicol_merge(slcdf.reset_index(), this_nudf_filtered.reset_index(),
+                           left_on=[('entry', ''), ('tmatch_idx','')],
+                           right_on=[('entry', ''), ('rec.mc.nu..index', '')],
+                           how="left") ## -- save all sllices
     #print(slcdf)
     return slcdf
 
@@ -429,6 +497,7 @@ def make_cohpi_nudf(f):
     genie_mode = nudf.genie_mode
     w = nudf.w
     E = nudf.E
+    ind = nudf.ind
 
     try :
         nuint_categ = pd.Series(8, index=nudf.index)
@@ -461,7 +530,24 @@ def make_cohpi_nudf(f):
         'true_cos_theta_mu': mu_cos_theta_series,
         'true_cos_theta_pi': cpi_cos_theta_series,
         'true_t': true_t_series,
-        'nuint_categ': nuint_categ
+        'nuint_categ': nuint_categ,
+        'ind': ind
     })
+    this_nudf.columns = pd.MultiIndex.from_tuples([(col, '') for col in this_nudf.columns])
 
     return this_nudf
+
+def make_cohpi_signal_nudf(f):
+    this_nudf = make_cohpi_nudf(f)
+
+    global all_systs_weights_df
+    systs = getsyst.get_all_syst_df(f)
+    all_systs_weights_df = systs
+
+    signal_nudf = this_nudf[this_nudf.nuint_categ == 1]
+    true_signal_systs = getsyst.filter_systs_nuind(f, all_systs_weights_df, signal_nudf.ind)
+
+    signal_nudf = multicol_concat(signal_nudf, true_signal_systs)
+    #print(signal_nudf)
+
+    return signal_nudf

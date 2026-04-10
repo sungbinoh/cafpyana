@@ -132,11 +132,11 @@ def print_syst_all(f):
     for i in range(len(wgt_names)):
         print(f"Index: {i:<3} | Name: {wgt_names[i]:<30} | Type: {wgt_types[i]:<5} | Univ: {wgt_nuniv[i]}")
 
-def get_syst_all(f, nuind, multisim_nuniv=1000):
+def get_all_syst_df(f, multisim_nuniv=1000):
+    ## adding this function to open globaltree only once for each flat.caf
     if "globalTree" not in f:
-        return pd.DataFrame(index=nuind.index)
-
-    nuidx = pd.MultiIndex.from_arrays([nuind.index.get_level_values(0), nuind])
+        print("no globalTree")
+        #return pd.DataFrame(index=nuind.index)
 
     globalTree = f["globalTree"]
     wgt_names = [n for n in globalTree['global/wgts/wgts.name'].arrays(library="np")['wgts.name'][0]]
@@ -202,7 +202,15 @@ def get_syst_all(f, nuind, multisim_nuniv=1000):
     # 5. Build final DataFrame
     systs = pd.DataFrame(systs_dict)
 
-    # 6. Reindex smoothly
+    return systs
+
+def filter_systs_nuind(f, systs, nuind):
+    ## use outputs of the "get_wgts_df_and_list" above as input for this function
+    if "globalTree" not in f:
+        return pd.DataFrame(index=nuind.index)
+
+    nuidx = pd.MultiIndex.from_arrays([nuind.index.get_level_values(0), nuind])
+
     systs_match = systs.reindex(nuidx, fill_value=1.0)
     systs_match.index = nuind.index
 
