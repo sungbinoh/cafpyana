@@ -442,9 +442,9 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
             trkhitdf = make_trkhitdf(f, plane)
             #if det == "SBND": ## FIXME
             #    trkhitdf = trkhitdf[InFV(df = trkhitdf, inzback = 0., det = "SBND_nohighyz")]
-            dqdx_redo = chi2pid.dqdx(trkhitdf, gain=None, calibrate=det, isMC=ismc)
+            #dqdx_redo = chi2pid.dqdx(trkhitdf, gain=None, calibrate=det, isMC=ismc)
             dedx_redo = chi2pid.dedx(trkhitdf, gain=det, calibrate=det, plane=plane, isMC=ismc)
-            dedx_bias = (dedx_redo - trkhitdf.dedx) / trkhitdf.dedx
+            #dedx_bias = (dedx_redo - trkhitdf.dedx) / trkhitdf.dedx
             trkhitdf["dedx_redo"] = dedx_redo
             #trkhitdf["dqdx_redo"] = dqdx_redo
             #trkhitdf["dedx_bias"] = dedx_bias
