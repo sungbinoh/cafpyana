@@ -588,7 +588,7 @@ def make_all_spine_df(f, get_best_match=True, **trkArgs):
     spine_int_df = make_spine_int_df(f, get_best_match)
 
     # Load SPINE particles dataframe
-    spine_part_df = make_spine_part_df(f, **trkArgs)
+    spine_part_df = make_spine_part_df(f, get_best_match, **trkArgs)
     add_upper_level_to_df("particle", spine_part_df)
 
     # Merge both dataframes
@@ -598,7 +598,7 @@ def make_all_spine_df(f, get_best_match=True, **trkArgs):
 
 def make_spine_int_mcnu_df(f, get_best_match=True):
     """
-    SPINE dataframe maker which containes all SPINE reco and true variables 
+    SPINE dataframe maker which containes all SPINE reco and true interaction variables 
     matched with MC nu dataframe.
     
     :param f: file handle to the input ROOT file
@@ -619,79 +619,54 @@ def make_spine_int_mcnu_df(f, get_best_match=True):
         rhs=mcnu_df,
         left_on=["entry", ("rec", "dlp_true", "mct_index", "")],
         right_index=True,
-        how="left")
+        how="left",
+        validate="many_to_one"
+    )
 
     return spineint_mcnu_df
 
-
-def make_spine_part_df(f):
-    # Load SPINE reco particle (rec.dlp.particle.) branches
-    spine_part_df = loadbranches(f["recTree"], spinepart_branches)
-    spine_part_df = spine_part_df.rec.dlp.particles
-
-    # Load SPINE true particle (rec.dlp_true.particle.) branches
-    spine_true_part_df = loadbranches(f["recTree"], spinetpart_branches)
-    spine_true_part_df = spine_true_part_df.rec.dlp_true.particles
-    spine_true_part_df_prefix = "strue" # SPINE true
-    add_upper_level_to_df(spine_true_part_df_prefix, spine_true_part_df)
-    spine_true_part_df.columns = [s for s in spine_true_part_df.columns]
-
-    # Load true particle branches
-    true_part_df = loadbranches(f["recTree"], trueparticlebranches)
-    true_part_df = true_part_df.rec.true_particles
-    true_part_df_prefix = "true"
-    add_upper_level_to_df(true_part_df_prefix, true_part_df)
-
-    # ============ Do matching between SPINE true particles and reco ID matched ============ #
-    # - Load match_ids and overlaps branches
-    spine_part_match_df = loadbranches(f["recTree"], spinepart_matched_branches)
-    spine_part_match_overlap_df = loadbranches(f["recTree"], spinepart_matchovrlp_branches)
-    # - Dataframe with match ids and overlaps
-    spine_part_match_overlap_df.index.names = spine_part_match_df.index.names
-    spine_part_match_df = multicol_merge(spine_part_match_df, spine_part_match_overlap_df, left_index=True, right_index=True, how="left", validate="one_to_one")
-    spine_part_match_df = spine_part_match_df.rec.dlp.particles 
-    # - Get the best match (highest match_overlap), assume it's sorted
-    spine_bestmatch_df = spine_part_match_df.groupby(level=list(range(spine_part_match_df.index.nlevels-1))).first()
-    spine_bestmatch_df.columns = [s for s in spine_bestmatch_df.columns]
-    # - Match SPINE true particles with their pair (match id - overlap)
-    spine_bestmatch_wids_df = pd.merge(spine_bestmatch_df, spine_true_part_df, 
-                                       left_on=["entry", "match_ids"], 
-                                       right_on=["entry", (spine_true_part_df_prefix, "id", "")], 
-                                       how="left")
-    spine_bestmatch_wids_df.index = spine_bestmatch_df.index
+def make_spine_part_mcpart_df(f, get_best_match=True):
+    """
+    SPINE dataframe maker which containes all SPINE reco and true particle variables 
+    matched with MC part dataframe.
     
-    # ============ Match SPINE true particles dataframe with true particles dataframe ============ #
-    bestmatch_true_particles_df = multicol_merge(spine_bestmatch_wids_df, true_part_df, 
-                                                 left_on=["entry", (spine_true_part_df_prefix, "track_id", "")], 
-                                                 right_on=["entry", (true_part_df_prefix, "G4ID", "")],
-                                                 how="left")
-    bestmatch_true_particles_df.index = spine_bestmatch_wids_df.index
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
 
-    # Fill column levels
-    max_num_levels = max(bestmatch_true_particles_df.columns.nlevels, spine_part_df.columns.nlevels)
-    spine_part_df.columns = pd.MultiIndex.from_tuples(
-        [tuple(list(c) + [""] * (max_num_levels - len(c))) for c in spine_part_df.columns]
-    ) 
+    :return: SPINE + MC particles dataframe
+    :rtype: pd.DataFrame   
+    """
 
-    # Add true information to SPINE reco particle dataframe
-    for c in bestmatch_true_particles_df.columns:
-        spine_part_df[c] = bestmatch_true_particles_df[c]
+    # Load SPINE particles dataframe.
+    spinepart_df = make_spine_part_df(f, get_best_match)
 
-    cols_to_rename = ["momentum", "end_point", "start_point", "start_dir", "end_dir", "vertex"] 
+    # Load MC (Geant4) particles branches.
+    mcpart_df = loadbranches(f["recTree"], trueparticlebranches)
 
-    rename_to_XYZ(spine_part_df, cols_to_rename)
-    return spine_part_df
+    # Match SPINE particles dataframe with MC (Geant4) particles dataframe.
+
+    spinepart_mcpart_df = multicol_merge(
+        lhs=spinepart_df.reset_index(level=[1, 2]),
+        rhs=mcpart_df.reset_index(level=[1]),
+        left_on=["entry", ("rec", "dlp_true", "particles", "track_id", "")],
+        right_on=["entry", ("rec", "true_particles", "G4ID", "", "", "")],
+        how="left",
+        validate="many_to_one"
+    ).set_index(["rec.dlp..index", "rec.dlp.particles..index"], append=True)
+
+    return spinepart_mcpart_df
 
 def make_spine_int_df(f, get_best_match=True):
     """
-    SPINE dataframe maker which containes all SPINE reco and true variables matched with MC nu dataframe.
+    SPINE dataframe maker which containes all SPINE reco and true interaction variables
+    matched with MC nu dataframe.
     
     :param f: file handle to the input ROOT file
     :type f: uproot4.open file handle
     :param get_best_match: `True` if a best match selection is needed.
     :type get_best_match: bool
 
-    :return: SPINE events dataframe
+    :return: SPINE interactions dataframe
     :rtype: pd.DataFrame   
     """
     # Get reco tree from file.
@@ -753,6 +728,73 @@ def make_spine_int_df(f, get_best_match=True):
     rename_to_XYZ(spineint_matched_with_true_df, cols_to_rename)
 
     return spineint_matched_with_true_df
+
+def make_spine_part_df(f, get_best_match=True):
+    """
+    SPINE dataframe maker which containes all SPINE reco and true particle variables 
+    matched with MC nu dataframe.
+    
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
+    :param get_best_match: `True` if a best match selection is needed.
+    :type get_best_match: bool
+
+    :return: SPINE particles dataframe
+    :rtype: pd.DataFrame   
+    """
+    rec_tree = f["recTree"]
+
+    spinepart_df                = loadbranches(rec_tree, spinepart_branches)
+    spinetpart_df               = loadbranches(rec_tree, spinetpart_branches)
+    spinepart_matchids_df       = loadbranches(rec_tree, spinepart_matched_branches)
+    spinepart_matchovrlp_df     = loadbranches(rec_tree, spinepart_matchovrlp_branches)
+
+    # Match match_ids and match_overlaps data.
+    spinepart_matches_df = spinepart_matchids_df.merge(
+        spinepart_matchovrlp_df,
+        left_on = ["entry", "rec.dlp..index", "rec.dlp.particles..index", "rec.dlp.particles.match_ids..index"],
+        right_on = ["entry", "rec.dlp..index", "rec.dlp.particles..index", "rec.dlp.particles.match_overlaps..index"],
+        how="left",
+        validate="one_to_one"
+    )
+
+    matches_df = spinepart_matches_df
+    validate_matched = "many_to_one"
+    validate_matched_with_true = "many_to_many"
+    if get_best_match:
+        # Get best interaction matching
+        spinepart_best_matches_df = (
+            spinepart_matches_df
+            .sort_values(("rec", "dlp", "particles", "match_overlaps"), ascending=False)
+            .groupby(level=["entry", "rec.dlp..index", "rec.dlp.particles..index"])
+            .first()
+        )
+        matches_df = spinepart_best_matches_df
+        validate_matched = "one_to_one"
+        validate_matched_with_true = "many_to_one"
+
+    # Match reco SPINE particles to match_ids and match_overlaps data.
+    spinepart_matched_df = multicol_merge(
+        lhs=matches_df,
+        rhs=spinepart_df,
+        on=["entry", "rec.dlp..index", "rec.dlp.particles..index"],
+        how="left",
+        validate=validate_matched
+    )
+
+    spinepart_matched_with_true_df = multicol_merge(
+        lhs=spinepart_matched_df.reset_index(level=[1, 2]),
+        rhs=spinetpart_df.reset_index(level=[1, 2]),
+        left_on=["entry", ("rec", "dlp", "particles", "match_ids")],
+        right_on=["entry", ("rec", "dlp_true", "particles", "id")],
+        how="left",
+        validate=validate_matched_with_true
+    ).set_index(["rec.dlp..index", "rec.dlp.particles..index"], append=True)
+
+    cols_to_rename = ["momentum", "end_point", "start_point", "start_dir", "end_dir", "vertex"] 
+    rename_to_XYZ(spinepart_matched_with_true_df, cols_to_rename)
+
+    return spinepart_matched_with_true_df
 
 def make_spine_flash_df(f):
     """
