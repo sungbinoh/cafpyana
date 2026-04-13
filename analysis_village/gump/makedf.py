@@ -137,6 +137,11 @@ def make_spine_no_cuts_df(f):
 # and can be turned into ttree for PROfit
 
 def make_pandora_no_cuts_df(f):
+    if 'run2' or 'Run2' in f.file_path:
+        RUN = 2
+    elif 'run4' or 'Run4' in f.file_path:
+        RUN = 4
+
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if det.empty:
         return pd.DataFrame()
@@ -195,8 +200,10 @@ def make_pandora_no_cuts_df(f):
 
     trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.chi2u / trkdf.chi2p
 
+    trkdf['Run'] = RUN
+
     # track containment
-    trkdf[("pfp", "trk", "is_contained", "", "", "")] = trkfv_cut(trkdf.pfp.trk.start, DETECTOR) & trkfv_cut(trkdf.pfp.trk.end, DETECTOR)
+    trkdf[("pfp", "trk", "is_contained", "", "", "")] = trkstartfv_cut(trkdf, DETECTOR) & trkendfv_cut(trkdf, DETECTOR)
 
     # reco momentum -- range-only
     trkdf[("pfp", "trk", "P", "p_muon", "", "")] = trkdf[("pfp", "trk", "rangeP", "p_muon", "", "")]

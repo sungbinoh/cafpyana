@@ -30,6 +30,32 @@ plt.style.use('/exp/sbnd/app/users/nrowe/cafpyana/analysis_village/gump/dune.mpl
 def bin_centers(b):
     return 0.5 * (b[:-1] + b[1:])
 
+def plot_2d_hist_from_file(filename, plot_title):
+    x_edges = []
+    y_edges = []
+    data_rows = []
+
+    with open(filename, 'r') as f:
+        lines = f.readlines()
+        x_edges = [float(x) for x in lines[0].strip('# ').split(',') if x.strip()]
+        y_edges = [float(y) for y in lines[1].strip('# ').split(',') if y.strip()]
+        
+        for line in lines[2:]:
+            if line.strip():
+                row = [float(val) for val in line.strip().split(',') if val.strip()]
+                data_rows.append(row)
+
+    z_values = np.array(data_rows)
+
+    plt.figure(figsize=(10, 6))
+    X, Y = np.meshgrid(x_edges, y_edges)
+    mesh = plt.pcolormesh(x_edges, y_edges, z_values.T, linewidth=0.1)
+    
+    plt.colorbar(mesh, label='Value')
+    plt.title(plot_title)
+    plt.xlabel(r'z')
+    plt.ylabel(r'y')
+
 def plot_arrows(df, n=None, mask_bool=True, x='z', y='x', title_str=''):
     """
     Plots muon trajectories as arrows to show direction.

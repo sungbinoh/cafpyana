@@ -41,13 +41,31 @@ def apply_systs(recodf, mcnuwgtdf, DETECTOR, det_run):
         newcol = f"multisigma{col}" if "MECq0q3InterpWeighting" in col else col
         recodf_wgt_out[newcol] = np.array([matchdf[col][u].values for u in matchdf[col].columns]).T.tolist()
 
-    # 3. Load Mappings
+    recodf_wgt_out = apply_det_syst(recodf, recodf_wgt_out, DETECTOR)
+    recodf_wgt_out = apply_pot_syst(recodf, recodf_wgt_out, det_run)
+
+    return recodf_wgt_out
+
+def apply_pot_syst(recodf, recodf_wgt_out, det_run):
+    # POT Systematics
+    pot_scales = {'ps1': 0.5, 'ms1': -0.525805, 'ps2': 1.0, 'ms2': -1.12726, 'ps3': 1.5, 'ms3': -1.7286, 'cv': 0.0}
+
+    for det in ["SBNDRun1", "ICARUSRun2", "ICARUSRun4"]:
+        if int(det[-1]) == det_run:
+            recodf_wgt_out["POT_multisigma_"+det] = [[1.0 + (v/100.0) for v in pot_scales.values()] for _ in range(len(recodf))]
+        else:
+            recodf_wgt_out["POT_multisigma_"+det] = [[1.0 for _ in pot_scales.values()] for _ in range(len(recodf))]
+
+    return recodf_wgt_out
+
+def apply_det_syst(recodf, recodf_wgt_out, DETECTOR):
+    # 1. Load Mappings
     # These maps are always loaded, but used differently based on DETECTOR
     sce_df = apply_double_map(recodf, 'analysis_village/gump/rwt_outputs/min_SCE.txt', 'analysis_village/gump/rwt_outputs/pls_SCE.txt', 'CAFPYANA_SBN_v1_multisigma_SCE')
     wmxthetaxw_df = apply_map(recodf, 'analysis_village/gump/rwt_outputs/XThetaXW.txt', 'WireMod_SBN_v1_multisigma_XThetaXW')
     wmyz_df = apply_map(recodf, 'analysis_village/gump/rwt_outputs/YZ.txt', 'WireMod_SBN_v1_multisigma_YZ')
 
-    # 4. Apply Detector-Specific Logic
+    # 2. Apply Detector-Specific Logic
     is_sbnd = (DETECTOR == "SBND")
     not_DETECTOR = "ICARUS" if is_sbnd else "SBND"
 
@@ -65,7 +83,7 @@ def apply_systs(recodf, mcnuwgtdf, DETECTOR, det_run):
             # Create a list of 'ones' with the same shape as the data
             recodf_wgt_out[key] = [np.ones(df[key].shape[1]) for _ in range(len(df))]
 
-    # 5. Handle Smear and Gain (Active for current DETECTOR, 1.0 for the 'other')
+    # 3. Handle Smear and Gain (Active for current DETECTOR, 1.0 for the 'other')
     for feat in ['smear', 'gain']:
         col_name = f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_{feat}'
         other_col = f'CAFPYANA_SBN_v1_multisigma_{not_DETECTOR}_{feat}'
@@ -76,17 +94,27 @@ def apply_systs(recodf, mcnuwgtdf, DETECTOR, det_run):
         recodf_wgt_out[col_name] = feat_df[col_name].values.tolist()
         recodf_wgt_out[other_col] = [([1.0] * feat_df[col_name].shape[1]) for _ in range(len(feat_df))]
 
-    # 6. POT Systematics
-    pot_scales = {'ps1': 0.5, 'ms1': -0.525805, 'ps2': 1.0, 'ms2': -1.12726, 'ps3': 1.5, 'ms3': -1.7286, 'cv': 0.0}
-
-    for det in ["SBNDRun1", "ICARUSRun2", "ICARUSRun4"]:
-        if int(det[-1]) == det_run:
-            recodf_wgt_out["POT_multisigma_"+det] = [[1.0 + (v/100.0) for v in pot_scales.values()] for _ in range(len(recodf))]
-        else:
-            recodf_wgt_out["POT_multisigma_"+det] = [[1.0 for _ in pot_scales.values()] for _ in range(len(recodf))]
-
     return recodf_wgt_out
 
+def apply_flash(df, detector, det_run, fname, idf, ismc):
+    if "flash_maxpe" in df.columns:
+      del df["flash_maxpe"]
+
+    flashes = pd.read_hdf(fname, "flash_%i" % idf)
+
+    time_name = "firsttime" if detector == "SBND" else "time"
+    if ismc: # Scale PE for MC-only
+        if detector == "SBND": pe_scale = 0.66
+        elif detector == "ICARUS" and det_run == 2: pe_scale = 0.6
+        elif detector == "ICARUS" and det_run == 4: pe_scale = 0.4
+    else:
+        pe_scale = 1.0
+
+    intime = (flashes[time_name] > -5) & (flashes[time_name] < 5)
+    maxpe = (flashes.totalpe*intime).groupby(level=[0, 1]).max().rename("flash_maxpe")*pe_scale
+    df = df.join(maxpe)
+    print(df.flash_maxpe)
+    return df
 
 def make_gump_ttree_mc(dfname, split):
 
@@ -122,14 +150,12 @@ def make_gump_ttree_mc(dfname, split):
         recodf = pd.read_hdf(dfname)
         mcnuwgtdf  = recodf.copy()
 
-    for c in hdrdf.columns:
-        print(c)
-        print(hdrdf[c])
-
     mcnudf = pd.read_hdf(dfname, key=mcnudf_key)
 
     ## Figure out which detector this is
     DETECTOR = recodf.detector.iloc[0]
+
+    recodf = apply_flash(recodf, DETECTOR, det_run, dfname, split, ismc=True)
 
     ## apply selection
     recodf = all_cuts(recodf, DETECTOR, det_run)
@@ -155,6 +181,8 @@ def make_gump_ttree_data(dfname, split):
         det_run = 2
     elif 'SBND' in dfname:
         det_run = 1
+    elif 'ICARUS' in dfname:
+        det_run = 2
 
     with pd.HDFStore(dfname, mode='r') as store:
         keys = store.keys()
@@ -173,6 +201,7 @@ def make_gump_ttree_data(dfname, split):
     ## Figure out which detector this is
     DETECTOR = recodf.detector.iloc[0]
 
+    recodf = apply_flash(recodf, DETECTOR, det_run, dfname, split, ismc=True)
     ## apply selection
     recodf = all_cuts(recodf, DETECTOR, det_run)
 

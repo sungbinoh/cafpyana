@@ -54,7 +54,7 @@ def grab_pot(files, mc_bools, sep_bool=True):
             for i in range(get_n_split(file)):
                 if detector == "ICARUS": single_ngates_OFF = pd.read_hdf(file, "trig_"+str(i)).gate_delta.sum()*(1-1/20.)
                 elif detector == "SBND": single_ngates_OFF = pd.read_hdf(file, "hdr_"+str(i)).noffbeambnb.sum()
-                print(f"{single_ngates_OFF} for {i} num gates")
+                print(f"{single_ngates_OFF} gates for {i}'th key")
                 ngates_OFF += single_ngates_OFF
             pot.append(5e12*ngates_OFF/N_GATES_ON_PER_5e12POT)
             print(f"{file} sample \"pot\": {pot[-1]}")
@@ -112,13 +112,14 @@ if __name__ == "__main__":
     parser.add_argument('-i','--input', nargs='+', type=str)
     parser.add_argument('-l','--list', type=str)
     parser.add_argument('-t','--test', action='store_true')
+    parser.add_argument('-d','--data', action='store_true')
 
     args = parser.parse_args()
 
     if args.test:
         test()
     elif args.input:
-        grab_pot(args.input, True, False)
+        grab_pot(args.input, not args.data, False)
     elif args.list:
         with open(args.list, 'r') as file:
                 inputs = file.read().splitlines() 
