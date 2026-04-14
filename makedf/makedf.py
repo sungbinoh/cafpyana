@@ -589,7 +589,6 @@ def make_all_spine_df(f, get_best_match=True, **trkArgs):
 
     # Load SPINE particles dataframe
     spine_part_df = make_spine_part_df(f, get_best_match, **trkArgs)
-    add_upper_level_to_df("particle", spine_part_df)
 
     # Merge both dataframes
     spine_df = multicol_merge(spine_int_df, spine_part_df, left_index=True, right_index=True, how="right", validate="one_to_many")
@@ -644,7 +643,6 @@ def make_spine_part_mcpart_df(f, get_best_match=True):
     mcpart_df = loadbranches(f["recTree"], trueparticlebranches)
 
     # Match SPINE particles dataframe with MC (Geant4) particles dataframe.
-
     spinepart_mcpart_df = multicol_merge(
         lhs=spinepart_df.reset_index(level=[1, 2]),
         rhs=mcpart_df.reset_index(level=[1]),
@@ -687,11 +685,11 @@ def make_spine_int_df(f, get_best_match=True):
         validate="one_to_one"
     )
 
+    # If we want to get the best match, first sorts the match_overlaps column and gets the first value.
+    # matches_df, validate_matched and validate_matched_with_true values change depending on get_best_match value.
     matches_df = spineint_matches_df
     validate_matched = "many_to_one"
     validate_matched_with_true = "many_to_many"
-
-    # If we want to get the best match, first sorts the match_overlaps column and gets the first value.
     if get_best_match:
         # Find best match for each Multi-Index.
         spineint_best_matches_df = (
@@ -758,6 +756,8 @@ def make_spine_part_df(f, get_best_match=True):
         validate="one_to_one"
     )
 
+    # If we want to get the best match, first sorts the match_overlaps column and gets the first value.
+    # matches_df, validate_matched and validate_matched_with_true values change depending on get_best_match value.
     matches_df = spinepart_matches_df
     validate_matched = "many_to_one"
     validate_matched_with_true = "many_to_many"
@@ -782,6 +782,7 @@ def make_spine_part_df(f, get_best_match=True):
         validate=validate_matched
     )
 
+    # Match reco SPINE particles with true SPINE particles.
     spinepart_matched_with_true_df = multicol_merge(
         lhs=spinepart_matched_df.reset_index(level=[1, 2]),
         rhs=spinetpart_df.reset_index(level=[1, 2]),
@@ -791,6 +792,7 @@ def make_spine_part_df(f, get_best_match=True):
         validate=validate_matched_with_true
     ).set_index(["rec.dlp..index", "rec.dlp.particles..index"], append=True)
 
+    # Rename I0-I1-I2 variables to x-y-z
     cols_to_rename = ["momentum", "end_point", "start_point", "start_dir", "end_dir", "vertex"] 
     rename_to_XYZ(spinepart_matched_with_true_df, cols_to_rename)
 
