@@ -18,14 +18,14 @@ def make_frameshiftdf_slc(f, FVcut = False):
     slcdf = slcdf.drop('tmatch', axis=1,level=1) # slc level
 
     # pre-selection cuts
-    #slcdf = slcdf[slcdf.slc.is_clear_cosmic==0]
-    #slcdf = slcdf[slcdf.slc.nu_score > 0.5]
+    slcdf = slcdf[slcdf.slc.is_clear_cosmic==0]
+    slcdf = slcdf[slcdf.slc.nu_score > 0.5]
     if FVcut:
         slcdf = slcdf[InFV(df=slcdf.slc.vertex, inzback=0, det=DETECTOR)]    
 
     #save frameshift/timing info columns
-    #framedf = make_framedf(f)
-    framedf = make_framedf_new(f)
+    framedf = make_framedf(f)
+    #framedf = make_framedf_new(f)
     timingdf = make_timingdf(f)
     ftdf = multicol_merge(framedf, timingdf, left_index=True, right_index=True, how="left", validate="one_to_one")
     
@@ -63,14 +63,19 @@ def make_frameshiftdf_crtsp(f):
 
     DETECTOR = "SBND"
 
-    crtbranches = ['rec.crt_spacepoints.time'
-                  ,'rec.crt_spacepoints.complete']
+    crtbranches = [
+                    'rec.crt_spacepoints.time'
+                  ,'rec.crt_spacepoints.time_err'
+                  ,'rec.crt_spacepoints.pe'
+                  ,'rec.crt_spacepoints.complete'
+                  ,'rec.crt_spacepoints.tagger'
+                  ]
     crtdf = loadbranches(f["recTree"], crtbranches)
     crtdf = crtdf[crtdf.rec.crt_spacepoints.complete == 1]   
 
     #save frameshift/timing info columns
-    #framedf = make_framedf(f)
-    framedf = make_framedf_new(f)
+    framedf = make_framedf(f)
+    #framedf = make_framedf_new(f)
     timingdf = make_timingdf(f)
     ftdf = multicol_merge(framedf, timingdf, left_index=True, right_index=True, how="left", validate="one_to_one")
     
