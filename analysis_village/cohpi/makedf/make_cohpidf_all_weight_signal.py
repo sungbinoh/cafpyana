@@ -424,8 +424,8 @@ def make_cohpidf_slc(f):
     slcdf = slcdf[(slcdf.n_prong == 2) & (slcdf.n_trk == 2) & (slcdf.n_proton == 0) & (slcdf.n_shower == 0)]
 
     ###### (9) - c: dir Z and opening ang
-    long_dirz_cut = 0.7
-    short_dir_z_cut = 0.5
+    long_dirz_cut = -1.
+    short_dir_z_cut = -1.
     open_ang_cut = 0.5
     slcdf = slcdf[(slcdf.long_dirz > long_dirz_cut) & (slcdf.short_dirz > short_dir_z_cut) & (slcdf.opening_angle > open_ang_cut)]
 
