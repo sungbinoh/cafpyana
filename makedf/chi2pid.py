@@ -5,7 +5,7 @@ import sqlite3
 import uproot
 
 larsoft_data_v = "v1_02_02"
-icarus_data_v = "v10_06_00"
+icarus_data_v = "v10_06_06"
 sbnd_data_v = "v01_35_00"
 
 rr_max_cut_chi2 = 25. ## for resolving MC's hit RR cut, after fixing the issue, put this value to 26.
@@ -15,7 +15,7 @@ ICARUS_CALO_PARAMS = {
     "alpha_emb": 0.904,
     "beta_90": 0.204,
     "R_emb": 1.25,
-    "gains": [0.016751, 0.012755, 0.012513],
+    "gains": [0.016751, 0.012755, 0.012516],
     "c_cal_frac": [1., 1., 1.],
 }
 
@@ -195,17 +195,17 @@ def _yz_zbin(z, yz_zbin):
 
 def _yz_iov(run): 
     iov = __iov(run, IC_yz_cal_iovdf)
-    iov[run == 1] = 4 # MC default to Run 4
+    iov[run == 1] = 5 # non-Overlay MC default to Run 4
     return iov
 
 def _etau_iov(run):
     iov = __iov(run, IC_etau_cal_iovdf)
-    iov[run == 1] = -1 # MC default to no run
+    iov[run == 1] = -1 # non-Overlay MC default to no run
     return iov
 
 def _tpc_iov(run):
     iov = __iov(run, IC_tpc_cal_iovdf)
-    iov[run == 1] = 3 # MC default to Run 4
+    iov[run == 1] = 4 # non-Overlay MC default to Run 4
     return iov
     
 
