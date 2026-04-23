@@ -236,8 +236,8 @@ def make_cohpidf_slc(f):
     #### (4) dir Z cut
     longdf = pandora_df.sort_values(by=("pfp", "trk", "len", "", "", ""), ascending=False).groupby(level=[0,1]).nth(0)
     shortdf = pandora_df.sort_values(by=("pfp", "trk", "len", "", "", ""), ascending=False).groupby(level=[0,1]).nth(1)
-    is_long_dirz_pass = longdf.pfp.trk.dir.z > 0.7
-    is_short_dirz_pass = shortdf.pfp.trk.dir.z > 0.5
+    is_long_dirz_pass = longdf.pfp.trk.dir.z > -1. ## not applying dir z cut
+    is_short_dirz_pass = shortdf.pfp.trk.dir.z > -1. ## not applying dir z cut
 
     long_dirx = longdf.pfp.trk.dir.x
     long_diry = longdf.pfp.trk.dir.y
