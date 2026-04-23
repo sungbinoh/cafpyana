@@ -1,22 +1,26 @@
-#import glob
-import XRootD.client.glob_funcs as glob
-import numpy as np
-import uproot
-import pandas as pd
-from tqdm.auto import tqdm
-import subprocess
-from multiprocessing import Pool
+# Standard library imports
 import multiprocessing
 import os
-import dill
+import random
+import subprocess
 import sys
-from functools import partial
-import time
-import uuid
 import tempfile
+import time
+import traceback
+import uuid
+from functools import partial
+from multiprocessing import Pool
 
-from makedf.makedf import make_histpotdf
-from makedf.makedf import make_histgenevtdf
+# Third-party imports
+import dill
+import numpy as np
+import pandas as pd
+import uproot
+import XRootD.client.glob_funcs as glob
+from tqdm.auto import tqdm
+
+# Local application/custom imports
+from makedf.makedf import make_histgenevtdf, make_histpotdf
 
 CPU_COUNT = multiprocessing.cpu_count()
 
@@ -43,108 +47,147 @@ class NTupleProc(object):
         self.f = data["f"]
         self.name = data["name"]
 
-def _open_with_retries(path, attempts=5, sleep=2.0):
+def _open_with_retries(path, attempts=3, sleep=5.0):
     last_exc = None
+
+    # --- Try streaming with a "Pre-flight" check ---
     for k in range(attempts):
         try:
-            return uproot.open(path, timeout=120)
-        except (OSError, ValueError) as e:
+            # 1. Open the file handle
+            f = uproot.open(path, timeout=300)
+
+            # 2. PRE-FLIGHT: Force a small read (getting keys)
+            # If the door is timing out, this will raise the 'Operation expired' error HERE.
+            _ = f.keys()
+
+            return f
+        except Exception as e:
             last_exc = e
-            if k + 1 < attempts:
-                time.sleep(sleep * (k + 1))
+            print(f"[Attempt {k+1}] Network lag for {os.path.basename(path)}. Error: {e}", flush=True)
+            time.sleep(sleep * (k + 1) + random.uniform(0, 3))
+
+    # If streaming fails after all attempts, raise the exception
+    # so _loaddf can trigger the local copy failover.
     raise last_exc
 
+def _execute_load(f, applyfs, index, fname):
+    """Internal helper to process an open file handle."""
+    results = []
+
+    # 1. Read TotalEvents immediately to check file validity
+    totevt = f['TotalEvents'].values()[0]
+
+    # --- PHASE A: Main Trees ---
+    if "recTree" not in f:
+        print(f"File ({fname}) missing recTree. Skipping main DFS.", flush=True)
+    elif totevt < 1e-6:
+        print(f"File ({fname}) has 0 in TotalEvents. Skipping main DFS.", flush=True)
+    else:
+        for i, applyf in enumerate(applyfs):
+            df = applyf(f)
+            if df is not None:
+                # CRITICAL: Deep copy ensures data is in RAM, not 'linked' to the file
+                df = df.copy(deep=True)
+
+                # Metadata tagging
+                df["__ntuple"] = index
+                df.set_index("__ntuple", append=True, inplace=True)
+                new_order = [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
+                df = df.reorder_levels(new_order)
+                results.append(df)
+
+    # --- PHASE B: Metadata Histograms ---
+    # POT Histogram
+    try:
+        df_histpot = make_histpotdf(f).copy(deep=True)
+        df_histpot["__ntuple"] = index
+        df_histpot.set_index("__ntuple", append=True, inplace=True)
+        new_order = [df_histpot.index.nlevels - 1] + list(range(df_histpot.index.nlevels - 1))
+        results.append(df_histpot.reorder_levels(new_order))
+    except Exception as e:
+        print(f"Warning: Could not read TotalPOT from {os.path.basename(fname)}: {e}", flush=True)
+
+    # GenEvents Histogram
+    try:
+        df_histgenevt = make_histgenevtdf(f).copy(deep=True)
+        df_histgenevt["__ntuple"] = index
+        df_histgenevt.set_index("__ntuple", append=True, inplace=True)
+        new_order = [df_histgenevt.index.nlevels - 1] + list(range(df_histgenevt.index.nlevels - 1))
+        results.append(df_histgenevt.reorder_levels(new_order))
+    except Exception as e:
+        print(f"Warning: Could not read TotalGenEvents from {os.path.basename(fname)}: {e}", flush=True)
+
+    return results
+
 def _loaddf(applyfs, preprocess, g):
-    # fname, index, applyfs = inp
     index, fname = g
+    original_fname = fname
+
     # Convert pnfs to xroot URL's
     if fname.startswith("/pnfs"):
         fname = fname.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
-    # fix xroot URL's
     elif fname.startswith("xroot"):
         fname = fname[1:]
 
-    madef = False
-
-    # run any preprocess-ing commands
+    dfs = []
     tempfiles = []
+    local_copy_path = None
+
+    # Run any preprocess-ing commands
     if preprocess is not None:
         for i, p in enumerate(preprocess):
             temp_directory = tempfile.gettempdir()
-            temp_file_name = os.path.join(temp_directory, "temp%i_%s.flat.caf.root" % (i, str(uuid.uuid4()))) 
+            temp_file_name = os.path.join(temp_directory, f"temp{i}_{uuid.uuid4()}.flat.caf.root")
             p.run(fname, temp_file_name)
             tempfiles.append(temp_file_name)
             fname = temp_file_name
 
     try:
-        # Open AND close strictly within the context manager
-        with _open_with_retries(fname) as f:
-            dfs = []
-            if("TotalEvents" in f):
-                totevt = f['TotalEvents'].values()[0]
+        # ATTEMPT 1: Normal Streaming
+        try:
+            with _open_with_retries(fname) as f:
+                dfs = _execute_load(f, applyfs, index, fname)
+        except Exception as e:
+            # If we hit an error (like XRootD Expired or exhausted retries), trigger failover
+            if "Operation expired" in str(e) or "vector_read" in str(e) or "I/O operation on closed file" in str(e):
+                print(f"Streaming timeout for {os.path.basename(fname)}. Triggering local copy failover...", flush=True)
+
+                # Setup local scratch path using your environment variable!
+                scratch_dir = os.getenv("CAFPYANA_TMP_SCRATCH", "/scratch/7DayLifetime/sungbino/tmp_failover")
+                os.makedirs(scratch_dir, exist_ok=True)
+                local_copy_path = os.path.join(scratch_dir, f"{uuid.uuid4()}_{os.path.basename(original_fname)}")
+
+                # XRDCP the file (Robust)
+                subprocess.run(["xrdcp", "-s", "-f", fname, local_copy_path], check=True)
+
+                # ATTEMPT 2: Process the local file
+                with uproot.open(local_copy_path) as f_local:
+                    dfs = _execute_load(f_local, applyfs, index, local_copy_path)
+                    print(f"Successfully recovered {os.path.basename(fname)} via local copy.", flush=True)
             else:
-                print("File (%s) missing TotalEvents. Skipping empty file!" % fname)
-                return None
-                
-            if "recTree" not in f:
-                print("File (%s) missing recTree. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
-            elif totevt < 1e-6:
-                print("File (%s) has 0 in TotalEvents. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
-            else:
-                for applyf in applyfs:
-                    df = applyf(f)  # must fully read from 'f' here
-                    if df is None:
-                        dfs.append(None)
-                        continue
+                # If it's a completely different error, don't bother copying; just raise it.
+                raise e
 
-                    # --- CRITICAL: detach from file-backed/lazy data ---
-                    # If it's a pandas obj, deep-copy; if not, try to materialize.
-                    if isinstance(df, pd.DataFrame):
-                        df = df.copy(deep=True)
-                    elif hasattr(df, "to_numpy"):  # Series / array-like
-                        df = pd.DataFrame(df.to_numpy()).copy(deep=True)
-                    # ---------------------------------------------------
-
-                    # Tag with __ntuple and move it to front of MultiIndex
-                    df["__ntuple"] = index
-                    df.set_index("__ntuple", append=True, inplace=True)
-                    new_order = [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
-                    df = df.reorder_levels(new_order)
-
-                    dfs.append(df)
-
-
-            df_histpot = make_histpotdf(f)
-            if "TotalPOT" not in f:
-                print(f"File ({fname}) missing TotalPOT histogram. Using empty DataFrame.")
-            df_histpot["__ntuple"] = index
-            df_histpot.set_index("__ntuple", append=True, inplace=True)
-            new_order = [df_histpot.index.nlevels - 1] + list(range(df_histpot.index.nlevels - 1))
-            df_histpot = df_histpot.reorder_levels(new_order)
-            dfs.append(df_histpot)
-
-            df_histgenevt = make_histgenevtdf(f)
-            if "TotalGenEvents" not in f:
-                print(f"File ({fname}) missing TotalGenEvents histogram. Using empty DataFrame.")
-            df_histgenevt["__ntuple"] = index
-            df_histgenevt.set_index("__ntuple", append=True, inplace=True)
-            new_order = [df_histgenevt.index.nlevels - 1] + list(range(df_histgenevt.index.nlevels - 1))
-            df_histgenevt = df_histgenevt.reorder_levels(new_order)
-            dfs.append(df_histgenevt)
-
-    except (OSError, ValueError) as e:
-        print(f"Could not open file ({fname}). Skipping...")
-        print(e)
+    except Exception as e:
+        print(f"PERMANENT FAILURE: Could not process file ({fname}). Skipping...", flush=True)
+        print(f"Error Detail: {e}", flush=True)
+        traceback.print_exc()
         dfs = None
 
+    # --- CLEANUP ---
+    # 1. Preprocessed files
+    for tmp in tempfiles:
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
-    for f in tempfiles:
-        os.remove(f)
-            
-    if not dfs:
-        return None
+    # 2. Local failover copy
+    if local_copy_path and os.path.exists(local_copy_path):
+        try:
+            os.remove(local_copy_path)
+        except Exception as e:
+            print(f"Cleanup error for {local_copy_path}: {e}")
 
-    return dfs
+    return dfs if (dfs and len(dfs) > 0) else None
 
 class NTupleGlob(object):
     def __init__(self, g, branches):
@@ -163,14 +206,14 @@ class NTupleGlob(object):
         if not isinstance(fs, list):
             fs = [fs]
 
-        thisglob = self.glob 
+        thisglob = self.glob
         if maxfile:
             thisglob = thisglob[:maxfile]
 
         if nproc == "auto":
             CPU_COUNT_use = int(CPU_COUNT * 0.8)
             nproc = min(CPU_COUNT_use, len(thisglob))
-            print("CPU_COUNT : " + str(CPU_COUNT) + ", len(thisglob): " + str(len(thisglob)) + ", nproc: " + str(nproc))
+        print("CPU_COUNT : " + str(CPU_COUNT) + ", len(thisglob): " + str(len(thisglob)) + ", nproc: " + str(nproc))
 
         ret = []
 
@@ -184,5 +227,3 @@ class NTupleGlob(object):
             print('Received Ctrl-C. Returning dataframes collected so far.')
 
         return ret
-
-

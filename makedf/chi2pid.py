@@ -6,9 +6,9 @@ import uproot
 
 larsoft_data_v = "v1_02_02"
 icarus_data_v = "v10_06_06"
-sbnd_data_v = "v01_35_00"
+sbnd_data_v = "v01_41_00" #3 for sbndcode v10_14_02
 
-rr_max_cut_chi2 = 25. ## for resolving MC's hit RR cut, after fixing the issue, put this value to 26.
+rr_max_cut_chi2 = 26. ## for resolving MC's hit RR cut, after fixing the issue, put this value to 26.
 
 #### == use pandora_df_calo_update to apply these changes
 ICARUS_CALO_PARAMS = {
@@ -22,14 +22,29 @@ ICARUS_CALO_PARAMS = {
 #### Default
 #### == For each element, the first entry is for MC and the second entry is for the data
 SBND_CALO_PARAMS = {
-    "alpha_emb": [0.904, 0.904],
-    "beta_90": [0.204, 0.204],
-    "R_emb": [1.25, 1.25],
+    "alpha_emb": [0.904, 0.9366111025888879],
+    "beta_90": [0.204, 0.1835451204193374],
+    "R_emb": [1.25, 1.567685536351266],
     "gains": [
         [0.0203521, 0.0202351, 0.0200727], ## MC
-        [0.0223037, 0.0219534, 0.0215156]], ## Data
+        [0.02, 0.02, 0.02]], ## Data
     "c_cal_frac": [1., 1., 1.],
-    "etau": [100., 35.], ## first value for MC and second value for data
+    "etau": [35., 35.], ## first value for MC and second value for data
+}
+
+
+# calo variations
+# variations on recombination parameters are taken from the ICARUS measurement uncertainties
+CALO_VARIATIONS = {
+    "cv": SBND_CALO_PARAMS,
+    "ccal_p": {**SBND_CALO_PARAMS, "c_cal_frac": [1.02, 1.02, 1.02]},
+    "ccal_m": {**SBND_CALO_PARAMS, "c_cal_frac": [0.98, 0.98, 0.98]},
+    "alpha_p": {**SBND_CALO_PARAMS, "alpha_emb": [0.904+0.008, 0.904+0.008]},
+    "alpha_m": {**SBND_CALO_PARAMS, "alpha_emb": [0.904-0.008, 0.904-0.008]},
+    "beta_p": {**SBND_CALO_PARAMS, "beta_90": [0.204+0.008, 0.204+0.008]},
+    "beta_m": {**SBND_CALO_PARAMS, "beta_90": [0.204-0.008, 0.204-0.008]},
+    "R_p": {**SBND_CALO_PARAMS, "R_emb": [1.25+0.02, 1.25+0.02]},
+    "R_m": {**SBND_CALO_PARAMS, "R_emb": [1.25-0.02, 1.25-0.02]},
 }
 
 
@@ -119,32 +134,46 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
         ybin = _yz_ybin(dqdxdf.y, this_yz_ybin)
         zbin = _yz_zbin(dqdxdf.z, this_yz_zbin)
         bin_test_df = pd.DataFrame({"y":dqdxdf.y, "z": dqdxdf.z, "ybin": ybin, "zbin": zbin, "dqdx": dqdx})
-        dqdxdf['iov'] = 0 ## FIXME: once SBND has time dep. calo, it should be updated
+        if isMC:
+            dqdxdf['iov'] = 0 ## FIXME: once SBND has time dep. calo, it should be updated
+        else:
+            dqdxdf['iov'] = _etau_iov_sbnd(dqdxdf.run)
+
         iov = dqdxdf.iov ## FIXME: once SBND has time dep. calo, it should be updated
         itpc = dqdxdf.tpc
         plane = dqdxdf.plane
 
         yzdf = pd.DataFrame({"ybin": ybin, "zbin": zbin, "itpc": itpc, "plane": plane, "iov": iov})
+        yzdf['iov'] = 0 ## yzdf iov ==0 for MC and data
         yz_scale = yzdf.merge(this_yz_cal_df, on=["iov", "itpc", "plane", "ybin", "zbin"], how="left", validate="many_to_one").scale
-        yz_scale[yz_scale < 1e-6] = 1.
+        yz_scale[yz_scale < 1e-3] = 1.
         yz_scale = yz_scale.fillna(1)
         yz_scale.index = dqdxdf.index
+        #dqdxdf['yz_scale'] = yz_scale ## FIXME
 
         #yzdf['rr'] = dqdxdf.rr
         #yzdf['scale'] = yz_scale
         #print(yzdf[yzdf.rr < 26.].head(50))
         # compute lifetime correction
         iov = dqdxdf.iov ## FIXME: once SBND has time dep. calo, it should be updated
-        etaudf = pd.DataFrame({"itpc": itpc, "iov": iov})
-        etau = etaudf.merge(this_etau_df, on=["iov", "itpc"], how="left", validate="many_to_one").etau
+        if isMC:
+            etaudf = pd.DataFrame({"itpc": itpc, "iov": iov})
+            etau = etaudf.merge(this_etau_df, on=["iov", "itpc"], how="left", validate="many_to_one").etau
+        else:
+            etaudf = pd.DataFrame({"iov": iov})
+            etau = etaudf.merge(SBND_etau_cal_data_df, on=["iov"], how="left", validate="many_to_one")
+            etau['etau'] = np.where(dqdxdf.tpc == 0, etau.etau_E, etau.etau_W)
+            etau = etau.etau
+
         etau = etau.fillna(np.inf)
         etau.index = dqdxdf.index
 
         # apply the corrections
         t0 = 0 # assume in time
         tdrift = dqdxdf.t / 2000. - 0.2
-        dqdx = dqdx * np.exp(tdrift / etau) * yz_scale
-        #dqdx = dqdx / yz_scale
+        etau_corr = np.exp(tdrift / etau)
+        #dqdxdf['etau_corr'] = etau_corr ## FIXME
+        dqdx = dqdx * etau_corr * yz_scale
 
     else: # if not specified, rely on input calibration
         dqdx = dqdxdf.dqdx
@@ -165,21 +194,27 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
 
     return dqdx*gain_perhit
 
-def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False, smear=-1, scale=1):
+def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False, smear=-1, scale=1, new_calo_params=None):
     dqdx_v = dqdx(dqdxdf, gain=gain, calibrate=calibrate, isMC=isMC)
-    if gain == "ICARUS":
+    if gain == "SBND":
+
+        if new_calo_params is None:
+            calo_params = SBND_CALO_PARAMS
+        else:
+            calo_params = new_calo_params
+
+        scalegain = calo_params['c_cal_frac'][plane]
+        this_alpha_emb = calo_params["alpha_emb"][0] if isMC else calo_params["alpha_emb"][1]
+        this_beta_90 = calo_params["beta_90"][0] if isMC else calo_params["beta_90"][1]
+        this_R_emb = calo_params["R_emb"][0] if isMC else calo_params["R_emb"][1]
+        dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, this_alpha_emb, this_beta_90, this_R_emb)
+
+    elif gain == "ICARUS":
         scalegain = ICARUS_CALO_PARAMS['c_cal_frac'][plane]
-    elif gain == "SBND":
-        scalegain = SBND_CALO_PARAMS['c_cal_frac'][plane]
+        dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
+
     else:
         scalegain = 1.
-
-    if gain == "SBND":
-        this_alpha_emb = SBND_CALO_PARAMS["alpha_emb"][0] if isMC else SBND_CALO_PARAMS["alpha_emb"][1]
-        this_beta_90 = SBND_CALO_PARAMS["beta_90"][0] if isMC else SBND_CALO_PARAMS["beta_90"][1]
-        this_R_emb = SBND_CALO_PARAMS["R_emb"][0] if isMC else SBND_CALO_PARAMS["R_emb"][1]
-        dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, this_alpha_emb, this_beta_90, this_R_emb)
-    else:
         dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
 
     if smear > 0:
@@ -207,10 +242,15 @@ def _tpc_iov(run):
     iov = __iov(run, IC_tpc_cal_iovdf)
     iov[run == 1] = 4 # non-Overlay MC default to Run 4
     return iov
-    
 
 def __iov(run, df):
     return pd.cut(run, list(df.run) + [np.inf], labels=df.iov).astype(float).fillna(-1).astype(int)
+
+def _etau_iov_sbnd(run):
+    return __iov_sbnd(run, SBND_etau_cal_iovdf)
+
+def __iov_sbnd(run, df):
+    return pd.cut(run, list(df.run) + [np.inf], labels=df.iov, right=False)
 
 ##############################
 # EXPECTED dE/dx FILES
@@ -349,6 +389,8 @@ conn.close()
 ##############################
 # SBND TPC calo files
 ##############################
+
+# load SBND YZ unif maps
 SBND_yz_cal_mc_f = "/cvmfs/sbnd.opensciencegrid.org/products/sbnd/sbnd_data/" + sbnd_data_v + "/YZmaps/yz_correction_map_mcp2025b5e18.root"
 SBND_yz_cal_data_f = "/cvmfs/sbnd.opensciencegrid.org/products/sbnd/sbnd_data/" + sbnd_data_v + "/YZmaps/yz_correction_map_data1e20.root"
 
@@ -391,5 +433,31 @@ def call_sbnd_yz_corr(map_f):
 SBND_yz_cal_mc_df, yz_zbin_sbnd_mc, yz_ybin_sbnd_mc = call_sbnd_yz_corr(SBND_yz_cal_mc_f)
 SBND_yz_cal_data_df, yz_zbin_sbnd_data, yz_ybin_sbnd_data = call_sbnd_yz_corr(SBND_yz_cal_data_f)
 
+# load SBND etau DB
+SBND_etau_cal_f = "/cvmfs/sbnd.opensciencegrid.org/products/sbnd/sbnd_data/" + sbnd_data_v + "/CalibrationDatabase/tpc_elifetime.db"
+SBND_etau_cal_db = "tpc_elifetime_data"
+SBND_etau_cal_iov = "tpc_elifetime_iovs"
+
+conn = sqlite3.connect(SBND_etau_cal_f)
+cursor = conn.cursor()
+cursor.execute("SELECT * FROM %s" % SBND_etau_cal_db)
+rows = cursor.fetchall()
+data = list(zip(*rows))
+SBND_etau_cal_data_df = pd.DataFrame({
+  "iov": data[0],
+  "etau_E": data[5],
+  "etau_W": data[8],
+})
+
+cursor.execute("SELECT * FROM %s WHERE ACTIVE=1" % SBND_etau_cal_iov)
+rows = cursor.fetchall()
+data = list(zip(*rows))
+SBND_etau_cal_iovdf = pd.DataFrame({
+  "iov": data[0],
+  "begin_time": data[1],
+})
+SBND_etau_cal_iovdf["run"] = SBND_etau_cal_iovdf.begin_time % 1000000000
+SBND_etau_cal_iovdf.sort_values(by="run", inplace=True)
+conn.close()
+
 SBND_etau_cal_mc_df = pd.DataFrame( {'iov': [0, 0], 'itpc': [0, 1], 'etau': [SBND_CALO_PARAMS["etau"][0], SBND_CALO_PARAMS["etau"][0]]})
-SBND_etau_cal_data_df = pd.DataFrame( {'iov': [0, 0], 'itpc': [0, 1], 'etau': [SBND_CALO_PARAMS["etau"][1], SBND_CALO_PARAMS["etau"][1]]})
