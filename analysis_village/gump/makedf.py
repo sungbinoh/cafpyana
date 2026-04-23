@@ -591,7 +591,7 @@ def make_gump_nudf(f, is_slc=False):
     is_1p0pi = (nudf.nmu_27MeV == 1) & (nudf.np_50MeV == 1) & (nudf.npi_30MeV == 0) & (nudf.npi0 == 0) 
     is_numu = (nudf.pdg == 14)
     is_other_numucc = (is_numu & is_cc & (is_1p0pi == 0) & is_fv)
-    is_contained = trkfv_cut(nudf.mu.start, DETECTOR) & trkfv_cut(nudf.p.start, DETECTOR)
+    is_contained = trkfv_cut(nudf.mu.end, DETECTOR) & trkfv_cut(nudf.p.end, DETECTOR)
     is_sig = is_fv & is_1p0pi & is_numu & is_cc & is_contained
 
     nudf['nuint_categ'] = genie_mode 
@@ -616,6 +616,12 @@ def make_gump_nudf(f, is_slc=False):
         'pos_x' : nudf.position.x,
         'pos_y' : nudf.position.y,
         'pos_z' : nudf.position.z,
+        'mu_end_x' : nudf.mu.end.x,
+        'mu_end_y' : nudf.mu.end.y,
+        'mu_end_z' : nudf.mu.end.z,
+        'p_end_x' : nudf.p.end.x,
+        'p_end_y' : nudf.p.end.y,
+        'p_end_z' : nudf.p.end.z,
         'pdg': pdg,
         'nmu': nmu,
         'nn': nn,
