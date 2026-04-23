@@ -501,6 +501,12 @@ gump_genie_reknob_systematics = gump_genie_systematics + [
     'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b2',
     'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b4',
 
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin1',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin2',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin3',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin4',
+    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin5',
+
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin1',
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin2',
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin3',
@@ -537,17 +543,15 @@ gump_genie_reknob_systematics = gump_genie_systematics + [
     'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrKin_PiProFix_N',
     'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrKin_PiProBias_N',
 
-    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_ValQ0Bin0_MECResponse',
-    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_ValQ0Bin1_MECResponse',
-    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_ValQ0Bin2_MECResponse',
-    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_ValQ0Bin3_MECResponse',
-    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_ValQ0Bin4_MECResponse',
+    'MECq0q3InterpWeighting_SuSAv2ToValenica_q0binned_MECResponse_q0bin0',
+    'MECq0q3InterpWeighting_SuSAv2ToValenica_q0binned_MECResponse_q0bin1',
+    'MECq0q3InterpWeighting_SuSAv2ToValenica_q0binned_MECResponse_q0bin2',
+    'MECq0q3InterpWeighting_SuSAv2ToValenica_q0binned_MECResponse_q0bin3',
 
-    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_MarQ0Bin0_MECResponse',
-    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_MarQ0Bin1_MECResponse',
-    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_MarQ0Bin2_MECResponse',
-    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_MarQ0Bin3_MECResponse',
-    'MECq0q3InterpWeighting_SBNNuSyst_multisigma_MarQ0Bin4_MECResponse',
+    'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin0',
+    'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin1',
+    'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin2',
+    'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin3',
 ]
 
 def make_gump_nuslimwgtdf(f):
