@@ -148,6 +148,8 @@ def make_pandora_no_cuts_df(f):
     else:
         print("Detector unclear, check rec.hdr.det!")
 
+    ismc = loadbranches(f["recTree"], ["rec.hdr.ismc"]).rec.hdr.ismc.iloc[0]
+
     slcdf = make_slcdf(f)
     StartingRows = len(slcdf)
 
@@ -160,38 +162,63 @@ def make_pandora_no_cuts_df(f):
         trkhitdf = make_trkhitdf(f)
 
         # systematic variations
-        dedx_redo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS")
+        dedx_redo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", isMC=ismc)
         trkhitdf["dedx_redo"] = dedx_redo
 
-        dedx_hi = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", scale=1.01)
+        dedx_hi = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", isMC=ismc, scale=1.01)
         trkhitdf["dedx_hi"] = dedx_hi
-        dedx_lo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", scale=0.99)
+        dedx_lo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", isMC=ismc, scale=0.99)
         trkhitdf["dedx_lo"] = dedx_lo
-        dedx_smear = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", smear=0.05)
-        trkhitdf["dedx_smear"] = dedx_smear
 
-        trkdf["chi2u"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_redo")[0]
-        trkdf["chi2p"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_redo")[0]
+        dedx_2hi = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", isMC=ismc, scale=1.02)
+        trkhitdf["dedx_2hi"] = dedx_2hi
+        dedx_2lo = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", isMC=ismc, scale=0.98)
+        trkhitdf["dedx_2lo"] = dedx_2lo
 
-        trkdf["chi2u_lo"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_lo")[0]
-        trkdf["chi2p_lo"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_lo")[0]
+        dedx_smear5 = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", isMC=ismc, smear=0.05)
+        trkhitdf["dedx_smear5"] = dedx_smear5
 
-        trkdf["chi2u_hi"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_hi")[0]
-        trkdf["chi2p_hi"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_hi")[0]
-
-        trkdf["chi2u_smear"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_smear")[0]
-        trkdf["chi2p_smear"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_smear")[0]
+        dedx_smear13 = chi2pid.dedx(trkhitdf, gain="ICARUS", calibrate="ICARUS", isMC=ismc, smear=0.13)
+        trkhitdf["dedx_smear13"] = dedx_smear13
     else:
-        trkdf["chi2u"] = trkdf.pfp.trk.chi2pid.I2.chi2_muon
-        trkdf["chi2p"] = trkdf.pfp.trk.chi2pid.I2.chi2_proton
+        trkhitdf = make_trkhitdf(f)
 
-        # TODO: implement
-        trkdf["chi2u_lo"] = trkdf.chi2u
-        trkdf["chi2u_hi"] = trkdf.chi2u
-        trkdf["chi2u_smear"] = trkdf.chi2u
-        trkdf["chi2p_lo"] = trkdf.chi2p
-        trkdf["chi2p_hi"] = trkdf.chi2p
-        trkdf["chi2p_smear"] = trkdf.chi2p
+        dedx_redo = chi2pid.dedx(trkhitdf, gain="SBND", calibrate="SBND", isMC=ismc)
+        trkhitdf["dedx_redo"] = dedx_redo
+
+        dedx_hi = chi2pid.dedx(trkhitdf, gain="SBND", calibrate="SBND", isMC=ismc, scale=1.02)
+        trkhitdf["dedx_hi"] = dedx_hi
+        dedx_lo = chi2pid.dedx(trkhitdf, gain="SBND", calibrate="SBND", isMC=ismc, scale=0.98)
+        trkhitdf["dedx_lo"] = dedx_lo
+
+        dedx_2hi = chi2pid.dedx(trkhitdf, gain="SBND", calibrate="SBND", isMC=ismc, scale=1.04)
+        trkhitdf["dedx_2hi"] = dedx_2hi
+        dedx_2lo = chi2pid.dedx(trkhitdf, gain="SBND", calibrate="SBND", isMC=ismc, scale=0.96)
+        trkhitdf["dedx_2lo"] = dedx_2lo
+
+        dedx_smear5 = chi2pid.dedx(trkhitdf, gain="SBND", calibrate="SBND", isMC=ismc, smear=0.05)
+        trkhitdf["dedx_smear5"] = dedx_smear5
+
+        dedx_smear13 = chi2pid.dedx(trkhitdf, gain="SBND", calibrate="SBND", isMC=ismc, smear=0.13)
+        trkhitdf["dedx_smear13"] = dedx_smear13
+
+    trkdf["chi2u"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_redo")[0]
+    trkdf["chi2p"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_redo")[0]
+    
+    trkdf["chi2u_lo"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_lo")[0]
+    trkdf["chi2p_lo"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_lo")[0]
+    trkdf["chi2u_hi"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_hi")[0]
+    trkdf["chi2p_hi"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_hi")[0]
+
+    trkdf["chi2u_2lo"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_2lo")[0]
+    trkdf["chi2p_2lo"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_2lo")[0]
+    trkdf["chi2u_2hi"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_2hi")[0]
+    trkdf["chi2p_2hi"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_2hi")[0]
+    
+    trkdf["chi2u_smear5"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_smear5")[0]
+    trkdf["chi2p_smear5"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_smear5")[0]
+    trkdf["chi2u_smear13"] = chi2pid.chi2u(trkhitdf, dedxname="dedx_smear13")[0]
+    trkdf["chi2p_smear13"] = chi2pid.chi2p(trkhitdf, dedxname="dedx_smear13")[0]
 
     trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.chi2u / trkdf.chi2p
 
@@ -310,16 +337,31 @@ def make_pandora_no_cuts_df(f):
 
         'mu_chi2lo_of_mu_cand': slcdf.mu.chi2u_lo,
         'mu_chi2hi_of_mu_cand': slcdf.mu.chi2u_hi,
-        'mu_chi2smear_of_mu_cand': slcdf.mu.chi2u_smear,
+        'mu_chi22lo_of_mu_cand': slcdf.mu.chi2u_2lo,
+        'mu_chi22hi_of_mu_cand': slcdf.mu.chi2u_2hi,
+        'mu_chi2smear5_of_mu_cand': slcdf.mu.chi2u_smear5,
+        'mu_chi2smear13_of_mu_cand': slcdf.mu.chi2u_smear13,
+
         'mu_chi2lo_of_prot_cand': slcdf.p.chi2u_lo,
         'mu_chi2hi_of_prot_cand': slcdf.p.chi2u_hi,
-        'mu_chi2smear_of_prot_cand': slcdf.p.chi2u_smear,
+        'mu_chi22lo_of_prot_cand': slcdf.p.chi2u_2lo,
+        'mu_chi22hi_of_prot_cand': slcdf.p.chi2u_2hi,
+        'mu_chi2smear5_of_prot_cand': slcdf.p.chi2u_smear5,
+        'mu_chi2smear13_of_prot_cand': slcdf.p.chi2u_smear13,
+
         'prot_chi2lo_of_mu_cand': slcdf.mu.chi2p_lo,
         'prot_chi2hi_of_mu_cand': slcdf.mu.chi2p_hi,
-        'prot_chi2smear_of_mu_cand': slcdf.mu.chi2p_smear,
+        'prot_chi22lo_of_mu_cand': slcdf.mu.chi2p_2lo,
+        'prot_chi22hi_of_mu_cand': slcdf.mu.chi2p_2hi,
+        'prot_chi2smear5_of_mu_cand': slcdf.mu.chi2p_smear5,
+        'prot_chi2smear13_of_mu_cand': slcdf.mu.chi2p_smear13,
+
         'prot_chi2lo_of_prot_cand': slcdf.p.chi2p_lo,
         'prot_chi2hi_of_prot_cand': slcdf.p.chi2p_hi,
-        'prot_chi2smear_of_prot_cand': slcdf.p.chi2p_smear,
+        'prot_chi22lo_of_prot_cand': slcdf.p.chi2p_2lo,
+        'prot_chi22hi_of_prot_cand': slcdf.p.chi2p_2hi,
+        'prot_chi2smear5_of_prot_cand': slcdf.p.chi2p_smear5,
+        'prot_chi2smear13_of_prot_cand': slcdf.p.chi2p_smear13,
 
         'p_len': p_len,
         'mu_len': mu_len,
