@@ -5,7 +5,6 @@ import sys
 # Third-party imports
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
 # Add the head direcoty to sys.path
 workspace_root = os.getcwd()

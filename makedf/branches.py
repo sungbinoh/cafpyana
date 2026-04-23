@@ -387,21 +387,21 @@ stubhitbranches = [
 eslc = "rec.dlp."
 
 eslcbranches = [
-    eslc + "is_neutrino",
-    eslc + "nu_id",
+    eslc + "is_time_contained",
+    eslc + "id",
     eslc + "num_particles",
-    eslc + "num_primaries",
+    eslc + "num_primary_particles",
     eslc + "vertex.0",
     eslc + "vertex.1",
     eslc + "vertex.2",
 ]
 
 eslcmatchedbranches = [
-    eslc + "match",
+    eslc + "match_ids",
 ]
 
 eslcmatchovrlpbranches = [
-    eslc + "match_overlap",
+    eslc + "match_overlaps",
 ]
 
 inter = "rec.dlp."
@@ -479,6 +479,7 @@ eparticlebranches = [
     epart + "interaction_id",
     epart + "id",
     epart + "is_contained",
+    epart + "is_time_contained",
     epart + "is_primary",
     epart + "is_valid",
     epart + "length",
@@ -507,21 +508,27 @@ eparticlebranches = [
     epart + "pid_scores.2",
     epart + "pid_scores.3",
     epart + "pid_scores.4",
+    epart + "pid_scores.5",
     epart + "start_point.0",
     epart + "start_point.1",
     epart + "start_point.2",
     epart + "start_dir.0",
     epart + "start_dir.1",
     epart + "start_dir.2",
-    epart + "start_dedx"
+    epart + "start_dedx",
+]
+
+eparticlematchedbranches = [
+    epart + "match_ids",
+]
+
+eparticlematchovrlpbranches = [
+    epart + "match_overlaps",
 ]
 
 etruthpart = "rec.dlp_true.particles."
 etrueparticlebranches = [k.replace(epart, etruthpart) for k in eparticlebranches if "pid_scores" not in k and "start_dedx" not in k]
 
-eparticlematchedbranches = [
-    epart + "match_ids",
-    epart + "match_overlaps",
+etrueparticlebranches += [
+    etruthpart + "track_id"
 ]
-
-

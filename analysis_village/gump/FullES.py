@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from plot_tools import *
 # Add the head direcoty to sys.path
 workspace_root = os.getcwd()  
