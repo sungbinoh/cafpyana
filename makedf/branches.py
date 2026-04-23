@@ -384,151 +384,435 @@ stubhitbranches = [
     "rec.slc.reco.stub.planes.hits.wire",
 ]
 
-eslc = "rec.dlp."
-
-eslcbranches = [
-    eslc + "is_time_contained",
-    eslc + "id",
-    eslc + "num_particles",
-    eslc + "num_primary_particles",
-    eslc + "vertex.0",
-    eslc + "vertex.1",
-    eslc + "vertex.2",
+# ===============  SPINE branches =============== #
+# - SPINE reco interaction branches
+spineint = "rec.dlp."
+spineint_branches = [
+    spineint + b for b in [
+        "cathode_offset",                       # Distance from the cathode [cm].
+        "depositions_sum",                      # Sum of deposited (de-ghosted) energy [MeV].
+        "flash_hypo_pe",                        # Total PE of the hypothesized flash from OpT0Finder.
+        "flash_total_pe",                       # Total PE of the matched flash (uses OpT0Finder, same order as flash_ids).
+        "id",                                   # Interaction ID (dense enumeration starting from 0 within the event).
+        "is_cathode_crosser",                   # Whether the interaction is a cathode-crosser (some particle crosses the cathode).
+        "is_contained",                         # Whether the interaction is contained within some margin from the detector walls (see SPINE configuration)
+        "is_fiducial",                          # Whether the interaction is in the fiducial volume (see SPINE configuration).
+        "is_flash_matched",                     # Whether the flash is matched to the interaction (uses OpT0Finder).
+        "is_matched",                           # Whether the interaction is matched to a true interaction.
+        "is_time_contained",                    # Whether the particle is time-contained (within the "in-time" region of the drift window).
+        "is_truth",                             # Whether the interaction is a truth interaction.
+        "num_particles",                        # The number of particles in the interaction.
+        "num_primary_particles",                # The number of primary particles in the interaction.
+        "particle_counts.0",                    # The number of particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 0.
+        "particle_counts.1",                    # The number of particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 1.
+        "particle_counts.2",                    # The number of particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 2.
+        "particle_counts.3",                    # The number of particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 3.
+        "particle_counts.4",                    # The number of particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 4.
+        "particle_counts.5",                    # The number of particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 5.
+        "primary_particle_counts.0",            # The number of primary particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 0.
+        "primary_particle_counts.1",            # The number of primary particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 1.
+        "primary_particle_counts.2",            # The number of primary particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 2.
+        "primary_particle_counts.3",            # The number of primary particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 3.
+        "primary_particle_counts.4",            # The number of primary particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 4.
+        "primary_particle_counts.5",            # The number of primary particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 5.
+        "size",                                 # The size of the interaction (number of voxels).
+#        "topology",                             # Topology of the interaction (e.g. "0g0e1mu0pi2p") considering only primaries.
+        "vertex.0",                             # Vertex of the interaction in detector coordinates (X coordinate).
+        "vertex.1",                             # Vertex of the interaction in detector coordinates (Y coordinate).
+        "vertex.2",                             # Vertex of the interaction in detector coordinates (Z coordinate).
+#        "particles",                            # Particles in the interaction.
+    ]
 ]
 
-eslcmatchedbranches = [
-    eslc + "match_ids",
+spineint_flashids_branches = [
+    spineint + "flash_ids"                      # Flash IDs for the matched flashes (uses OpT0Finder, lowest score first).
 ]
 
-eslcmatchovrlpbranches = [
-    eslc + "match_overlaps",
+spineint_flashscores_branches = [
+    spineint + "flash_scores"                   # Score of the matched flashes (uses OpT0Finder, same order as flash_ids).  
 ]
 
-inter = "rec.dlp."
-
-interbranches = [
-    inter + "id",
-    inter + "is_cathode_crosser",
-    inter + "is_time_contained",
-    inter + "is_contained",
-    inter + "is_fiducial",
-    inter + "is_flash_matched",
-    inter + "is_truth",
-    inter + "num_particles",
-    inter + "num_primary_particles",
-    inter + "vertex.0",
-    inter + "vertex.1",
-    inter + "vertex.2",
-    inter + "flash_hypo_pe",
-    inter + "flash_total_pe",
+spineint_flashtimes_branches = [
+    spineint + "flash_times"                    # Time of the matched flashes (uses OpT0Finder, same order as flash_ids).
 ]
 
-flashinterbranches = [
-    inter + "flash_scores",
-    inter + "flash_times",
+spineint_flashvolumeids_branches = [
+    spineint + "flash_volume_ids"               # Volume IDs of the matched flashes (uses OpT0Finder, same order as flash_ids).
 ]
 
-intermatchedbranches = [
-    inter + "match_ids",
+spineint_matched_branches = [
+    spineint + "match_ids"                      # Interaction IDs of the considered matches (correspond to true interaction IDs).
 ]
 
-intermatchovrlpbranches = [
-    inter + "match_overlaps",
+spineint_matchovrlp_branches = [
+    spineint + "match_overlaps"                 # Intersection over union (IoU) of space points of the considered matches.
 ]
 
-etruthint = "rec.dlp_true."
-
-etruthintbranches = [
-    etruthint + "id",
-    etruthint + "nu_id",
-    etruthint + "current_type",
-    etruthint + "energy_init",
-    etruthint + "energy_transfer",
-    etruthint + "num_particles",
-    etruthint + "num_primary_particles",
-    etruthint + "inelasticity",
-    etruthint + "interaction_mode",
-    etruthint + "interaction_type",
-    etruthint + "is_cathode_crosser",
-    etruthint + "is_time_contained",
-    etruthint + "is_contained",
-    etruthint + "is_fiducial",
-    etruthint + "lepton_p",
-    etruthint + "lepton_pdg_code",
-    etruthint + "mct_index",
+spineint_moduleids_branches = [
+    spineint + "module_ids"                     # Module IDs (cryostat) of the interaction.
 ]
 
-epart = "rec.dlp.particles."
-
-eparticlebranches = [
-    epart + "calo_ke",
-    epart + "cathode_offset",
-    # epart + "chi2_per_pid.0",
-    # epart + "chi2_per_pid.1",
-    # epart + "chi2_per_pid.2",
-    # epart + "chi2_per_pid.3",
-    # epart + "chi2_per_pid.4",
-    # epart + "chi2_per_pid.5",
-    # epart + "chi2_pid",
-    epart + "end_point.0",
-    epart + "end_point.1",
-    epart + "end_point.2",
-    epart + "end_dir.0",
-    epart + "end_dir.1",
-    epart + "end_dir.2",
-    epart + "interaction_id",
-    epart + "id",
-    epart + "is_contained",
-    epart + "is_time_contained",
-    epart + "is_primary",
-    epart + "is_valid",
-    epart + "length",
-    epart + "csda_ke",
-    epart + "csda_ke_per_pid.0",
-    epart + "csda_ke_per_pid.1",
-    epart + "csda_ke_per_pid.2",
-    epart + "csda_ke_per_pid.3",
-    epart + "csda_ke_per_pid.4",
-    epart + "csda_ke_per_pid.5",
-    epart + "ke",
-    epart + "p",
-    epart + "momentum.0",
-    epart + "momentum.1",
-    epart + "momentum.2",
-    epart + "mcs_ke",
-    epart + "mcs_ke_per_pid.0",
-    epart + "mcs_ke_per_pid.1",
-    epart + "mcs_ke_per_pid.2",
-    epart + "mcs_ke_per_pid.3",
-    epart + "mcs_ke_per_pid.4",
-    epart + "mcs_ke_per_pid.5",
-    epart + "pid",
-    epart + "pid_scores.0",
-    epart + "pid_scores.1",
-    epart + "pid_scores.2",
-    epart + "pid_scores.3",
-    epart + "pid_scores.4",
-    epart + "pid_scores.5",
-    epart + "start_point.0",
-    epart + "start_point.1",
-    epart + "start_point.2",
-    epart + "start_dir.0",
-    epart + "start_dir.1",
-    epart + "start_dir.2",
-    epart + "start_dedx",
+spineint_particleids_branches = [
+    spineint + "particle_ids"                   # Particle IDs in the interaction (see 'id' attribute of SRParticleDLP).
 ]
 
-eparticlematchedbranches = [
-    epart + "match_ids",
+spineint_primaryparticleids_branches = [
+    spineint + "primary_particle_ids"           # Primary particle IDs in the interaction (see 'id' attribute of SRParticleDLP).
 ]
 
-eparticlematchovrlpbranches = [
-    epart + "match_overlaps",
+# - SPINE true interaction branches
+spinetint = "rec.dlp_true."
+
+spinetint_branches = [
+    spinetint + b for b in [
+        "bjorken_x",                            # Bjorken x of the neutrino interaction.
+        "cathode_offset",                       # Distance from the cathode [cm].
+#        "creation_process",                     # Creation process associated with the neutrino (see MCParticle).
+        "current_type",                         # Current type of the neutrino (see MCNeutrino; 0=CC, 1=NC).
+        "depositions_adapt_q_sum",              # Total tagged (reco non-ghost) charge deposited [ADC].
+        "depositions_adapt_sum",                # Total tagged (reco non-ghost) energy deposited [MeV].
+        "depositions_g4_sum",                   # Total energy deposited energy at the G4 level [MeV].
+        "depositions_q_sum",                    # Total tagged (true non-ghost) charge deposited [ADC].
+        "depositions_sum",                      # Total tagged (true non-ghost) energy deposited [MeV].
+        "distance_travel",                      # Distance traveled by the neutrino from production to the interaction.
+        "energy_init",                          # Initial energy of the neutrino.
+        "energy_transfer",                      # Energy transfer (Q0) of the neutrino interaction.
+        "flash_hypo_pe",                        # Total PE of the hypothesized flash.
+        "flash_total_pe",                       # Total PE of the matched flash.
+        "hadronic_invariant_mass",              # Hadronic invariant mass of the neutrino.
+        "id",                                   # Interaction ID (dense enumeration starting from 0 within the event).
+        "inelasticity",                         # Inelasticity of the neutrino interaction.
+        "interaction_mode",                     # Interaction mode of the neutrino (see MCNeutrino).
+        "interaction_type",                     # Interaction type of the neutrino (see MCNeutrino).
+        "is_cathode_crosser",                   # Whether the interaction is a cathode-crosser (some particle crosses the cathode).
+        "is_contained",                         # Whether the interaction is contained within some margin from the detector walls.
+        "is_fiducial",                          # Whether the interaction is in the fiducial volume (see SPINE configuration).
+        "is_flash_matched",                     # Whether the flash is matched to the interaction.
+        "is_matched",                           # Whether the interaction is matched to a true interaction.
+        "is_time_contained",                    # Whether the particle is time-contained (within the "in-time" region of the drift window).
+        "is_truth",                             # Whether the interaction is a truth interaction.
+        "lepton_p",                             # Momentum of the lepton in the interaction.
+        "lepton_pdg_code",                      # PDG code of the lepton in the interaction.
+        "lepton_track_id",                      # Track ID of the lepton in the neutrino interaction.
+        "mct_index",                            # Index of the neutrino in the original MCTruth array.
+        "momentum.0",                           # Momentum (vector) of the neutrino (X coordinate).
+        "momentum.1",                           # Momentum (vector) of the neutrino (Y coordinate).
+        "momentum.2",                           # Momentum (vector) of the neutrino (Z coordinate).
+        "momentum_transfer",                    # Momentum transfer (Q^2) of the neutrino interaction.
+        "momentum_transfer_mag",                # Momentum transfer (Q3) of the neutrino interaction.
+        "nu_id",                                # Neutrino ID (-1 = not a neutrino, 0 = first neutrino, 1 = second neutrino, etc.).
+        "nucleon",                              # Hit nucleon in the neutrino interaction (see MCNeutrino).
+        "num_particles",                        # Number of particles in the interaction.
+        "num_primary_particles",                # Number of primary particles in the interaction.
+        "orig_id",                              # Original ID of the interaction (from Geant4).
+        "particle_counts.0",                    # Number of particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 0.
+        "particle_counts.1",                    # Number of particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 1.
+        "particle_counts.2",                    # Number of particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 2.
+        "particle_counts.3",                    # Number of particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 3.
+        "particle_counts.4",                    # Number of particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 4.
+        "particle_counts.5",                    # Number of particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 5.
+        "pdg_code",                             # PDG code of the neutrino.
+        "position.0",                           # Position of the neutrino interaction (X coordinate).
+        "position.1",                           # Position of the neutrino interaction (Y coordinate).
+        "position.2",                           # Position of the neutrino interaction (Z coordinate).
+        "primary_particle_counts.0",            # Number of primary particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 0.
+        "primary_particle_counts.1",            # Number of primary particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 1.
+        "primary_particle_counts.2",            # Number of primary particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 2.
+        "primary_particle_counts.3",            # Number of primary particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 3.
+        "primary_particle_counts.4",            # Number of primary particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 4.
+        "primary_particle_counts.5",            # Number of primary particles of each type in the interaction (photon, electron, muon, pion, proton, kaon), type 5.
+        "quark",                                # Hit quark in the neutrino interaction (see MCNeutrino).
+        "reco_vertex.0",                        # Vertex of the interaction in detector coordinates (reco) (X coordinate).
+        "reco_vertex.1",                        # Vertex of the interaction in detector coordinates (reco) (Y coordinate).
+        "reco_vertex.2",                        # Vertex of the interaction in detector coordinates (reco) (Z coordinate).
+        "size",                                 # Number of true non-ghost true-tagged space points.
+        "size_adapt",                           # Number of reco non-ghost true-tagged space points.
+        "size_g4",                              # Number of (rasterized) g4 energy depositions (no detector effects).
+        "target",                               # Target in the neutrino interaction.
+        "theta",                                # Angle between the neutrino and the outgoing lepton [radians].
+#        "topology",                             # Topology of the interaction (e.g. "0g0e1mu0pi2p") considering only primaries.
+        "track_id",                             # Track ID of the neutrino interaction.
+        "vertex.0",                             # Vertex of the interaction in detector coordinates (truth) (X coordinate).
+        "vertex.1",                             # Vertex of the interaction in detector coordinates (truth) (Y coordinate).
+        "vertex.2",                             # Vertex of the interaction in detector coordinates (truth) (Z coordinate).
+#        "particles",                            # Particles in the interaction.
+    ]
 ]
 
-etruthpart = "rec.dlp_true.particles."
-etrueparticlebranches = [k.replace(epart, etruthpart) for k in eparticlebranches if "pid_scores" not in k and "start_dedx" not in k]
-
-etrueparticlebranches += [
-    etruthpart + "track_id"
+spinetint_flashids_branches = [
+    spinetint + "flash_ids"                      # Flash IDs for the matched flashes (uses OpT0Finder, lowest score first).
 ]
+spinetint_flashscores_branches = [
+    spinetint + "flash_scores"                   # Flash score for the matched flashes (uses OpT0Finder, same order as flash_ids).  
+]
+spinetint_flashtimes_branches = [
+    spinetint + "flash_times"                    # Time of the matched flashes (uses OpT0Finder, same order as flash_ids).
+]
+spinetint_flashvolumeids_branches = [
+    spinetint + "flash_volume_ids"               # Volume IDs of the matched flashes (uses OpT0Finder, same order as flash_ids).
+]
+spinetint_matched_branches = [
+    spinetint + "match_ids"                      # Interaction IDs of the considered matches (correspond to reco interaction IDs).
+]
+spinetint_matchovrlp_branches = [
+    spinetint + "match_overlaps"                 # Intersection over union (IoU) of space points of the considered matches.
+]
+spinetint_moduleids_branches = [
+    spinetint + "module_ids"                     # Module IDs (cryostat) of the interaction.
+]
+spinetint_particleids_branches = [
+    spinetint + "particle_ids"                   # Particle IDs in the interaction (see 'id' attribute of SRParticleTruthDLP).
+]
+spinetint_primaryparticleids_branches = [
+    spinetint + "primary_particle_ids"           # Primary particle IDs in the interaction (see 'id' attribute of SRParticleTruthDLP).
+]
+
+
+# - SPINE reco particle branches
+spinepart = "rec.dlp.particles."
+
+spinepart_branches = [
+    spinepart + b for b in [
+        "axial_spread",                         # Axial spread of the particle.
+        "calo_ke",                              # Calorimetric kinetic energy.
+        "cathode_offset",                       # Distance from the cathode [cm].
+        "chi2_per_pid.0",                       # Chi2 score for PID hypothesis 0.
+        "chi2_per_pid.1",                       # Chi2 score for PID hypothesis 1.
+        "chi2_per_pid.2",                       # Chi2 score for PID hypothesis 2.
+        "chi2_per_pid.3",                       # Chi2 score for PID hypothesis 3.
+        "chi2_per_pid.4",                       # Chi2 score for PID hypothesis 4.
+        "chi2_per_pid.5",                       # Chi2 score for PID hypothesis 5.
+        "chi2_pid",                             # PID from the chi2-based PID.
+        "csda_ke",                              # Continuous-slowing-down-approximation kinetic energy.
+        "csda_ke_per_pid.0",                    # CSDA kinetic energy for PID 0.
+        "csda_ke_per_pid.1",                    # CSDA kinetic energy for PID 1.
+        "csda_ke_per_pid.2",                    # CSDA kinetic energy for PID 2.
+        "csda_ke_per_pid.3",                    # CSDA kinetic energy for PID 3.
+        "csda_ke_per_pid.4",                    # CSDA kinetic energy for PID 4.
+        "csda_ke_per_pid.5",                    # CSDA kinetic energy for PID 5.
+        "depositions_sum",                      # Sum of deposited (de-ghosted) energy [MeV].
+        "directional_spread",                   # Directional spread of the particle.
+        "end_dir.0",                            # Unit direction vector calculated at the particle end point (X coordinate).
+        "end_dir.1",                            # Unit direction vector calculated at the particle end point (Y coordinate).
+        "end_dir.2",                            # Unit direction vector calculated at the particle end point (Z coordinate).
+        "end_point.0",                          # End point (vector) of the particle (X coordinate).
+        "end_point.1",                          # End point (vector) of the particle (Y coordinate).
+        "end_point.2",                          # End point (vector) of the particle (Z coordinate).
+        "id",                                   # Particle ID (dense enumeration starting from 0 within the event).
+        "interaction_id",                       # Parent interaction ID.
+        "is_cathode_crosser",                   # Whether the particle is a cathode-crosser.
+        "is_contained",                         # Whether the particle is contained within some margin from the detector walls (see SPINE configuration).
+        "is_matched",                           # Whether the particle is matched.
+        "is_primary",                           # Whether the particle is a primary particle.
+        "is_time_contained",                    # Whether the particle is time-contained (within the "in-time" region of the drift window).
+        "is_truth",                             # Whether the particle is a truth particle.
+        "is_valid",                             # Whether the particle passes thresholds and counts towards the topology.
+        "ke",                                   # Kinetic energy from best energy estimator (CSDA, calorimetric, or MCS).
+        "length",                               # Length of the particle.
+        "mass",                                 # Mass of the particle (according to assigned PID).
+        "mcs_ke",                               # Multiple Coulomb scattering kinetic energy.
+        "mcs_ke_per_pid.0",                     # MCS kinetic energy for PID 0.
+        "mcs_ke_per_pid.1",                     # MCS kinetic energy for PID 1.
+        "mcs_ke_per_pid.2",                     # MCS kinetic energy for PID 2.
+        "mcs_ke_per_pid.3",                     # MCS kinetic energy for PID 3.
+        "mcs_ke_per_pid.4",                     # MCS kinetic energy for PID 4.
+        "mcs_ke_per_pid.5",                     # MCS kinetic energy for PID 5.
+        "momentum.0",                           # Momentum (vector) of the particle (X coordinate).
+        "momentum.1",                           # Momentum (vector) of the particle (Y coordinate).
+        "momentum.2",                           # Momentum (vector) of the particle (Z coordinate).
+        "num_fragments",                        # Number of fragments comprising the particle.
+        "p",                                    # Momentum magnitude.
+        "pdg_code",                             # PDG code of the particle.
+        "pid",                                  # Particle ID (see Pid_t enumeration).
+        "pid_scores.0",                         # PID 0 softmax scores.
+        "pid_scores.1",                         # PID 1 softmax scores.
+        "pid_scores.2",                         # PID 2 softmax scores.
+        "pid_scores.3",                         # PID 3 softmax scores.
+        "pid_scores.4",                         # PID 4 softmax scores.
+        "pid_scores.5",                         # PID 5 softmax scores.
+        "primary_scores.0",                     # Primary score for PID 0.
+        "primary_scores.1",                     # Primary score for PID 1.
+        "shape",                                # Semantic type of the particle (see Shape_t enumeration).
+        "size",                                 # The size of the particle (number of voxels).
+        "start_dedx",                           # dE/dx at the start of the particle.
+        "start_dir.0",                          # Unit direction vector calculated at the particle start point (X coordinate).
+        "start_dir.1",                          # Unit direction vector calculated at the particle start point (Y coordinate).
+        "start_dir.2",                          # Unit direction vector calculated at the particle start point (Z coordinate).
+        "start_point.0",                        # Start point (vector) of the particle (X coordinate).
+        "start_point.1",                        # Start point (vector) of the particle (Y coordinate).
+        "start_point.2",                        # Start point (vector) of the particle (Z coordinate).
+        "start_straightness",                   # Straightness at the start of the particle.
+        "vertex_distance"                       # Distance from the vertex.
+    ]
+]
+
+spinepart_fragmentids_branches = [
+    spinepart + "fragment_ids"                  # Fragment IDs comprising the particle.
+]
+
+spinepart_matched_branches = [
+    spinepart + "match_ids"                     # Particle IDs of the considered matches (correspond to true particle IDs).
+]
+
+spinepart_matchovrlp_branches = [
+    spinepart + "match_overlaps"                # Intersection over union (IoU) of space points of the considered matches.
+]
+
+spinepart_moduleids_branches = [
+    spinepart + "module_ids"                    # Module IDs (cryostat) of the particle.
+]
+
+spinepart_ppnids_branches = [
+    spinepart + "ppn_ids"                       # PPN IDs of the particle.
+]
+
+# - SPINE true particle branches
+spinetpart = "rec.dlp_true.particles."
+
+spinetpart_branches = [
+    spinetpart + b for b in [
+#        "ancestor_creation_process",           # Geant4 creation process of the ancestor particle.
+        "ancestor_pdg_code",                    # PDG code of the ancestor particle.
+        "ancestor_position.0",                  # Position of the ancestor particle (X coordinate).
+        "ancestor_position.1",                  # Position of the ancestor particle (Y coordinate).
+        "ancestor_position.2",                  # Position of the ancestor particle (Z coordinate).
+        "ancestor_t",                           # Time of the ancestor particle.
+        "ancestor_track_id",                    # Track ID of the ancestor particle.
+        "calo_ke",                              # Calorimetric kinetic energy.
+        "cathode_offset",                       # Distance from the cathode [cm].
+#        "children_counts",                     # Number of children of the particle.
+#        "creation_process",                    # Geant4 creation process associated with the particle (see MCParticle).
+        "csda_ke",                              # Continuous-slowing-down-approximation kinetic energy.
+        "csda_ke_per_pid.0",                    # CSDA kinetic energy per PID (PID 0).
+        "csda_ke_per_pid.1",                    # CSDA kinetic energy per PID (PID 1).
+        "csda_ke_per_pid.2",                    # CSDA kinetic energy per PID (PID 2).
+        "csda_ke_per_pid.3",                    # CSDA kinetic energy per PID (PID 3).
+        "csda_ke_per_pid.4",                    # CSDA kinetic energy per PID (PID 4).
+        "csda_ke_per_pid.5",                    # CSDA kinetic energy per PID (PID 5).
+        "depositions_adapt_q_sum",              # Total tagged (reco non-ghost) charge deposited [ADC].
+        "depositions_adapt_sum",                # Total tagged (reco non-ghost) energy deposited [MeV].
+        "depositions_g4_sum",                   # Total energy deposited energy at the G4 level [MeV].
+        "depositions_q_sum",                    # Total tagged (true non-ghost) charge deposited [ADC].
+        "depositions_sum",                      # Total tagged (true non-ghost) energy deposited [MeV].
+        "distance_travel",                      # Distance traveled by the neutrino from production to the interaction.
+        "end_dir.0",                            # Unit direction vector at the particle end point (X coordinate).
+        "end_dir.1",                            # Unit direction vector at the particle end point (Y coordinate).
+        "end_dir.2",                            # Unit direction vector at the particle end point (Z coordinate).
+        "end_momentum.0",                       # Momentum vector at the particle end (X coordinate).
+        "end_momentum.1",                       # Momentum vector at the particle end (Y coordinate).
+        "end_momentum.2",                       # Momentum vector at the particle end (Z coordinate).
+        "end_p",                                # Momentum magnitude of the particle at the end.
+        "end_point.0",                          # End point vector of the particle (X coordinate).
+        "end_point.1",                          # End point vector of the particle (Y coordinate).
+        "end_point.2",                          # End point vector of the particle (Z coordinate).
+        "end_position.0",                       # End position vector of the particle (X coordinate).
+        "end_position.1",                       # End position vector of the particle (Y coordinate).
+        "end_position.2",                       # End position vector of the particle (Z coordinate).
+        "end_t",                                # Time of the particle at the end.
+        "energy_deposit",                       # Energy deposited by the particle.
+        "energy_init",                          # Initial energy of the particle.
+        "first_step.0",                         # X coordinate of the first step of the particle.
+        "first_step.1",                         # Y coordinate of the first step oftheparticle.
+        "first_step.2",                         # Z coordinate of the first stepoftheparticle.
+        "group_id",                             # Group ID of the particle.
+        "group_primary",                        # Whether the particle is a primary within its group.
+        "id",                                   # Particle ID (dense enumeration starting from 0 within the event).
+        "interaction_id",                       # Parent interaction ID.
+        "interaction_primary",                  # Whether the particle is a primary within its interaction (equivalent to is_primary).
+        "is_cathode_crosser",                   # Whether the particle is a cathode-crosser.
+        "is_contained",                         # Whether the particle is contained within some margin from the detector walls (see SPINE configuration).
+        "is_matched",                           # Whether the particle is matched.
+        "is_primary",                           # Whether the particle is a primary particle.
+        "is_time_contained",                    # Whether the particle is time-contained (within the "in-time" region of the drift window).
+        "is_truth",                             # Whether the particle is a truth particle.
+        "is_valid",                             # Whether the particle passes thresholds and counts towards topology.
+        "ke",                                   # Kinetic energy from best energy estimator (CSDA, calorimetric, or MCS).
+        "last_step.0",                          # X coordinate of the last step of the particle.
+        "last_step.1",                          # Y coordinate of the coordinates of the last step of the particle.
+        "last_step.2",                          # Z coordinate of the coordinates of the last step of the particle.
+        "length",                               # Length of the particle.
+        "mass",                                 # Mass of the particle.
+        "mcs_ke",                               # Multiple Coulomb scattering kinetic energy.
+        "mcs_ke_per_pid.0",                     # MCS kinetic energy per PID.
+        "mcs_ke_per_pid.1",                     # MCS kinetic energy per PID.
+        "mcs_ke_per_pid.2",                     # MCS kinetic energy per PID.
+        "mcs_ke_per_pid.3",                     # MCS kinetic energy per PID.
+        "mcs_ke_per_pid.4",                     # MCS kinetic energy per PID.
+        "mcs_ke_per_pid.5",                     # MCS kinetic energy per PID.
+        "mcst_index",                           # MCST index.
+        "mct_index",                            # Index of the particle in the original MCTruth array.
+        "momentum.0",                           # Mmomentum (vector) of the particle (X coordinate).
+        "momentum.1",                           # Momentum (vector) of the particle (Y coordinate).
+        "momentum.2",                           # Momentum (vector) of the particle (Z coordinate).
+        "nu_id",                                # Neutrino ID (-1 = not a neutrino, 0 = first neutrino, 1 = second neutrino, etc.).
+        "num_fragments",                        # Number of particle fragments.
+        "num_voxels",                           # Number of voxels comprising the particle.
+        "orig_group_id",                        # Original group ID of the particle.
+        "orig_id",                              # Original ID of the particle.
+        "orig_interaction_id",                  # Interaction ID as it was stored in the parent LArCV file under the interaction_id attribute.
+        "orig_parent_id",                       # Parent ID as it was stored in the parent LArCV file under the parent_id attribute.
+        "p",                                    # Momentum magnitude.
+#        "parent_creation_process",             # Geant4 creation process of the parent particle.
+        "parent_id",                            # Parent particle ID.
+        "parent_pdg_code",                      # PDG code of the parent particle.
+        "parent_position.0",                    # Position of the parent particle (X coordinate).
+        "parent_position.1",                    # Position of the parent particle (Y coordinate).
+        "parent_position.2",                    # Position of the parent particle (Z coordinate).
+        "parent_t",                             # Time of the parent particle.
+        "parent_track_id",                      # Track ID of the parent particle.
+        "pdg_code",                             # PDG code of the particle.
+        "pid",                                  # Particle ID (see Pid enumeration).
+        "position.0",                           # Position of the particle (X coordinate).
+        "position.1",                           # Position of the particle (Y coordinate).
+        "position.2",                           # Position of the particle (Z coordinate).
+        "reco_end_dir.0",                       # Direction vector at the reconstructed end point of the particle (X coordinate).
+        "reco_end_dir.1",                       # Direction vector at the reconstructed end point of the particle (Y coordinate).
+        "reco_end_dir.2",                       # Direction vector at the reconstructed end point of the particle (Z coordinate).
+        "reco_ke",                              # Kinetic energy estimator using reconstructed information.
+        "reco_length",                          # Reconstructed length of the particle.
+        "reco_momentum.0",                      # Reconstructed momentum (vector) of the particle.
+        "reco_momentum.1",                      # Reconstructed momentum (vector) of the particle.
+        "reco_momentum.2",                      # Reconstructed momentum (vector) of the particle.
+        "reco_start_dir.0",                     # Direction vector at the reconstructed start point of the particle (X coordinate).
+        "reco_start_dir.1",                     # Direction vector at the reconstructed start point of the particle (Y coordinate).
+        "reco_start_dir.2",                     # Direction vector at the reconstructed start point of the particle (Z coordinate).
+        "shape",                                # Semantic type of the particle (see SemanticType enumeration).
+        "size",                                 # Size of the particle (number of voxels).
+        "size_adapt",                           # Size of the particle using adaptive thresholds (number of voxels).
+        "size_g4",                              # Size of the particle at the G4 level (number of voxels).
+        "start_dir.0",                          # Unit direction vector at the particle start point (X coordinate).
+        "start_dir.1",                          # Unit direction vector at the particle start point (Y coordinate).
+        "start_dir.2",                          # Unit direction vector at the particle start point (Z coordinate).
+        "start_point.0",                        # Position of the start point (vector) of the particle (X coordinate).
+        "start_point.1",                        # Position of the start point (vector) of the particle (Y coordinate).
+        "start_point.2",                        # Position of the start point (vector) of the particle (Z coordinate).
+        "t",                                    # Time of the particle.
+        "track_id"                              # Track ID of the particle.
+    ]   
+]   
+
+
+spinetpart_childrenid_branches = [
+    spinetpart + "children_id"                  # List of particle ID of children particles.
+]
+
+spinetpart_fragmentids_branches = [
+    spinetpart + "fragment_ids"                 # Fragment IDs comprising the particle.
+]
+
+spinetpart_matched_branches = [
+    spinetpart + "match_ids"                    # Particle IDs of the considered matches (correspond to reco particle IDs).
+]
+
+spinetpart_matchovrlp_branches = [
+    spinetpart + "match_overlaps"               # Intersection over union (IoU) of space points of the considered matches.
+]
+
+spinetpart_moduleids_branches = [
+    spinetpart + "module_ids"                   # Module IDs (cryostat) of the particle.
+]
+
+spinetpart_originchildrenid_branches = [
+    spinetpart + "orig_children_id"             # Original ID of the children particles.
+]
+
