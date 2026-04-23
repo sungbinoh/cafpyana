@@ -8,6 +8,7 @@ import tables
 from pyanalib.ntuple_glob import NTupleGlob
 import pandas as pd
 import warnings
+import re
 
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 warnings.filterwarnings("ignore", category=tables.exceptions.NaturalNameWarning)
@@ -148,16 +149,29 @@ def run_grid(inputfiles):
 
     for i_flist in range(0,len(flistForEachJob)):
         flist = flistForEachJob[i_flist]
+        input_list_name = 'inputs_%s.list'%(i_flist)
+        input_list_path = MasterJobDir + '/' + input_list_name
+
+        with open(input_list_path, 'w') as list_out:
+            for f in flist:
+                local_name = re.sub(r'^(?:root://[^/]+)?(?:/pnfs/fnal.gov/usr/)?', '', f)
+                local_name = local_name.lstrip('/')
+                local_name = local_name.replace('/', '__')
+                list_out.write(local_name + '\n')
+
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
+        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu 7 -l ' + input_list_name
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
-            if i_f == 0:
-                cmd += ' ' + flist[i_f]
-            else: 
-                cmd += ',' + flist[i_f]
-            #out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
+            local_name = re.sub(r'^(?:root://[^/]+)?(?:/pnfs/fnal.gov/usr/)?', '', flist[i_f])
+            local_name = local_name.lstrip('/')
+            local_name = local_name.replace('/', '__')
+            out.write('xrdcp ' + flist[i_f] + ' ' + local_name + '\n') ## -- for checking auth
+        out.write('echo "[run_%s.sh] input list file: %s"\n'%(i_flist, input_list_name))
+        out.write('echo "[run_%s.sh] number of inputs:"\n'%(i_flist))
+        out.write('wc -l ' + input_list_name + '\n')
+        out.write('ls -alh\n')
         out.write(cmd)
         out.close()
 
@@ -180,12 +194,15 @@ def run_grid(inputfiles):
 -e LC_ALL=C \\
 --role=Analysis \\
 --resource-provides="usage_model=DEDICATED,OPPORTUNISTIC" \\
---lines '+FERMIHTC_AutoRelease=True' --lines '+FERMIHTC_GraceMemory=1000' --lines '+FERMIHTC_GraceLifetime=3600' \\
+-l '+SingularityImage=\\"/cvmfs/singularity.opensciencegrid.org/fermilab/fnal-wn-el9\:9.7\\"' \\
+--lines '+FERMIHTC_AutoRelease=True' --lines '+FERMIHTC_GraceMemory=2000' --lines '+FERMIHTC_GraceLifetime=3600' \\
 --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)' \\
 --tar_file_name "dropbox://$(pwd)/bin_dir.tar" \\
 -N %d \\
---disk 100GB \\
---expected-lifetime 10h \\
+--disk 10GB \\
+--cpu 7 \\
+--memory 4GB \\
+--expected-lifetime 1h \\
 "file://$(pwd)/grid_executable.sh" \\
 "%s" \\
 "%s"'''%(ngrid,OutputDir,args.output)
