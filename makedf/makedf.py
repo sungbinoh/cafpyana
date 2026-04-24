@@ -393,6 +393,14 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     mcdf.loc[:, ('p','dir','y')] = mcdf.p.genp.y/mcdf.p.totp
     mcdf.loc[:, ('p','dir','z')] = mcdf.p.genp.z/mcdf.p.totp
 
+    # endpoints
+    mcdf.loc[:, ('mu','end','x')] = mcdf.mu.end.x
+    mcdf.loc[:, ('mu','end','y')] = mcdf.mu.end.y
+    mcdf.loc[:, ('mu','end','z')] = mcdf.mu.end.z
+    mcdf.loc[:, ('p','end','x')] = mcdf.p.end.x
+    mcdf.loc[:, ('p','end','y')] = mcdf.p.end.y
+    mcdf.loc[:, ('p','end','z')] = mcdf.p.end.z
+
     return mcdf
 
 def make_mcprimdf(f):
