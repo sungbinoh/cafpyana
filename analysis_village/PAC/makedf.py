@@ -166,6 +166,9 @@ def make_pandora_no_cuts_df(f):
         except KeyError:
             slc_has_stub_series[k] = False
 
+    print("Hey nate, check this out:")
+    print(slcdf.slc.truth.parent_dcy_E)
+
     ## (10) create a slice-based reco df
     slcdf = pd.DataFrame({
         'other_shw_length': other_shw_length,
@@ -229,7 +232,13 @@ def make_pandora_no_cuts_df(f):
         # 'tmatch_eff': slcdf.slc.tmatch.eff, 
         # 'tmatch_pur': slcdf.slc.tmatch.pur, 
         'tmatch_idx': tmatch_idx_series,
-        'has_stub': slc_has_stub_series
+        'has_stub': slc_has_stub_series,
+        'parent_dcy_E': slcdf.slc.truth.parent_dcy_E,
+        'parent_dcy_mode': slcdf.slc.truth.parent_dcy_mode,
+        'parent_dcy_mom_x': slcdf.slc.truth.parent_dcy_mom.x,
+        'parent_dcy_mom_y': slcdf.slc.truth.parent_dcy_mom.y,
+        'parent_dcy_mom_z': slcdf.slc.truth.parent_dcy_mom.z,
+        'parent_pdg': slcdf.slc.truth.parent_pdg,
     })
 
     # include some meta-data
