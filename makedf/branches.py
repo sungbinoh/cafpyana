@@ -311,6 +311,10 @@ mcbranches = [
     "rec.mc.nu.genie_mode",
     "rec.mc.nu.parent_pdg",
     "rec.mc.nu.parent_dcy_E",
+    "rec.mc.nu.parent_dcy_mode",
+    "rec.mc.nu.parent_dcy_mom.x",
+    "rec.mc.nu.parent_dcy_mom.y",
+    "rec.mc.nu.parent_dcy_mom.z",
     "rec.mc.nu.genie_evtrec_idx",
 ]
 
