@@ -222,9 +222,6 @@ def make_pandora_no_cuts_df(f):
 
     trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.chi2u / trkdf.chi2p
 
-    # track containment
-    trkdf[("pfp", "trk", "is_contained", "", "", "")] = trkfv_cut(trkdf.pfp.trk.start, DETECTOR) & trkfv_cut(trkdf.pfp.trk.end, DETECTOR)
-
     # reco momentum -- range-only
     trkdf[("pfp", "trk", "P", "p_muon", "", "")] = trkdf[("pfp", "trk", "rangeP", "p_muon", "", "")]
     trkdf[("pfp", "trk", "P", "p_pion", "", "")] = trkdf[("pfp", "trk", "rangeP", "p_pion", "", "")]
@@ -273,7 +270,6 @@ def make_pandora_no_cuts_df(f):
         p_E = pd.Series(dtype='float', name='p_E', index=empty_index)
         nu_E_calo = pd.Series(dtype='float', name='nu_E_calo', index=empty_index)
         has_stub = pd.Series(dtype='float', name='has_stub', index=empty_index)
-        is_contained = pd.Series(dtype='float', name='is_contained', index=empty_index)
     else:
         tki = transverse_kinematics(slcdf.mu.pfp.trk.P.p_muon, slcdf.mu.pfp.trk.dir, slcdf.p.pfp.trk.P.p_proton, slcdf.p.pfp.trk.dir)
         nu_E_calo = neutrino_energy(slcdf.mu.pfp.trk.P.p_muon, slcdf.mu.pfp.trk.dir, slcdf.p.pfp.trk.P.p_proton, slcdf.p.pfp.trk.dir)
@@ -284,7 +280,6 @@ def make_pandora_no_cuts_df(f):
         del_alpha = tki['del_alpha']
         mu_E = tki['mu_E']
         p_E = tki['p_E']
-        is_contained = slcdf.p.pfp.trk.is_contained & slcdf.mu.pfp.trk.is_contained
 
     ######## (9) - c: slc.tmatch.idx for truth matching
     bad_tmatch = np.invert(slcdf.slc.tmatch.eff > 0.5) & (slcdf.slc.tmatch.idx >= 0)
@@ -325,7 +320,6 @@ def make_pandora_no_cuts_df(f):
         'slc_vtx_z': slc_vtx.z,
         'is_clear_cosmic': is_clear_cosmic,
         'nu_score': nu_score,
-        'is_contained': is_contained,
         'crlongtrkdiry': crlongtrkdiry,
 
         'mu_chi2_of_mu_cand': mu_chi2_of_mu_cand,
@@ -383,7 +377,7 @@ def make_pandora_no_cuts_df(f):
         'del_p': del_p,
         'del_Tp': del_Tp,
         'del_phi': del_phi,
-        'has_stub': slc_has_stub_series
+        'has_stub': slc_has_stub_series,
 
         'tmatch_idx': tmatch_idx_series,
         'tmatch_eff': slcdf.slc.tmatch.eff, 
@@ -647,8 +641,7 @@ def make_gump_nudf(f, is_slc=False):
     is_1p0pi = (nudf.nmu_27MeV == 1) & (nudf.np_50MeV == 1) & (nudf.npi_30MeV == 0) & (nudf.npi0 == 0) 
     is_numu = (nudf.pdg == 14)
     is_other_numucc = (is_numu & is_cc & (is_1p0pi == 0) & is_fv)
-    is_contained = trkfv_cut(nudf.mu.end, DETECTOR) & trkfv_cut(nudf.p.end, DETECTOR)
-    is_sig = is_fv & is_1p0pi & is_numu & is_cc & is_contained
+    is_sig = is_fv & is_1p0pi & is_numu & is_cc
 
     nudf['nuint_categ'] = genie_mode 
 
@@ -665,7 +658,6 @@ def make_gump_nudf(f, is_slc=False):
         'del_p': true_del_p,
         'genie_mode': genie_mode, 
         'is_sig': is_sig, 
-        'is_contained': is_contained,
         'is_nc': is_nc, 
         'is_other_numucc': is_other_numucc, 
         'is_fv': is_fv, 
