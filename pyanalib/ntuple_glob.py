@@ -80,7 +80,12 @@ def _loaddf(applyfs, preprocess, g):
         # Open AND close strictly within the context manager
         with _open_with_retries(fname) as f:
             dfs = []
-            totevt = f['TotalEvents'].values()[0]
+            if("TotalEvents" in f):
+                totevt = f['TotalEvents'].values()[0]
+            else:
+                print("File (%s) missing TotalEvents. Skipping empty file!" % fname)
+                return None
+                
             if "recTree" not in f:
                 print("File (%s) missing recTree. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
             elif totevt < 1e-6:
