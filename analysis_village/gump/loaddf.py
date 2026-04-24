@@ -27,12 +27,6 @@ def tmatch(reco, mc):
     return df
 
 # Dataframe names
-EVT = "mcnu_%i"
-WGT = "histpotdf_%i"
-HDR = "trig_%i"
-MC  = "stub_%i"
-CRT = "hdr_%i"
-
 EVT = "evt_%i"
 WGT = "wgt_%i"
 HDR = "hdr_%i"
@@ -170,6 +164,11 @@ truthvars = {
   "true_vtx_x": ("pos_x", ""),
   "true_vtx_y": ("pos_y", ""),
   "true_vtx_z": ("pos_z", ""),
+  "true_nmu": ("nmu", ""),
+  "true_np": ("np", ""),
+  "true_nn": ("nn", ""),
+  "true_npi": ("npi", ""),
+  "true_npi0": ("npi0", ""),
 }
 
 def scale_pot(df, pot, desired_pot):
