@@ -25,6 +25,11 @@ def make_pandora_no_cuts_df(f):
     else:
         print("Detector unclear, check rec.hdr.det!")
 
+    if 'run2' or 'Run2' in f.file_path:
+        RUN = 2
+    elif 'run4' or 'Run4' in f.file_path:
+        RUN = 4
+
     slcdf = make_slcdf(f)
     StartingRows = len(slcdf)
 
@@ -71,6 +76,8 @@ def make_pandora_no_cuts_df(f):
 
 
     trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.chi2u / trkdf.chi2p
+
+    trkdf['Run'] = RUN
 
     # track containment
     trkdf[("pfp", "trk", "is_contained", "", "", "")] = trkfv_cut(trkdf.pfp.trk.start, DETECTOR) & trkfv_cut(trkdf.pfp.trk.end, DETECTOR)
