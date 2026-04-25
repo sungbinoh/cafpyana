@@ -80,7 +80,9 @@ def make_pandora_no_cuts_df(f):
     trkdf['Run'] = RUN
 
     # track containment
-    trkdf[("pfp", "trk", "is_contained", "", "", "")] = trkfv_cut(trkdf.pfp.trk.start, DETECTOR) & trkfv_cut(trkdf.pfp.trk.end, DETECTOR)
+    #trkdf[("pfp", "trk", "is_contained", "", "", "")] = trkfv_cut(trkdf.pfp.trk.start, DETECTOR) & trkfv_cut(trkdf.pfp.trk.end, DETECTOR)
+    trkdf[("pfp", "trk", "is_contained", "", "", "")] = trkstartfv_cut(trkdf, DETECTOR) & trkendfv_cut(trkdf, DETECTOR)
+
 
     # reco momentum -- range-only
     trkdf[("pfp", "trk", "P", "p_muon", "", "")] = trkdf[("pfp", "trk", "rangeP", "p_muon", "", "")]
