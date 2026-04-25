@@ -73,7 +73,7 @@ def true_fv_cut(df, det):
                            'Run': df.Run,
                            'x': df.position.x,
                            'y': df.position.y,
-                           'z': df.positionz}, index=df.index)
+                           'z': df.position.z}, index=df.index)
     return vtxfv_cut(vtx, det)
 
 def slcfv_cut(df, det):
@@ -86,6 +86,36 @@ def slcfv_cut(df, det):
 
 def trkfv_cut(df, det):
     return _fv_cut(df, det, inzback=10)
+
+def true_trkstartfv_cut(df, det):
+    mu_vtx = pd.DataFrame({
+                           'Run': df['Run'],
+                           'x': df.mu.start.x,
+                           'y': df.mu.start.y,
+                           'z': df.mu.start.z}, index=df.index)
+
+    p_vtx = pd.DataFrame({
+                           'Run': df['Run'],
+                           'x': df.mu.start.x,
+                           'y': df.mu.start.y,
+                           'z': df.mu.start.z}, index=df.index)
+
+    return trkfv_cut(mu_vtx, det) & trkfv_cut(p_vtx, det)
+
+def true_trkendfv_cut(df, det):
+    mu_vtx = pd.DataFrame({
+                           'Run': df['Run'],
+                           'x': df.mu.end.x,
+                           'y': df.mu.end.y,
+                           'z': df.mu.end.z}, index=df.index)
+
+    p_vtx = pd.DataFrame({
+                           'Run': df['Run'],
+                           'x': df.mu.end.x,
+                           'y': df.mu.end.y,
+                           'z': df.mu.end.z}, index=df.index)
+
+    return trkfv_cut(mu_vtx, det) & trkfv_cut(p_vtx, det)
 
 def trkstartfv_cut(df, det):
     vtx = pd.DataFrame({

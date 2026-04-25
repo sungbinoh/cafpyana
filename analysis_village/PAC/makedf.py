@@ -445,6 +445,7 @@ def make_PAC_nudf(f, is_slc=False):
     elif 'run4' or 'Run4' in f.file_path:
         RUN = 4
 
+    RUN = 4
     nudf['Run'] = RUN
 
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
@@ -459,6 +460,8 @@ def make_PAC_nudf(f, is_slc=False):
     else:
         print("Detector unclear, check rec.hdr.det!")
 
+    print(nudf['Run'])
+
     is_fv = true_fv_cut(nudf, DETECTOR)
     is_cc = nudf.iscc
     is_nc = (nudf.iscc == 0)
@@ -472,7 +475,9 @@ def make_PAC_nudf(f, is_slc=False):
     is_1p0pi = (nudf.nmu_27MeV == 1) & (nudf.np_50MeV == 1) & (nudf.npi_30MeV == 0) & (nudf.npi0 == 0) 
     is_numu = (nudf.pdg == 14)
     is_other_numucc = (is_numu & is_cc & (is_1p0pi == 0) & is_fv)
-    is_contained = trkfv_cut(nudf.mu.start, DETECTOR) & trkfv_cut(nudf.p.start, DETECTOR)
+    
+    #trkdf[("pfp", "trk", "is_contained", "", "", "")] = trkstartfv_cut(trkdf, DETECTOR) & trkendfv_cut(trkdf, DETECTOR)
+    is_contained = true_trkstartfv_cut(nudf, DETECTOR) & true_trkendfv_cut(nudf, DETECTOR)
     is_sig = is_fv & is_1p0pi & is_numu & is_cc & is_contained
 
     nudf['nuint_categ'] = genie_mode 
