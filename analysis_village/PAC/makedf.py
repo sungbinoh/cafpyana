@@ -440,6 +440,13 @@ def make_PAC_nudf(f, is_slc=False):
 
     #wgtdf = pd.concat([bnbsyst.bnbsyst(f, nudf.ind), geniesyst.geniesyst(f, nudf.ind)], axis=1).astype('float32')
 
+    if 'run2' or 'Run2' in f.file_path:
+        RUN = 2
+    elif 'run4' or 'Run4' in f.file_path:
+        RUN = 4
+
+    nudf['Run'] = RUN
+
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
 
     if det.empty:
@@ -452,7 +459,7 @@ def make_PAC_nudf(f, is_slc=False):
     else:
         print("Detector unclear, check rec.hdr.det!")
 
-    is_fv = vtxfv_cut(nudf.position, DETECTOR)
+    is_fv = true_fv_cut(nudf, DETECTOR)
     is_cc = nudf.iscc
     is_nc = (nudf.iscc == 0)
     genie_mode = nudf.genie_mode

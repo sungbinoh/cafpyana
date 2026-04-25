@@ -31,6 +31,11 @@ SBNDFVCuts = {
         "x": {"min": 0., "max": 200.},
         "y": {"min": -200., "max": 200},
         "z": {"min": 250., "max": 500.}
+    },
+    "highYZ": {
+        "x": {"min": -200., "max": 200.},
+        "y": {"min": -200., "max": 100},
+        "z": {"min": 250., "max": 500.}
     }
 }
 
@@ -62,6 +67,14 @@ ICARUSRun4FVCuts = {
 
 def vtxfv_cut(df, det):
     return _fv_cut(df, det, inzback=50)
+
+def true_fv_cut(df, det):
+    vtx = pd.DataFrame({
+                           'Run': df.Run,
+                           'x': df.position.x,
+                           'y': df.position.y,
+                           'z': df.positionz}, index=df.index)
+    return vtxfv_cut(vtx, det)
 
 def slcfv_cut(df, det):
     vtx = pd.DataFrame({
@@ -107,7 +120,6 @@ def pfv_cut(df, det):
     return trkfv_cut(vtx, det)
 
 def _fv_cut(df, det, inx=10, iny=10, inzfront=10, inzback=50):
-    print(det)
     if "ICARUS" in det:
         FVRun2 = (((df.x < (ICARUSRun2FVCuts['C0']['x']['max'] - inx)) & (df.x > (ICARUSRun2FVCuts['C0']['x']['min'] + inx))) |\
                 ((df.x < (ICARUSRun2FVCuts['C1']['x']['max'] - inx)) & (df.x > (ICARUSRun2FVCuts['C1']['x']['min'] + inx)))) &\
@@ -131,12 +143,20 @@ def _fv_cut(df, det, inx=10, iny=10, inzfront=10, inzback=50):
         return ((df.x < SBNDFVCuts['lowYZ']['x']['max'] - inx) & (df.x > SBNDFVCuts['lowYZ']['x']['min'] + inx) &\
                 (df.y < SBNDFVCuts['lowYZ']['y']['max'] - iny) & (df.y > SBNDFVCuts['lowYZ']['y']['min'] + iny) &\
                 (df.z < SBNDFVCuts['lowYZ']['z']['max']) & (df.z > SBNDFVCuts['lowYZ']['z']['min'] + inzfront)) |\
-               ((df.x < SBNDFVCuts['highYZWest']['x']['max'] - inx) & (df.x > SBNDFVCuts['highYZWest']['x']['min'] + inx) &\
-                (df.y < SBNDFVCuts['highYZWest']['y']['max'] - iny) & (df.y > SBNDFVCuts['highYZWest']['y']['min'] + iny) &\
-                (df.z < SBNDFVCuts['highYZWest']['z']['max'] - inzback) & (df.z > SBNDFVCuts['highYZWest']['z']['min'])) |\
-               ((df.x < SBNDFVCuts['highYZEast']['x']['max'] - inx) & (df.x > SBNDFVCuts['highYZEast']['x']['min'] + inx) &\
-                (df.y < SBNDFVCuts['highYZEast']['y']['max'] - iny) & (df.y > SBNDFVCuts['highYZEast']['y']['min'] + iny) &\
-                (df.z < SBNDFVCuts['highYZEast']['z']['max'] - inzback) & (df.z > SBNDFVCuts['highYZEast']['z']['min']))
+               ((df.x < SBNDFVCuts['highYZ']['x']['max'] - inx) & (df.x > SBNDFVCuts['highYZ']['x']['min'] + inx) &\
+                (df.y < SBNDFVCuts['highYZ']['y']['max'] - iny) & (df.y > SBNDFVCuts['highYZ']['y']['min'] + iny) &\
+                (df.z < SBNDFVCuts['highYZ']['z']['max'] - inzback) & (df.z > SBNDFVCuts['highYZ']['z']['min']))
+
+        # should switch to this soon, but right now need to keep using older cuts
+        #return ((df.x < SBNDFVCuts['lowYZ']['x']['max'] - inx) & (df.x > SBNDFVCuts['lowYZ']['x']['min'] + inx) &\
+        #        (df.y < SBNDFVCuts['lowYZ']['y']['max'] - iny) & (df.y > SBNDFVCuts['lowYZ']['y']['min'] + iny) &\
+        #        (df.z < SBNDFVCuts['lowYZ']['z']['max']) & (df.z > SBNDFVCuts['lowYZ']['z']['min'] + inzfront)) |\
+        #       ((df.x < SBNDFVCuts['highYZWest']['x']['max'] - inx) & (df.x > SBNDFVCuts['highYZWest']['x']['min']) &\
+        #        (df.y < SBNDFVCuts['highYZWest']['y']['max'] - iny) & (df.y > SBNDFVCuts['highYZWest']['y']['min'] + iny) &\
+        #        (df.z < SBNDFVCuts['highYZWest']['z']['max'] - inzback) & (df.z > SBNDFVCuts['highYZWest']['z']['min'])) |\
+        #       ((df.x < SBNDFVCuts['highYZEast']['x']['max']) & (df.x > SBNDFVCuts['highYZEast']['x']['min'] + inx) &\
+        #        (df.y < SBNDFVCuts['highYZEast']['y']['max'] - iny) & (df.y > SBNDFVCuts['highYZEast']['y']['min'] + iny) &\
+        #        (df.z < SBNDFVCuts['highYZEast']['z']['max'] - inzback) & (df.z > SBNDFVCuts['highYZEast']['z']['min']))
 
     else:
         raise NameError("DETECTOR not valid, should be SBND or ICARUS Run2 or ICARUS Run4")
@@ -145,16 +165,16 @@ def flash_cut(df, det):
     if det == "SBND":
         return df.flash_maxpe > 2000.
     elif det == "ICARUS Run2":
-        return df.flash_maxpe > 3000.
+        return df.flash_maxpe > 6000.
     elif det == "ICARUS Run4":
-        return df.flash_maxpe > 3000.
+        return df.flash_maxpe > 1000.
     elif det == "ICARUS":
         return ((df.flash_maxpe > 3000) & (df.Run == 2)) | ((df.flash_maxpe > 3000) & (df.Run == 4))
 
 
 def cosmic_cut(df, is_old=False):
     if is_old:
-        return (df.nu_score >0.4)
+        return (df.nu_score > 0.4)
     else:
         df = add_opening_angle_mu_p(df)
         return (df.nu_score > 0.4) & (df["mu_p_opening_angle_deg"] < 155)
@@ -249,7 +269,10 @@ def breakdown_top(var, df):
            ]
     return ret
 
-def old_cuts(recodf, DETECTOR):
+def old_cuts(recodf, DETECTOR, det_run=False):
+    if det_run:
+        recodf['Run'] = det_run
+
     ## fv cut
     recodf = recodf[slcfv_cut(recodf, DETECTOR)]
 
@@ -274,6 +297,17 @@ def old_cuts(recodf, DETECTOR):
 
     return recodf
 
+def cathode_cut(df):
+    p_start = df[['slc_vtx_x', 'slc_vtx_y', 'slc_vtx_z']].values
+    p_mu = df[['mu_end_x', 'mu_end_y', 'mu_end_z']].values
+    df = df[~intersects_prism_vectorized(p_start, p_mu, (-5., -200., 0.), (5., 200., 500.))]
+
+    p_start = df[['slc_vtx_x', 'slc_vtx_y', 'slc_vtx_z']].values
+    p_prot = df[['p_end_x', 'p_end_y', 'p_end_z']].values
+    df = df[~intersects_prism_vectorized(p_start, p_prot, (-5., -200., 0.), (5., 200., 500.))]
+
+    return df
+
 def intersects_prism_vectorized(p1_array, p2_array, prism_min=(-200., 100., 250.), prism_max=(200., 200., 500.), solid=True):
     """
     Determines intersection for multiple line segments simultaneously.
@@ -289,7 +323,7 @@ def intersects_prism_vectorized(p1_array, p2_array, prism_min=(-200., 100., 250.
     # Initialize t_min and t_max for each segment
     t_min = np.zeros(len(p1))
     t_max = np.ones(len(p1))
-    
+
     direction = p2 - p1
 
     inside_bool = np.zeros(len(p1))
@@ -304,28 +338,30 @@ def intersects_prism_vectorized(p1_array, p2_array, prism_min=(-200., 100., 250.
         # Use a small epsilon to avoid true division by zero
         # or handle it via numpy's error handling
         inv_dir = 1.0 / np.where(direction[:, i] == 0, 1e-9, direction[:, i])
-        
+
         tmin = (p_min[i] - p1[:, i]) * inv_dir
         tmax = (p_max[i] - p1[:, i]) * inv_dir
-        
+
         t_near = np.minimum(tmin, tmax)
         t_far = np.maximum(tmin, tmax)
-        
+
         # Update entry/exit for the entire batch
         t_min = np.maximum(t_min, t_near)
         t_max = np.minimum(t_max, t_far)
         # If the line is parallel to the axis (dir=0), manually check bounds
         parallel_mask = (direction[:, i] == 0)
         outside_bounds = (p1[:, i] < p_min[i]) | (p1[:, i] > p_max[i])
-        
+
         # If parallel and outside, invalidate the t range so it returns False
         t_min = np.where(parallel_mask & outside_bounds, 1.0, t_min)
         t_max = np.where(parallel_mask & outside_bounds, 0.0, t_max)
 
     return (t_min <= t_max) | inside_bool
 
-def all_cuts(recodf, DETECTOR, det_run):
-    recodf['Run'] = det_run
+def all_cuts(recodf, DETECTOR, det_run=False):
+    if det_run:
+        recodf['Run'] = det_run
+
     ## fv cut
     recodf = recodf[slcfv_cut(recodf, DETECTOR)]
 
@@ -333,7 +369,7 @@ def all_cuts(recodf, DETECTOR, det_run):
     recodf = recodf[cosmic_cut(recodf)]
 
     ### flash cut
-    recodf = recodf[flash_cut(recodf, DETECTOR)]
+    #recodf = recodf[flash_cut(recodf, DETECTOR)]
 
     ### Two prong cut
     recodf = recodf[twoprong_cut(recodf)]
@@ -346,6 +382,9 @@ def all_cuts(recodf, DETECTOR, det_run):
     recodf = recodf[pid_cut(recodf.mu_chi2_of_mu_cand, recodf.mu_chi2_of_prot_cand,
                             recodf.prot_chi2_of_mu_cand, recodf.prot_chi2_of_prot_cand,
                             recodf.mu_len)]
+
+    ### Cathode cut
+    #recodf = cathode_cut(recodf)
 
     return recodf
 
