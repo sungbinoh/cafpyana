@@ -21,25 +21,6 @@ def InFV_nohiyz_trk(data):
     pass_y = ((data.z < 250) & (np.abs(data.y) < 190.)) | ((data.z > 250) & (data.y > -190.) & (data.y < ymax_highz))
     return pass_xz & pass_y
 
-def InFV_nohiyz(data):
-    xmin = 10.
-    xmax = 190.
-    zmin = 10.
-    zmax = 450.
-    ymax_highz = 100.
-    pass_xz = (np.abs(data.x) > xmin) & (np.abs(data.x) < xmax) & (data.z > zmin) & (data.z < zmax)
-    pass_y = ((data.z < 250) & (np.abs(data.y) < 190.)) | ((data.z > 250) & (data.y > -190.) & (data.y < ymax_highz))
-    return pass_xz & pass_y
-
-def InFV_nohiyz_trk(data):
-    xmax = 190.
-    zmin = 10.
-    zmax = 450.
-    ymax_highz = 100.
-    pass_xz = (np.abs(data.x) < xmax) & (data.z > zmin) & (data.z < zmax)
-    pass_y = ((data.z < 250) & (np.abs(data.y) < 190.)) | ((data.z > 250) & (data.y > -190.) & (data.y < ymax_highz))
-    return pass_xz & pass_y
-
 ## -- truth level flags
 def Signal(df): # definition
     is_fv = InFV_nohiyz(df.position)
@@ -86,7 +67,7 @@ def reco_t(dir_x, dir_y, dir_z, range_P_muon, range_P_pion):
     py_sq = np.power(p_0 * dir_y.iloc[0] + p_1 * dir_y.iloc[1], 2.)
     pz_sq = np.power(E_0 + E_1 - p_0 * dir_z.iloc[0] - p_1 * dir_z.iloc[1], 2.)
     abs_t = px_sq + py_sq + pz_sq
-    
+
     #print(abs_t)
     return abs_t
 
@@ -114,7 +95,7 @@ def measure_opening_angle(group):
 
 def beam_totp_angle(n_trk_mupid, dir_x, dir_y, dir_z, range_P_muon, range_P_pion, mu_pid_pass):
     if n_trk_mupid != 2:
-        return -999.  
+        return -999.
     dir_x = dir_x[mu_pid_pass]
     dir_y = dir_y[mu_pid_pass]
     dir_z = dir_z[mu_pid_pass]
@@ -123,7 +104,7 @@ def beam_totp_angle(n_trk_mupid, dir_x, dir_y, dir_z, range_P_muon, range_P_pion
     if(range_P_muon.size != 2):
         print("error, dir_x.len != 2")
         return -888.
-    
+
     # -- assume first particle is muon and the other is pion
     p_0 = range_P_muon.iloc[0]
     p_1 = range_P_pion.iloc[1]
@@ -138,7 +119,7 @@ def beam_totp_angle(n_trk_mupid, dir_x, dir_y, dir_z, range_P_muon, range_P_pion
 
     totp_cos = totpz / np.power(np.power(totpx, 2.) + np.power(totpy, 2.) + np.power(totpz, 2.) , 0.5)
     return totp_cos
-    
+
 def measure_beam_totp_angle(group):
     n_trk_mupid = group[('n_trk_mupid', '', '')].iloc[0]
     dir_x = group[('trk', 'dir', 'x')]
@@ -161,12 +142,21 @@ def make_slc_var(df):
 
 ## -- data fram maker for cohpi analysis
 def make_cohpidf_slc(f):
-    
-    #pandora_df = make_pandora_df(f)
-    pandora_df = make_pandora_df_calo_update(f)
+
+    is_recalo = True
+    if is_recalo:
+        pandora_df = make_pandora_df_calo_update(f)
+    else:
+        pandora_df = make_pandora_df(f)
+
     barycenterFM_df = loadbranches(f["recTree"], barycenterFMbranches).rec
     pandora_df = multicol_merge(barycenterFM_df, pandora_df, left_index=True, right_index=True, how="right", validate="one_to_many")
-    #print(pandora_df)
+
+    #### (0) BCFM and nuscore
+    bcfm_score = pandora_df.slc.barycenterFM.score
+    bcfm_score = make_slc_var(bcfm_score)
+    nu_score = pandora_df.slc.nu_score
+    nu_score = make_slc_var(nu_score)
 
     #### (1) FV cut
     is_fv = InFV_nohiyz(pandora_df.slc.vertex)
@@ -187,7 +177,10 @@ def make_cohpidf_slc(f):
     def is_trk_candidate(df):
         return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5)
     def is_proton_candidate(df):
-        return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5) & (df.pfp.trk.chi2pid.I2.arctan_mu_over_p > 0.4)
+        if is_recalo:
+            return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5) & (df.pfp.trk.chi2pid.I2.chi2_muon_new > 25.)
+        else:
+            return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5) & (df.pfp.trk.chi2pid.I2.chi2_muon > 25.)
     def is_shower_candidate(df):
         return (df.pfp.trackScore < 0.50)
 
@@ -202,23 +195,25 @@ def make_cohpidf_slc(f):
     n_shower = (pandora_df.pfp.is_shower_candidate).groupby(level=[0,1]).sum()
 
     pass_n_trk_condition = (n_trk == 2) & (n_proton == 0) & (n_shower == 0)
-    
+
     two_trk_df_condition = (two_trk_df_condition) & (n_prong == 2) & (n_trk == 2) & (n_proton == 0) & (n_shower == 0)
 
     n_prong = make_slc_var(n_prong)
     n_trk = make_slc_var(n_trk)
     n_proton = make_slc_var(n_proton)
     n_shower = make_slc_var(n_shower)
-    
+
     tmatch_idx = pandora_df.slc.tmatch.idx
     tmatch_eff = pandora_df.slc.tmatch.eff
     tmatch_purity = pandora_df.slc.tmatch.pur
     tmatch_idx = make_slc_var(tmatch_idx)
     tmatch_eff = make_slc_var(tmatch_eff)
     tmatch_purity = make_slc_var(tmatch_purity)
-    
+
     slcdf = pd.DataFrame({
         'is_fv': is_fv,
+        'bcfm_score': bcfm_score,
+        'nu_score': nu_score,
         'is_not_clear_cosmic': is_not_clear_cosmic,
         'n_prong': n_prong,
         'n_trk': n_trk,
@@ -228,7 +223,7 @@ def make_cohpidf_slc(f):
         'tmatch_eff': tmatch_eff,
         'tmatch_purity': tmatch_purity,
     })
-    
+
     #### (4) dir Z cut
     longdf = pandora_df.sort_values(by=("pfp", "trk", "len", "", "", ""), ascending=False).groupby(level=[0,1]).nth(0)
     shortdf = pandora_df.sort_values(by=("pfp", "trk", "len", "", "", ""), ascending=False).groupby(level=[0,1]).nth(1)
@@ -254,7 +249,7 @@ def make_cohpidf_slc(f):
     slcdf['short_dirx'] = short_dirx
     slcdf['short_diry'] = short_diry
     slcdf['short_dirz'] = short_dirz
-    
+
     is_long_dirz_pass = make_slc_var(is_long_dirz_pass)
     is_short_dirz_pass = make_slc_var(is_short_dirz_pass)
 
@@ -288,6 +283,34 @@ def make_cohpidf_slc(f):
     short_trk_pid = make_slc_var(short_trk_pid)
     slcdf['long_trk_pid'] = long_trk_pid
     slcdf['short_trk_pid'] = short_trk_pid
+
+    long_trk_chi2_mu = longdf.pfp.trk.chi2pid.I2.chi2_muon
+    long_trk_chi2_pro = longdf.pfp.trk.chi2pid.I2.chi2_proton
+    long_trk_chi2_mu = make_slc_var(long_trk_chi2_mu)
+    long_trk_chi2_pro = make_slc_var(long_trk_chi2_pro)
+    slcdf['long_trk_chi2_mu'] = long_trk_chi2_mu
+    slcdf['long_trk_chi2_pro'] = long_trk_chi2_pro
+    if is_recalo:
+        long_trk_chi2_mu_new = longdf.pfp.trk.chi2pid.I2.chi2_muon_new
+        long_trk_chi2_pro_new = longdf.pfp.trk.chi2pid.I2.chi2_proton_new
+        long_trk_chi2_mu_new = make_slc_var(long_trk_chi2_mu_new)
+        long_trk_chi2_pro_new = make_slc_var(long_trk_chi2_pro_new)
+        slcdf['long_trk_chi2_mu_new'] = long_trk_chi2_mu_new
+        slcdf['long_trk_chi2_pro_new'] = long_trk_chi2_pro_new
+
+    short_trk_chi2_mu = shortdf.pfp.trk.chi2pid.I2.chi2_muon
+    short_trk_chi2_pro = shortdf.pfp.trk.chi2pid.I2.chi2_proton
+    short_trk_chi2_mu = make_slc_var(short_trk_chi2_mu)
+    short_trk_chi2_pro = make_slc_var(short_trk_chi2_pro)
+    slcdf['short_trk_chi2_mu'] = short_trk_chi2_mu
+    slcdf['short_trk_chi2_pro'] = short_trk_chi2_pro
+    if is_recalo:
+        short_trk_chi2_mu_new = shortdf.pfp.trk.chi2pid.I2.chi2_muon_new
+        short_trk_chi2_pro_new = shortdf.pfp.trk.chi2pid.I2.chi2_proton_new
+        short_trk_chi2_mu_new = make_slc_var(short_trk_chi2_mu_new)
+        short_trk_chi2_pro_new = make_slc_var(short_trk_chi2_pro_new)
+        slcdf['short_trk_chi2_mu_new'] = short_trk_chi2_mu_new
+        slcdf['short_trk_chi2_pro_new'] = short_trk_chi2_pro_new
 
     #### (6) measure two-track variables
     two_trk_df = pandora_df[two_trk_df_condition]
@@ -342,7 +365,7 @@ def make_cohpidf_slc(f):
     range_p_cpi = make_slc_var(range_p_cpi)
     slcdf['range_p_mu'] = range_p_mu
     slcdf['range_p_cpi'] = range_p_cpi
-        
+
     #### (7) Add total pe for each entry
     opflash_df = make_opflashdf(f)
     opflash_df = opflash_df[(opflash_df.firsttime > -5.) & (opflash_df.firsttime < 5.)]
@@ -358,7 +381,7 @@ def make_cohpidf_slc(f):
     pfp_vtxdist_4cm_df = pandora_df[(pandora_df.pfp.dist_to_vertex < 50.) & (pandora_df.slc.is_clear_cosmic == 0)]
     hittrk_matched_df = multicol_merge(hitdf.reset_index(), pfp_vtxdist_4cm_df.reset_index(),
                                        left_on=[('entry', '', '', '', '', ''), ('rec.slc..index', '', '', '', '', ''), ('rec.slc.reco.pfp..index', '', '', '', '', '')],
-                                       right_on=[('entry', '', '', '', '', ''), ('rec.slc..index', '', '', '', '', ''), ('rec.slc.reco.pfp..index', '', '', '', '', '')], 
+                                       right_on=[('entry', '', '', '', '', ''), ('rec.slc..index', '', '', '', '', ''), ('rec.slc.reco.pfp..index', '', '', '', '', '')],
                                        how="right")
     hittrk_matched_df = hittrk_matched_df.set_index(["entry", "rec.slc..index", "rec.slc.reco.pfp..index", "rec.slc.reco.pfp.trk.calo.2.points..index"], verify_integrity=True)
     hittrk_matched_df = multicol_add(hittrk_matched_df, dmagdf(hittrk_matched_df.slc.vertex, hittrk_matched_df.pfp.trk.hit).rename(("pfp", "trk", "hit", "dist_to_vertex", "", "")))
@@ -371,7 +394,7 @@ def make_cohpidf_slc(f):
     sum_integ_3cm = (hittrk_matched_df_3cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum()
     sum_integ_2cm = (hittrk_matched_df_2cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum()
     sum_integ_1cm = (hittrk_matched_df_1cm.pfp.trk.hit.integral).groupby(level=[0,1]).sum()
-    
+
     #print(sum_integ_4cm)
     slcdf['sum_integ_4cm'] = sum_integ_4cm
     slcdf['sum_integ_3cm'] = sum_integ_3cm
@@ -400,13 +423,13 @@ def make_cohpi_nudf(f):
     true_t = get_true_t(nudf).fillna(999999)
     nudf['true_t'] = true_t
 
-    is_fv = InFV_nohiyz_trk(nudf.position)
+    is_fv = InFV_nohiyz(nudf.position)
     is_signal = Signal(nudf)
     is_cc = nudf.iscc
     genie_mode = nudf.genie_mode
     w = nudf.w
     E = nudf.E
-    
+
     try :
         nuint_categ = pd.Series(8, index=nudf.index)
     except Exception as e:
@@ -440,5 +463,5 @@ def make_cohpi_nudf(f):
         'true_t': true_t_series,
         'nuint_categ': nuint_categ
     })
- 
+
     return this_nudf
