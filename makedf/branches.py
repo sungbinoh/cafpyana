@@ -207,6 +207,15 @@ shwbranches = [
     shwbranch + "truth.pur",
 ]
 
+
+presel_branches = [
+    "rec.slc.is_clear_cosmic",
+    "rec.slc.vertex.x", "rec.slc.vertex.y", "rec.slc.vertex.z",
+    "rec.slc.nu_score",
+    "rec.slc.barycenterFM.flashTime",
+    "rec.slc.barycenterFM.score",
+]
+
 trkhitadcbranches = [
   trkbranch + "calo.2.points.adcs"
 ]
