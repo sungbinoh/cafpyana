@@ -23,6 +23,7 @@ hdrbranches = [
     "rec.hdr.cluster",
     "rec.hdr.fno",
     "rec.hdr.noffbeambnb",
+    "rec.hdr.nbnbinfo",
 ]
 
 trigger_info_branches = [
@@ -191,7 +192,8 @@ trkmcsbranches = [
 
 shwbranches = [
     shwbranch + "start.x", shwbranch + "start.y", shwbranch + "start.z",
-    shwbranch + "end.x",   shwbranch + "end.y", shwbranch + "end.z",
+    shwbranch + "end.x",   shwbranch + "end.y",   shwbranch + "end.z",
+    shwbranch + "dir.x",   shwbranch + "dir.y",   shwbranch + "dir.z",
     shwbranch + 'conversion_gap', 
     shwbranch + "density",
     shwbranch + "open_angle",
@@ -292,6 +294,13 @@ barycenterFMbranches = [
     "rec.slc.barycenterFM.deltaZ",
 ]
 
+correctedflashbranches = [
+    "rec.slc.correctedOpFlash.OpFlashT0",
+    "rec.slc.correctedOpFlash.NuToFLight",
+    "rec.slc.correctedOpFlash.NuToFCharge",
+    "rec.slc.correctedOpFlash.OpFlashT0Corrected",
+]
+
 mcbranches = [
     "rec.mc.nu.E",
     "rec.mc.nu.baseline",
@@ -351,6 +360,40 @@ mchbranches = [
   "rec.mc.prtl.C3",
   "rec.mc.prtl.C4",
   "rec.mc.prtl.C5",
+]
+
+mevprtltruth = "rec.mc.prtl."
+mevprtltruthbranches = [
+   mevprtltruth + "gen",
+   mevprtltruth + "time",
+   mevprtltruth + "E",
+   mevprtltruth + "M",
+   mevprtltruth + "flux_weight",
+   mevprtltruth + "ray_weight",
+   mevprtltruth + "decay_weight",
+   mevprtltruth + "decay_length",
+   mevprtltruth + "allowed_decay_fraction",
+   mevprtltruth + "cryostat",
+   mevprtltruth + "position.x",
+   mevprtltruth + "position.y",
+   mevprtltruth + "position.z",
+   mevprtltruth + "momentum.x",
+   mevprtltruth + "momentum.y",
+   mevprtltruth + "momentum.z",
+   mevprtltruth + "enter.x",
+   mevprtltruth + "enter.y",
+   mevprtltruth + "enter.z",
+   mevprtltruth + "exit.x",
+   mevprtltruth + "exit.y",
+   mevprtltruth + "exit.z",
+   mevprtltruth + "start.x",
+   mevprtltruth + "start.y",
+   mevprtltruth + "start.z",
+   mevprtltruth + "C1",
+   mevprtltruth + "C2",
+   mevprtltruth + "C3",
+   mevprtltruth + "C4",
+   mevprtltruth + "C5",
 ]
 
 stubbranches = [
@@ -815,4 +858,3 @@ spinetpart_moduleids_branches = [
 spinetpart_originchildrenid_branches = [
     spinetpart + "orig_children_id"             # Original ID of the children particles.
 ]
-
