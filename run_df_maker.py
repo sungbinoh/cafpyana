@@ -55,13 +55,31 @@ def run_pool(output, inputs, nproc):
 
     dfss = ntuples.dataframes(nproc=nproc, fs=DFS, preprocess=PREPROCESS)
     output = pathlib.Path(output).with_suffix('.df')
-    k_idx = 0
     split_margin = args.SplitSize
     with pd.HDFStore(output) as hdf_pd:
         NAMES.append("histpotdf")
         NAMES.append("histgenevtdf")
-        size_counters = {k: 0 for k in NAMES}
-        df_buffers = {k: [] for k in NAMES}
+        split_idx = 0
+        split_bytes = 0.0
+        split_buffers = {k: [] for k in NAMES}
+
+        def _flush_split():
+            nonlocal split_idx, split_bytes, split_buffers
+            wrote_any = False
+            for k, buffer in split_buffers.items():
+                if not buffer:
+                    continue
+                concat_df = pd.concat(buffer, ignore_index=False)
+                this_key = f"{k}_{split_idx}"
+                hdf_pd.put(key=this_key, value=concat_df, format="fixed")
+                print(f"Saved {this_key}: {concat_df.memory_usage(deep=True).sum() / (1024**3):.4f} GB")
+                del concat_df
+                wrote_any = True
+
+            if wrote_any:
+                split_idx += 1
+            split_bytes = 0.0
+            split_buffers = {k: [] for k in NAMES}
 
         for dfs in dfss:
             this_NAMES = NAMES
@@ -69,54 +87,22 @@ def run_pool(output, inputs, nproc):
                 this_NAMES = ["histpotdf", "histgenevtdf"]
 
             for k, df in zip(reversed(this_NAMES), reversed(dfs)):
-                this_key = k + "_" + str(k_idx)
-                size_bytes = df.memory_usage(deep=True).sum() if df is not None else 0
+                if df is None:
+                    continue
+
+                size_bytes = df.memory_usage(deep=True).sum()
                 size_gb = size_bytes / (1024**3)
-                if len(dfs) == 2: ## no or empty recTree
-                    size_counters["histpotdf"] += size_gb
-                    df_buffers["histpotdf"].append(df)
-
-                    size_counters["histgenevtdf"] += size_gb
-                    df_buffers["histgenevtdf"].append(df)
-                else:
-                    size_counters[k] += size_gb
-                    if df is not None:
-                        df_buffers[k].append(df)  # accumulate
-
-                #print(f"{k}_{k_idx}: added {size_gb:.4f} GB (total {size_counters[k]:.4f} GB)")
-
+                split_buffers[k].append(df)
+                split_bytes += size_gb
                 del df
 
-            if any(val > split_margin for val in size_counters.values()):
-                # Concatenate and save accumulated DataFrames
-                for k, buffer in df_buffers.items():
-                    if buffer:  # only if buffer has data
-                        concat_df = pd.concat(buffer, ignore_index=False)
-                        this_key = k + "_" + str(k_idx)
-                        try:
-                            hdf_pd.put(key=this_key, value=concat_df, format="fixed")
-                            print(f"Saved {this_key}: {concat_df.memory_usage(deep=True).sum() / (1024**3):.4f} GB")
-                        except Exception as e:
-                            print(f"Table {this_key} failed to save, skipping. Exception: {str(e)}")
-                        del concat_df
-                # Reset counters and buffers
-                k_idx += 1
-                size_counters = {k: 0 for k in this_NAMES}
-                df_buffers = {k: [] for k in this_NAMES}
+            if split_bytes >= split_margin:
+                _flush_split()
 
-        for k, buffer in df_buffers.items():
-            if buffer:
-                concat_df = pd.concat(buffer, ignore_index=False)
-                this_key = k + "_" + str(k_idx)
-                try:
-                    hdf_pd.put(key=this_key, value=concat_df, format="fixed")
-                    print(f"Saved {this_key}: {concat_df.memory_usage(deep=True).sum() / (1024**3):.4f} GB")
-                except Exception as e:
-                    print(f"Table {this_key} failed to save, skipping. Exception: {str(e)}")
-                del concat_df
+        _flush_split()
 
         # Save the split count metadata
-        split_df = pd.DataFrame({"n_split": [k_idx + 1]})  # +1 because k_idx is 0-based
+        split_df = pd.DataFrame({"n_split": [split_idx]})
         hdf_pd.put(key="split", value=split_df, format="fixed")
         print(f"Saved split info: {split_df.iloc[0]['n_split']} total splits")
 
@@ -201,7 +187,7 @@ def run_grid(inputfiles):
 -N %d \\
 --disk 10GB \\
 --cpu 7 \\
---memory 4GB \\
+--memory 5GB \\
 --expected-lifetime 1h \\
 "file://$(pwd)/grid_executable.sh" \\
 "%s" \\
