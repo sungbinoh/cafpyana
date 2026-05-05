@@ -502,6 +502,8 @@ gump_genie_systematics = [
     "GENIEReWeight_SBN_v1_multisigma_MaNCRES",
     "GENIEReWeight_SBN_v1_multisigma_MvCCRES",
     "GENIEReWeight_SBN_v1_multisigma_MvNCRES",
+    "GENIEReWeight_SBN_v1_multisigma_RDecBR1gamma",
+    "GENIEReWeight_SBN_v1_multisigma_RDecBR1eta",
 
     # Non-Res
 
