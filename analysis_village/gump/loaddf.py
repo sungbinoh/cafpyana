@@ -283,6 +283,27 @@ def load_one(fname, idf,
 
     df = df.merge(match, on=["__ntuple", "entry"], how="left")
 
+    # DROP DUPLICATED EVENTS
+    # A "duplicate" is the same physical event appearing in more than one
+    # (__ntuple, entry) row of the header — i.e. the same event reconstructed twice.
+    # SBND MC legitimately reuses (run, evt) across distinct MC events, so when
+    # match_Enu is True we include nu_E0 in the dedup key as a tie-breaker.
+    # Drop ALL occurrences (keep=False), not just the extras, from both match and df.
+    # Use a MultiIndex.isin mask on df rather than df.merge, so df's existing
+    # MultiIndex (__ntuple, entry, rec.slc..index) is preserved.
+    dedup_cols = ["run", "evt", "nu_E0"] if match_Enu else ["run", "evt"]
+    dup_mask_match = match.duplicated(subset=dedup_cols, keep=False)
+    n_dup_pairs = int(match.loc[dup_mask_match, dedup_cols].drop_duplicates().shape[0])
+    n_dup_rows  = int(dup_mask_match.sum())
+    if n_dup_rows > 0:
+        bad_pairs = pd.MultiIndex.from_frame(
+            match.loc[dup_mask_match, dedup_cols].drop_duplicates())
+        df_pairs = pd.MultiIndex.from_arrays([df[c] for c in dedup_cols])
+        df = df[~df_pairs.isin(bad_pairs)]
+        match = match[~dup_mask_match]
+    print(f"[{os.path.basename(fname)} idf={idf}] dedup: dropped "
+          f"{n_dup_pairs} duplicated {tuple(dedup_cols)} keys ({n_dup_rows} hdr rows)")
+
     match = match.set_index(match_ind, append=True).droplevel([0,1]).sort_index()
 
     # LOAD POT
@@ -406,6 +427,33 @@ def load(fname, maxdf=None, **kwargs):
         matches.append(match)
     df = pd.concat(dfs).reset_index(drop=True)
     match = pd.concat(matches)
+
+    # CROSS-IDF DEDUP
+    # `load_one` only sees one idf (split) at a time. The same physical event can
+    # show up in more than one idf — `__ntuple` is a per-idf ordinal, not globally
+    # unique, so the within-idf check can't catch this. Drop every occurrence of
+    # any duplicate after the concat across idfs. Match nu_E0 in the key when it's
+    # present (match_Enu=True), since SBND MC reuses (run, evt) across distinct
+    # MC events and would over-drop on (run, evt) alone.
+    dedup_levels = ["run", "evt"]
+    if "nu_E0" in match.index.names:
+        dedup_levels.append("nu_E0")
+    key = pd.MultiIndex.from_arrays([
+        match.index.get_level_values(name) for name in dedup_levels
+    ])
+    dup_mask = key.duplicated(keep=False)
+    if dup_mask.any():
+        bad_pairs = pd.MultiIndex.from_arrays([
+            key.get_level_values(i)[dup_mask] for i in range(len(dedup_levels))
+        ]).unique()
+        n_dup_pairs = len(bad_pairs)
+        n_dup_rows  = int(dup_mask.sum())
+        match = match[~dup_mask]
+        df_pairs = pd.MultiIndex.from_arrays([df[name] for name in dedup_levels])
+        df = df[~df_pairs.isin(bad_pairs)]
+        print(f"[{os.path.basename(fname)}] cross-idf dedup: dropped "
+              f"{n_dup_pairs} duplicated {tuple(dedup_levels)} keys "
+              f"({n_dup_rows} match rows)")
 
     return df, match, pots
         
