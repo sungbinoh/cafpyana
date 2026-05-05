@@ -36,53 +36,68 @@ FLASH = "flash_%i"
 
 xsec_syst = [
     # CCQE
-    "GENIEReWeight_SBN_v1_multisigma_VecFFCCQEshape",
-    'GENIEReWeight_SBN_v1_multisigma_CoulombCCQE',
+    "CCQETemplateReweight_SBN_v3_LFGToSF_q0bin0",
+    "CCQETemplateReweight_SBN_v3_LFGToSF_q0bin1",
+    "CCQETemplateReweight_SBN_v3_LFGToSF_q0bin2",
+    "CCQETemplateReweight_SBN_v3_LFGToSF_q0bin3",
+    "CCQETemplateReweight_SBN_v3_LFGToSF_q0bin4",
 
-    "ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b1", 
-    "ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b2",
-    "ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b3",
-    "ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b4",
+    "CCQETemplateReweight_SBN_v3_LFGToHF_q0bin0",
+    "CCQETemplateReweight_SBN_v3_LFGToHF_q0bin1",
+    "CCQETemplateReweight_SBN_v3_LFGToHF_q0bin2",
+    "CCQETemplateReweight_SBN_v3_LFGToHF_q0bin3",
+    "CCQETemplateReweight_SBN_v3_LFGToHF_q0bin4",
 
-    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin1',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin2',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin3',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin4',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin5',
-    
-    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin1',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin2',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin3',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin4',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin5',
+    "CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin0",
+    "CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin1",
+    "CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin2",
+    "CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin3",
+    "CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin4",
 
-    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin1',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin2',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin3',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin4',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin5',
-    
-    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_0',
-    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_1',
-    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_2',
-    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_3',
-    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_4',
-    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_5',
+    # QE-INT
+    "QEInterference_SBN_v3_QEIntf_dial_0",
+    "QEInterference_SBN_v3_QEIntf_dial_1",
+    "QEInterference_SBN_v3_QEIntf_dial_2",
+    "QEInterference_SBN_v3_QEIntf_dial_3",
+    "QEInterference_SBN_v3_QEIntf_dial_4",
+    "QEInterference_SBN_v3_QEIntf_dial_5",
 
-    # MEC
-    'GENIEReWeight_SBN_v1_multisigma_NormCCMEC',
-    'GENIEReWeight_SBN_v1_multisigma_NormNCMEC',
-    "GENIEReWeight_SBN_v1_multisigma_DecayAngMEC",
-    
-    'MECq0q3InterpWeighting_SuSAv2ToValenica_q0binned_MECResponse_q0bin0',
-    'MECq0q3InterpWeighting_SuSAv2ToValenica_q0binned_MECResponse_q0bin1',
-    'MECq0q3InterpWeighting_SuSAv2ToValenica_q0binned_MECResponse_q0bin2',
-    'MECq0q3InterpWeighting_SuSAv2ToValenica_q0binned_MECResponse_q0bin3',
+    # E-Dep FSI
+    "GENIEReWeight_SBN_v3_FrG4_N",
+    "GENIEReWeight_SBN_v3_FrINCL_N",
+    "GENIEReWeight_SBN_v3_FrG4LoE_N",
+    "GENIEReWeight_SBN_v3_FrG4M1E_N",
+    "GENIEReWeight_SBN_v3_FrG4M2E_N",
+    "GENIEReWeight_SBN_v3_FrG4HiE_N",
+    "GENIEReWeight_SBN_v3_FrINCLLoE_N",
+    "GENIEReWeight_SBN_v3_FrINCLM1E_N",
+    "GENIEReWeight_SBN_v3_FrINCLM2E_N",
+    "GENIEReWeight_SBN_v3_FrINCLHiE_N",
+    "GENIEReWeight_SBN_v3_MFPLoE_N",
+    "GENIEReWeight_SBN_v3_MFPM1E_N",
+    "GENIEReWeight_SBN_v3_MFPM2E_N",
+    "GENIEReWeight_SBN_v3_MFPHiE_N",
+    "GENIEReWeight_SBN_v3_FrKin_PiProFix_N",
+    "GENIEReWeight_SBN_v3_FrKin_PiProBias_N",
 
-    'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin0',
-    'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin1',
-    'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin2',
-    'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin3',
+    # QD Fraction
+    "PionAbsWeighter_SBN_v3_QuasiDeuteronFraction",
+
+    # Z-expansion
+    "ZExpPCAWeighter_SBN_v3_MvA_b1",
+    "ZExpPCAWeighter_SBN_v3_MvA_b2",
+    "ZExpPCAWeighter_SBN_v3_MvA_b3",
+    "ZExpPCAWeighter_SBN_v3_MvA_b4",
+
+    # MEC Shape
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin0",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin1",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin2",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin3",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin0",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin1",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin2",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin3",
 
     # RES
     "GENIEReWeight_SBN_v1_multisigma_Theta_Delta2Npi",
@@ -91,7 +106,6 @@ xsec_syst = [
     "GENIEReWeight_SBN_v1_multisigma_MaNCRES",
     "GENIEReWeight_SBN_v1_multisigma_MvCCRES",
     "GENIEReWeight_SBN_v1_multisigma_MvNCRES",
-    # Non-Res
 
     # DIS
     # "GENIEReWeight_SBN_v1_multisim_DISBYVariationResponse",
@@ -115,18 +129,6 @@ xsec_syst = [
     
     # 'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4_N',
     # 'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCL_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4LoE_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCLLoE_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4M1E_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCLM1E_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4M2E_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCLM2E_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4HiE_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCLHiE_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_MFPLoE_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_MFPM1E_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_MFPM2E_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_MFPHiE_N',
 
     # NCEL
     'GENIEReWeight_SBN_v1_multisigma_MaNCEL',
@@ -134,7 +136,8 @@ xsec_syst = [
 ]
 
 xsec_cv_rwgt = [
-    "ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b1", 
+    "ZExpPCAWeighter_SBN_v3_MvA_b1",
+    "CCQEXSecCorr_SBN_v3_CCQEXSecCorr",
 ]
 
 flux_syst = [
@@ -320,7 +323,8 @@ def load_one(fname, idf,
         rewgt = pd.read_hdf(fname, wgtname % idf)[xsec_cv_rwgt]
         rewgt["cvwgt"] = 1.
         for w in xsec_cv_rwgt:
-            rewgt["cvwgt"] = rewgt.cvwgt * rewgt[w]["cv"]
+            cvcol = "cv" if "cv" in rewgt[w].columns else "morph"
+            rewgt["cvwgt"] = rewgt.cvwgt * rewgt[w][cvcol]
         df = df.merge(rewgt.cvwgt.rename("cvwgt"), left_on=["__ntuple", "entry", "tmatch_idx"], right_index=True, how="left")
         df.cvwgt = df.cvwgt.fillna(1.)
     else:
