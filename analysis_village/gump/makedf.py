@@ -222,9 +222,6 @@ def make_pandora_no_cuts_df(f):
 
     trkdf[("pfp", "trk", "chi2pid", "I2", "mu_over_p", "")] = trkdf.chi2u / trkdf.chi2p
 
-    # track containment
-    trkdf[("pfp", "trk", "is_contained", "", "", "")] = trkfv_cut(trkdf.pfp.trk.start, DETECTOR) & trkfv_cut(trkdf.pfp.trk.end, DETECTOR)
-
     # reco momentum -- range-only
     trkdf[("pfp", "trk", "P", "p_muon", "", "")] = trkdf[("pfp", "trk", "rangeP", "p_muon", "", "")]
     trkdf[("pfp", "trk", "P", "p_pion", "", "")] = trkdf[("pfp", "trk", "rangeP", "p_pion", "", "")]
@@ -273,7 +270,6 @@ def make_pandora_no_cuts_df(f):
         p_E = pd.Series(dtype='float', name='p_E', index=empty_index)
         nu_E_calo = pd.Series(dtype='float', name='nu_E_calo', index=empty_index)
         has_stub = pd.Series(dtype='float', name='has_stub', index=empty_index)
-        is_contained = pd.Series(dtype='float', name='is_contained', index=empty_index)
     else:
         tki = transverse_kinematics(slcdf.mu.pfp.trk.P.p_muon, slcdf.mu.pfp.trk.dir, slcdf.p.pfp.trk.P.p_proton, slcdf.p.pfp.trk.dir)
         nu_E_calo = neutrino_energy(slcdf.mu.pfp.trk.P.p_muon, slcdf.mu.pfp.trk.dir, slcdf.p.pfp.trk.P.p_proton, slcdf.p.pfp.trk.dir)
@@ -284,7 +280,6 @@ def make_pandora_no_cuts_df(f):
         del_alpha = tki['del_alpha']
         mu_E = tki['mu_E']
         p_E = tki['p_E']
-        is_contained = slcdf.p.pfp.trk.is_contained & slcdf.mu.pfp.trk.is_contained
 
     ######## (9) - c: slc.tmatch.idx for truth matching
     bad_tmatch = np.invert(slcdf.slc.tmatch.eff > 0.5) & (slcdf.slc.tmatch.idx >= 0)
@@ -325,9 +320,6 @@ def make_pandora_no_cuts_df(f):
         'slc_vtx_z': slc_vtx.z,
         'is_clear_cosmic': is_clear_cosmic,
         'nu_score': nu_score,
-        'true_pdg': true_pdg,
-        'is_cosmic': (true_pdg == -1),
-        'is_contained': is_contained,
         'crlongtrkdiry': crlongtrkdiry,
 
         'mu_chi2_of_mu_cand': mu_chi2_of_mu_cand,
@@ -382,20 +374,74 @@ def make_pandora_no_cuts_df(f):
         'p_dir_x': slcdf.p.pfp.trk.dir.x,
         'p_dir_y': slcdf.p.pfp.trk.dir.y,
         'p_dir_z': slcdf.p.pfp.trk.dir.z,
-        'mu_true_p': magdf(slcdf.mu.pfp.trk.truth.p.genp),
-        'mu_true_pdg': slcdf.mu.pfp.trk.truth.p.pdg,
-        'p_true_p': magdf(slcdf.p.pfp.trk.truth.p.genp),
-        'p_true_pdg': slcdf.p.pfp.trk.truth.p.pdg,
-        'baseline': slcdf.slc.truth.baseline, 
-        'nu_E_true': slcdf.slc.truth.E,
         'del_p': del_p,
         'del_Tp': del_Tp,
         'del_phi': del_phi,
-        # 'tmatch_eff': slcdf.slc.tmatch.eff, 
-        # 'tmatch_pur': slcdf.slc.tmatch.pur, 
+        'has_stub': slc_has_stub_series,
+
         'tmatch_idx': tmatch_idx_series,
-        'has_stub': slc_has_stub_series
+        'tmatch_eff': slcdf.slc.tmatch.eff, 
+        'tmatch_pur': slcdf.slc.tmatch.pur, 
+
+        'baseline': slcdf.slc.truth.baseline, # TODO remove 
+        'true_baseline': slcdf.slc.truth.baseline,
+        'nu_E_true': slcdf.slc.truth.E, # TODO remove
+        'true_nu_E': slcdf.slc.truth.E,
+        'true_pdg': true_pdg, # TODO remove
+        'true_nu_pdg': true_pdg,
+        'is_cosmic': (true_pdg == -1), # TODO remove
+        'true_is_cosmic': (true_pdg == -1),
+
+        'true_nu_vtx_x': slcdf.slc.truth.position.x,
+        'true_nu_vtx_y': slcdf.slc.truth.position.y,
+        'true_nu_vtx_z': slcdf.slc.truth.position.z,
+
+        'p_true_p': magdf(slcdf.p.pfp.trk.truth.p.genp), # TODO remove
+        'true_pcand_p': magdf(slcdf.p.pfp.trk.truth.p.genp),
+        'p_true_pdg': slcdf.p.pfp.trk.truth.p.pdg, # TODO remove
+        'true_pcand_pdg': slcdf.p.pfp.trk.truth.p.pdg,
+
+        'true_pcand_dir_x': slcdf.p.pfp.trk.truth.p.genp.x / magdf(slcdf.p.pfp.trk.truth.p.genp),
+        'true_pcand_dir_y': slcdf.p.pfp.trk.truth.p.genp.y / magdf(slcdf.p.pfp.trk.truth.p.genp),
+        'true_pcand_dir_z': slcdf.p.pfp.trk.truth.p.genp.z / magdf(slcdf.p.pfp.trk.truth.p.genp),
+        'true_pcand_end_x': slcdf.p.pfp.trk.truth.p.end.x,
+        'true_pcand_end_y': slcdf.p.pfp.trk.truth.p.end.y,
+        'true_pcand_end_z': slcdf.p.pfp.trk.truth.p.end.z,
+
+        'mu_true_p': magdf(slcdf.mu.pfp.trk.truth.p.genp), # TODO remove
+        'true_mucand_p': magdf(slcdf.mu.pfp.trk.truth.p.genp),
+        'mu_true_pdg': slcdf.mu.pfp.trk.truth.p.pdg, # TODO remove
+        'true_mucand_pdg': slcdf.mu.pfp.trk.truth.p.pdg,
+
+        'true_mucand_dir_x': slcdf.mu.pfp.trk.truth.p.genp.x /  magdf(slcdf.mu.pfp.trk.truth.p.genp),
+        'true_mucand_dir_y': slcdf.mu.pfp.trk.truth.p.genp.y /  magdf(slcdf.mu.pfp.trk.truth.p.genp),
+        'true_mucand_dir_z': slcdf.mu.pfp.trk.truth.p.genp.z /  magdf(slcdf.mu.pfp.trk.truth.p.genp),
+        'true_mucand_end_x': slcdf.mu.pfp.trk.truth.p.end.x,
+        'true_mucand_end_y': slcdf.mu.pfp.trk.truth.p.end.y,
+        'true_mucand_end_z': slcdf.mu.pfp.trk.truth.p.end.z,
+
+        'true_mu_p': slcdf.slc.truth.mu.totp,
+        'true_mu_dir_x': slcdf.slc.truth.mu.dir.x,
+        'true_mu_dir_y': slcdf.slc.truth.mu.dir.y,
+        'true_mu_dir_z': slcdf.slc.truth.mu.dir.z,
+        'true_mu_end_x': slcdf.slc.truth.mu.end.x,
+        'true_mu_end_y': slcdf.slc.truth.mu.end.y,
+        'true_mu_end_z': slcdf.slc.truth.mu.end.z,
+
+        'true_p_p': slcdf.slc.truth.p.totp,
+        'true_p_dir_x': slcdf.slc.truth.p.dir.x,
+        'true_p_dir_y': slcdf.slc.truth.p.dir.y,
+        'true_p_dir_z': slcdf.slc.truth.p.dir.z,
+        'true_p_end_x': slcdf.slc.truth.p.end.x,
+        'true_p_end_y': slcdf.slc.truth.p.end.y,
+        'true_p_end_z': slcdf.slc.truth.p.end.z,
+
+        'true_nmu_27MeV': slcdf.slc.truth.nmu_27MeV,
+        'true_np_20MeV': slcdf.slc.truth.np_20MeV,
+        'true_np_50MeV': slcdf.slc.truth.np_50MeV,
+        'true_npi_30MeV': slcdf.slc.truth.npi_30MeV,
     })
+
 
     # include some meta-data
     slcdf['detector'] = DETECTOR
@@ -456,6 +502,8 @@ gump_genie_systematics = [
     "GENIEReWeight_SBN_v1_multisigma_MaNCRES",
     "GENIEReWeight_SBN_v1_multisigma_MvCCRES",
     "GENIEReWeight_SBN_v1_multisigma_MvNCRES",
+    "GENIEReWeight_SBN_v1_multisigma_RDecBR1gamma",
+    "GENIEReWeight_SBN_v1_multisigma_RDecBR1eta",
 
     # Non-Res
 
@@ -491,67 +539,70 @@ gump_genie_systematics = [
 
 # additional (re-weights)
 gump_genie_reknob_systematics = gump_genie_systematics + [
-    'ZExpPCAWeighter_SBNNuSyst_multisigma_D_ZExp_b1',
-    'ZExpPCAWeighter_SBNNuSyst_multisigma_D_ZExp_b3',
-    'ZExpPCAWeighter_SBNNuSyst_multisigma_D_ZExp_b2',
-    'ZExpPCAWeighter_SBNNuSyst_multisigma_D_ZExp_b4',
+    "CCQETemplateReweight_SBN_v3_LFGToSF_q0bin0",
+    "CCQETemplateReweight_SBN_v3_LFGToSF_q0bin1",
+    "CCQETemplateReweight_SBN_v3_LFGToSF_q0bin2",
+    "CCQETemplateReweight_SBN_v3_LFGToSF_q0bin3",
+    "CCQETemplateReweight_SBN_v3_LFGToSF_q0bin4",
 
-    'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b1',
-    'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b3',
-    'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b2',
-    'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b4',
+    "CCQETemplateReweight_SBN_v3_LFGToHF_q0bin0",
+    "CCQETemplateReweight_SBN_v3_LFGToHF_q0bin1",
+    "CCQETemplateReweight_SBN_v3_LFGToHF_q0bin2",
+    "CCQETemplateReweight_SBN_v3_LFGToHF_q0bin3",
+    "CCQETemplateReweight_SBN_v3_LFGToHF_q0bin4",
 
-    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin1',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin2',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin3',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin4',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_HF_q0bin5',
+    "CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin0",
+    "CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin1",
+    "CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin2",
+    "CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin3",
+    "CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin4",
 
-    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin1',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin2',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin3',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin4',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin5',
+    "QEInterference_SBN_v3_QEIntf_dial_0",
+    "QEInterference_SBN_v3_QEIntf_dial_1",
+    "QEInterference_SBN_v3_QEIntf_dial_2",
+    "QEInterference_SBN_v3_QEIntf_dial_3",
+    "QEInterference_SBN_v3_QEIntf_dial_4",
+    "QEInterference_SBN_v3_QEIntf_dial_5",
 
-    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin1',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin2',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin3',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin4',
-    'CCQETemplateReweight_SBNNuSyst_multisigma_CRPA_q0bin5',
+    "GENIEReWeight_SBN_v3_FrG4_N",
+    "GENIEReWeight_SBN_v3_FrINCL_N",
+    "GENIEReWeight_SBN_v3_FrG4LoE_N",
+    "GENIEReWeight_SBN_v3_FrG4M1E_N",
+    "GENIEReWeight_SBN_v3_FrG4M2E_N",
+    "GENIEReWeight_SBN_v3_FrG4HiE_N",
+    "GENIEReWeight_SBN_v3_FrINCLLoE_N",
+    "GENIEReWeight_SBN_v3_FrINCLM1E_N",
+    "GENIEReWeight_SBN_v3_FrINCLM2E_N",
+    "GENIEReWeight_SBN_v3_FrINCLHiE_N",
+    "GENIEReWeight_SBN_v3_MFPLoE_N",
+    "GENIEReWeight_SBN_v3_MFPM1E_N",
+    "GENIEReWeight_SBN_v3_MFPM2E_N",
+    "GENIEReWeight_SBN_v3_MFPHiE_N",
+    "GENIEReWeight_SBN_v3_FrKin_PiProFix_N",
+    "GENIEReWeight_SBN_v3_FrKin_PiProBias_N",
 
-    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_0',
-    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_1',
-    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_2',
-    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_3',
-    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_4',
-    'QEInterference_SBNNuSyst_multisigma_INT_QEIntf_dial_5',
+    "PionAbsWeighter_SBN_v3_QuasiDeuteronFraction",
 
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCL_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4LoE_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCLLoE_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4M1E_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCLM1E_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4M2E_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCLM2E_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrG4HiE_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrINCLHiE_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_MFPLoE_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_MFPM1E_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_MFPM2E_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_MFPHiE_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrKin_PiProFix_N',
-    'GENIEReWeight_SBNNuSyst_multisigma_EDepFSI_FrKin_PiProBias_N',
+    "ZExpPCAWeighter_SBN_v3_Deut_b1",
+    "ZExpPCAWeighter_SBN_v3_Deut_b2",
+    "ZExpPCAWeighter_SBN_v3_Deut_b3",
+    "ZExpPCAWeighter_SBN_v3_Deut_b4",
 
-    'MECq0q3InterpWeighting_SuSAv2ToValenica_q0binned_MECResponse_q0bin0',
-    'MECq0q3InterpWeighting_SuSAv2ToValenica_q0binned_MECResponse_q0bin1',
-    'MECq0q3InterpWeighting_SuSAv2ToValenica_q0binned_MECResponse_q0bin2',
-    'MECq0q3InterpWeighting_SuSAv2ToValenica_q0binned_MECResponse_q0bin3',
+    "ZExpPCAWeighter_SBN_v3_MvA_b1",
+    "ZExpPCAWeighter_SBN_v3_MvA_b2",
+    "ZExpPCAWeighter_SBN_v3_MvA_b3",
+    "ZExpPCAWeighter_SBN_v3_MvA_b4",
 
-    'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin0',
-    'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin1',
-    'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin2',
-    'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin3',
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin0",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin1",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin2",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin3",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin0",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin1",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin2",
+    "MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin3",
+
+    "CCQEXSecCorr_SBN_v3_CCQEXSecCorr",
 ]
 
 def make_gump_nuslimwgtdf(f):
@@ -595,8 +646,7 @@ def make_gump_nudf(f, is_slc=False):
     is_1p0pi = (nudf.nmu_27MeV == 1) & (nudf.np_50MeV == 1) & (nudf.npi_30MeV == 0) & (nudf.npi0 == 0) 
     is_numu = (nudf.pdg == 14)
     is_other_numucc = (is_numu & is_cc & (is_1p0pi == 0) & is_fv)
-    is_contained = trkfv_cut(nudf.mu.end, DETECTOR) & trkfv_cut(nudf.p.end, DETECTOR)
-    is_sig = is_fv & is_1p0pi & is_numu & is_cc & is_contained
+    is_sig = is_fv & is_1p0pi & is_numu & is_cc
 
     nudf['nuint_categ'] = genie_mode 
 
@@ -613,7 +663,6 @@ def make_gump_nudf(f, is_slc=False):
         'del_p': true_del_p,
         'genie_mode': genie_mode, 
         'is_sig': is_sig, 
-        'is_contained': is_contained,
         'is_nc': is_nc, 
         'is_other_numucc': is_other_numucc, 
         'is_fv': is_fv, 
