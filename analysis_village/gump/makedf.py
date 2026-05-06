@@ -141,6 +141,8 @@ def make_pandora_no_cuts_df(f):
         RUN = 2
     elif 'run4' or 'Run4' in f.file_path:
         RUN = 4
+    elif 'SBND' or 'sbnd' in f.file_path:
+        RUN = 1
 
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if det.empty:
@@ -352,6 +354,12 @@ def make_pandora_no_cuts_df(f):
         'p_true_p': magdf(slcdf.p.pfp.trk.truth.p.genp),
         'p_true_pdg': slcdf.p.pfp.trk.truth.p.pdg,
         'baseline': slcdf.slc.truth.baseline, 
+        'parent_dcy_E': slcdf.slc.truth.parent_dcy_E, 
+        'parent_dcy_mode': slcdf.slc.truth.parent_dcy_mode, 
+        'parent_dcy_mom_x': slcdf.slc.truth.parent_dcy_mom.x, 
+        'parent_dcy_mom_y': slcdf.slc.truth.parent_dcy_mom.y, 
+        'parent_dcy_mom_z': slcdf.slc.truth.parent_dcy_mom.z, 
+        'parent_pdg': slcdf.slc.truth.parent_pdg, 
         'nu_E_true': slcdf.slc.truth.E,
         'del_p': del_p,
         'del_Tp': del_Tp,
