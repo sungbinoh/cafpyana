@@ -42,6 +42,13 @@ parser.add_argument('-split', dest='SplitSize', default=1.0, type=float, help="S
 
 args = parser.parse_args()
 
+DEFAULT_GRID_PARAMS = {
+    "memory":   "5GB",
+    "cpu":      7,
+    "disk":     "10GB",
+    "lifetime": "1h",
+}
+
 def run_pool(output, inputs, nproc):
     os.nice(10)
     ntuples = NTupleGlob(inputs, None)
@@ -107,6 +114,8 @@ def run_pool(output, inputs, nproc):
         print(f"Saved split info: {split_df.iloc[0]['n_split']} total splits")
 
 def run_grid(inputfiles):
+    grid_params = {**DEFAULT_GRID_PARAMS, **globals().get("GRID_PARAMS", {})}
+
     # 1) dir/file name style
     JobStartTime = datetime.datetime.now()
     timestamp =  JobStartTime.strftime('%Y_%m_%d_%H%M%S')
@@ -179,7 +188,7 @@ def run_grid(inputfiles):
     tar_cmd = 'tar cf bin_dir.tar ./'
     os.system(tar_cmd)
 
-    submitCMD = '''jobsub_submit \\
+    submitCMD = f'''jobsub_submit \\
 -G sbnd \\
 --auth-methods="token" \\
 -e LC_ALL=C \\
@@ -189,14 +198,14 @@ def run_grid(inputfiles):
 --lines '+FERMIHTC_AutoRelease=True' --lines '+FERMIHTC_GraceMemory=2000' --lines '+FERMIHTC_GraceLifetime=3600' \\
 --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)' \\
 --tar_file_name "dropbox://$(pwd)/bin_dir.tar" \\
--N %d \\
---disk 10GB \\
---cpu 7 \\
---memory 5GB \\
---expected-lifetime 1h \\
+-N {ngrid} \\
+--disk {grid_params['disk']} \\
+--cpu {grid_params['cpu']} \\
+--memory {grid_params['memory']} \\
+--expected-lifetime {grid_params['lifetime']} \\
 "file://$(pwd)/grid_executable.sh" \\
-"%s" \\
-"%s"'''%(ngrid,OutputDir,args.output)
+"{OutputDir}" \\
+"{args.output}"'''
 
     print(submitCMD)
     os.system(submitCMD)
@@ -235,11 +244,12 @@ if __name__ == "__main__":
         ### check if it is grid mode for pool mode
         if args.NGridJobs == 0:
             print("Running Pool mode");
-            exec(open(args.config).read())
+            exec(open(args.config).read(), globals())
             run_pool(args.output, InputSamples, "auto" if args.NCPU < 0 else args.NCPU)
 
         elif args.NGridJobs > 0:
             print("Running Grid mode");
+            exec(open(args.config).read(), globals())
             run_grid(InputSamples)
             
         else:
