@@ -221,8 +221,12 @@ def load_one(fname, idf,
             match_Enu=match_Enu, offbeampot=offbeampot, preselection=preselection)
         cache_file = os.path.join(cache_dir, cache_hash + ".h5")
         if os.path.exists(cache_file):
-            df = pd.read_hdf(cache_file, "df")
-            match = pd.read_hdf(cache_file, "match")
+            try:
+                df = pd.read_hdf(cache_file, "df")
+                match = pd.read_hdf(cache_file, "match")
+            except Exception as err:
+                print(fname, cache_file)
+                raise err 
             with h5py.File(cache_file, "r") as cf:
                 pot = float(cf.attrs["pot"])
             return df, match, pot
