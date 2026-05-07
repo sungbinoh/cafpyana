@@ -1,4 +1,5 @@
 import sys
+import argparse
 import os
 import pandas as pd
 workspace_root = os.getcwd()
@@ -53,7 +54,7 @@ def grab_pot(files, mc_bools, sep_bool=True):
             for i in range(get_n_split(file)):
                 if detector == "ICARUS": single_ngates_OFF = pd.read_hdf(file, "trig_"+str(i)).gate_delta.sum()*(1-1/20.)
                 elif detector == "SBND": single_ngates_OFF = pd.read_hdf(file, "hdr_"+str(i)).noffbeambnb.sum()
-                print(f"{single_ngates_OFF} for {i} num gates")
+                print(f"{single_ngates_OFF} gates for {i}'th key")
                 ngates_OFF += single_ngates_OFF
             pot.append(5e12*ngates_OFF/N_GATES_ON_PER_5e12POT)
             print(f"{file} sample \"pot\": {pot[-1]}")
@@ -62,27 +63,64 @@ def grab_pot(files, mc_bools, sep_bool=True):
         print("Cannot have negative POT!!!")
         sys.exit()
 
-        if sep_bool: 
-            if len(pot) == 1:
-                return pot[0]
-            else:
-                return pot
+    if sep_bool:
+        if len(pot) == 1:
+            return pot[0]
         else:
-            return sum(pot)
+            return pot
+    else:
+        print(f"final total: {sum(pot)}")
+        return sum(pot)
 
 def test():
-    prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
+    # pac_prefix = "/exp/sbnd/data/users/nrowe/"
 
-    cv_files = []
-    for i in range(19):
-        cv_files.append(prefix+f"SBND_SpringMC_rewgt_{i}.df")
+    # pac_files = []
+    # for i in range(7):
+    #     pac_files.append(pac_prefix+f"SBND_Run1_MC_{i:02d}.df")
+    # grab_pot(pac_files, True, False)
 
-    grab_pot(cv_files, True)
-    grab_pot(prefix+"ICARUS_SpringMCOverlay_rewgt.df", True)
-    grab_pot(prefix+"SBND_SpringLowEMC.df", True)
-    grab_pot(prefix+"ICARUS_SpringMCDirt_slimwgt.df", True)
-    grab_pot(prefix+"SBND_SpringBNBOffData_5000.df", False)
-    grab_pot(prefix+"ICARUS_SpringRun2BNBOff_unblind_prescaled.df", False)
+    # pac_prefix = "/exp/sbnd/data/users/nrowe/PAC/df/"
+    # pac_files = []
+    # for i in range(35):
+    #     pac_files.append(pac_prefix+f"ICARUS_Run4_MC_{i:02d}.df")
+    # grab_pot(pac_files, True, False)
+
+    # prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
+
+    # cv_files = []
+    # for i in range(19):
+    #     cv_files.append(prefix+f"SBND_SpringMC_rewgt_{i}.df")
+
+    # grab_pot(cv_files, True)
+    # grab_pot(prefix+"ICARUS_SpringMCOverlay_rewgt.df", True)
+    # grab_pot(prefix+"SBND_SpringLowEMC.df", True)
+    # grab_pot(prefix+"SBND_SpringBNBOffData_5000.df", False)
+    # grab_pot(prefix+"ICARUS_SpringRun2BNBOff_unblind_prescaled.df", False)
+    gray_prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/"
+    nate_prefix = "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-6/"
+    #grab_pot(gray_prefix+"SBND_SpringBNBOffData_5000.df", False)
+    #grab_pot(nate_prefix+"ICARUSRun4_SpringRun2BNBOff_unblind_prescaled.df", False)
+    #grab_pot(nate_prefix+"ICARUSRun2_SpringRun2BNBOff_unblind_prescaled.df", False)
+    grab_pot(nate_prefix+"ICARUSRun2_Spring_Overlay_Dirt.df", False)
+    grab_pot(nate_prefix+"ICARUSRun4_Spring_Overlay_Dirt.df", False)
 
 if __name__ == "__main__":
-    test()
+
+    parser = argparse.ArgumentParser(prog = 'pot',
+                                     description = 'POT grabber and related functions for gump analysis.')
+    parser.add_argument('-i','--input', nargs='+', type=str)
+    parser.add_argument('-l','--list', type=str)
+    parser.add_argument('-t','--test', action='store_true')
+    parser.add_argument('-d','--data', action='store_true')
+
+    args = parser.parse_args()
+
+    if args.test:
+        test()
+    elif args.input:
+        grab_pot(args.input, not args.data, False)
+    elif args.list:
+        with open(args.list, 'r') as file:
+                inputs = file.read().splitlines() 
+        grab_pot(inputs, True, False)

@@ -6,14 +6,129 @@ import pyanalib.pandas_helpers as ph
 import awkward as ak
 import numpy as np
 
-from analysis_village.gump.gump_cuts import *
-from analysis_village.gump.rwt_map import *
+
+# Add the head directly to sys.path
+sys.path.insert(0, "analysis_village/gump")
+
+from gump_cuts import *
+from loaddf import *
+from rwt_map import *
+
+def apply_truth(recodf, mcnudf):
+    matchdf = recodf.copy()
+    matchdf.columns = pd.MultiIndex.from_tuples([(col, '') for col in matchdf.columns])
+    matchdf = tmatch(matchdf, mcnudf)
+
+    recodf = recodf.reset_index()
+    recodf = pd.concat([recodf, matchdf['is_nc'].reset_index(), matchdf['genie_mode'].reset_index()], axis = 1)
+    recodf['is_nc'] = recodf['is_nc'].fillna(0)
+    recodf['genie_mode'] = recodf['genie_mode'].fillna(0)
+    return recodf
+
+def apply_systs(recodf, mcnuwgtdf, DETECTOR, det_run):
+    # 1. Setup and Matching
+    matchdf = recodf.copy()
+    matchdf.columns = pd.MultiIndex.from_tuples([(col, '') for col in matchdf.columns])
+    matchdf = tmatch(matchdf, mcnuwgtdf)
+
+    recodf_wgt_out = pd.DataFrame({},index=matchdf.index)
+
+    # 2. Process existing weight columns
+    wgt_cols = [c for c in mcnuwgtdf.columns.get_level_values(0).unique()
+                if any(k in c for k in ["GENIE", "Flux", "SBNNuSyst", "InterpWeighting"])]
+
+    for col in wgt_cols:
+        newcol = f"multisigma{col}" if "MECq0q3InterpWeighting" in col else col
+        recodf_wgt_out[newcol] = np.array([matchdf[col][u].values for u in matchdf[col].columns]).T.tolist()
+
+    recodf_wgt_out = apply_det_syst(recodf, recodf_wgt_out, DETECTOR)
+    recodf_wgt_out = apply_pot_syst(recodf, recodf_wgt_out, det_run)
+
+    return recodf_wgt_out
+
+def apply_pot_syst(recodf, recodf_wgt_out, det_run):
+    # POT Systematics
+    pot_scales = {'ps1': 0.5, 'ms1': -0.525805, 'ps2': 1.0, 'ms2': -1.12726, 'ps3': 1.5, 'ms3': -1.7286, 'cv': 0.0}
+
+    for det in ["SBNDRun1", "ICARUSRun2", "ICARUSRun4"]:
+        if int(det[-1]) == det_run:
+            recodf_wgt_out["POT_multisigma_"+det] = [[1.0 + (v/100.0) for v in pot_scales.values()] for _ in range(len(recodf))]
+        else:
+            recodf_wgt_out["POT_multisigma_"+det] = [[1.0 for _ in pot_scales.values()] for _ in range(len(recodf))]
+
+    return recodf_wgt_out
+
+def apply_det_syst(recodf, recodf_wgt_out, DETECTOR):
+    # 1. Load Mappings
+    # These maps are always loaded, but used differently based on DETECTOR
+    sce_df = apply_double_map(recodf, 'analysis_village/gump/rwt_outputs/min_SCE.txt', 'analysis_village/gump/rwt_outputs/pls_SCE.txt', 'CAFPYANA_SBN_v1_multisigma_SCE')
+    wmxthetaxw_df = apply_map(recodf, 'analysis_village/gump/rwt_outputs/XThetaXW.txt', 'WireMod_SBN_v1_multisigma_XThetaXW')
+    wmyz_df = apply_map(recodf, 'analysis_village/gump/rwt_outputs/YZ.txt', 'WireMod_SBN_v1_multisigma_YZ')
+
+    # 2. Apply Detector-Specific Logic
+    is_sbnd = (DETECTOR == "SBND")
+    not_DETECTOR = "ICARUS" if is_sbnd else "SBND"
+
+    # Common Logic: Use values if SBND, else Use ones
+    sys_map = {
+        'CAFPYANA_SBN_v1_multisigma_SCE': sce_df,
+        'WireMod_SBN_v1_multisigma_XThetaXW': wmxthetaxw_df,
+        'WireMod_SBN_v1_multisigma_YZ': wmyz_df
+    }
+
+    for key, df in sys_map.items():
+        if is_sbnd:
+            recodf_wgt_out[key] = np.array([df[key][u].values for u in df[key].columns]).T.tolist()
+        else:
+            # Create a list of 'ones' with the same shape as the data
+            recodf_wgt_out[key] = [np.ones(df[key].shape[1]) for _ in range(len(df))]
+
+    # 3. Handle Smear and Gain (Active for current DETECTOR, 1.0 for the 'other')
+    for feat in ['smear', 'gain']:
+        col_name = f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_{feat}'
+        other_col = f'CAFPYANA_SBN_v1_multisigma_{not_DETECTOR}_{feat}'
+
+        # Load the map dynamically
+        feat_df = apply_double_map(recodf, f'analysis_village/gump/rwt_outputs/min_{DETECTOR}_{feat}.txt', f'analysis_village/gump/rwt_outputs/pls_{DETECTOR}_{feat}.txt', col_name)
+
+        recodf_wgt_out[col_name] = feat_df[col_name].values.tolist()
+        recodf_wgt_out[other_col] = [([1.0] * feat_df[col_name].shape[1]) for _ in range(len(feat_df))]
+
+    return recodf_wgt_out
+
+def apply_flash(df, detector, det_run, fname, idf, ismc):
+    if "flash_maxpe" in df.columns:
+      del df["flash_maxpe"]
+
+    flashes = pd.read_hdf(fname, "flash_%i" % idf)
+
+    time_name = "firsttime" if detector == "SBND" else "time"
+    if ismc: # Scale PE for MC-only
+        if detector == "SBND": pe_scale = 0.66
+        elif detector == "ICARUS" and det_run == 2: pe_scale = 0.6
+        elif detector == "ICARUS" and det_run == 4: pe_scale = 0.4
+    else:
+        pe_scale = 1.0
+
+    intime = (flashes[time_name] > -5) & (flashes[time_name] < 5)
+    maxpe = (flashes.totalpe*intime).groupby(level=[0, 1]).max().rename("flash_maxpe")*pe_scale
+    df = df.join(maxpe)
+    print(df.flash_maxpe)
+    return df
 
 def make_gump_ttree_mc(dfname, split):
 
+    # This should be replaced with reading from df later
+    if 'ICARUSRun4' in dfname:
+        det_run = 4
+    if 'ICARUSRun2' in dfname:
+        det_run = 2
+    elif 'SBND' in dfname:
+        det_run = 1
+
     with pd.HDFStore(dfname, mode='r') as store:
         keys = store.keys()
-    print(keys)
+
     if len(keys) > 0:
         if '/evt_0' in keys:
             suffix = '_' + str(split)
@@ -35,99 +150,39 @@ def make_gump_ttree_mc(dfname, split):
         recodf = pd.read_hdf(dfname)
         mcnuwgtdf  = recodf.copy()
 
+    mcnudf = pd.read_hdf(dfname, key=mcnudf_key)
+
     ## Figure out which detector this is
     DETECTOR = recodf.detector.iloc[0]
 
-    ## Apply cuts
-    recodf = recodf[slcfv_cut(recodf, DETECTOR)]
+    recodf = apply_flash(recodf, DETECTOR, det_run, dfname, split, ismc=True)
 
-    ### NuScore cut
-    recodf = recodf[cosmic_cut(recodf)]
+    ## apply selection
+    recodf = all_cuts(recodf, DETECTOR, det_run)
 
-    ### Two prong cut
-    recodf = recodf[twoprong_cut(recodf)]
+    ## add in systematics
+    recodf_wgt_out = apply_systs(recodf, mcnuwgtdf, DETECTOR, det_run)
 
-    ### containment cut
-    recodf = recodf[mufv_cut(recodf, DETECTOR)]
-    recodf = recodf[pfv_cut(recodf, DETECTOR)]
+    ## grab some truth level information
+    recodf = apply_truth(recodf, mcnudf)
 
-    ### PID cut
-    recodf = recodf[pid_cut(recodf.mu_chi2_of_mu_cand, recodf.mu_chi2_of_prot_cand, 
-                            recodf.prot_chi2_of_mu_cand, recodf.prot_chi2_of_prot_cand, 
-                            recodf.mu_len)]
-
-    ### crthitveto cut
-    if DETECTOR == "ICARUS":
-        recodf = recodf[crthitveto_cut(recodf)]
-
-    ## Work for the reco df
-    matchdf = recodf.copy()
-    matchdf.columns = pd.MultiIndex.from_tuples([(col, '') for col in matchdf.columns])
-    matchdf = ph.multicol_merge(matchdf.reset_index(), mcnuwgtdf.reset_index(),
-                               left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
-                               right_on=[("__ntuple", ""), ("entry", ""), ("rec.mc.nu..index", "")],
-                               how="left") ## -- save all sllices
-
-    wgt_columns = [c for c in list(set(mcnuwgtdf.columns.get_level_values(0)))if (c.startswith("GENIE") or "Flux" in c or "SBNNuSyst" in c or "InterpWeighting" in c)]
-    recodf_wgt_out = pd.DataFrame({}, index=matchdf.index)
-
-    for col in wgt_columns:
-        if "MECq0q3InterpWeighting" in col:
-            newcol =  "multisigma" + col
-        else:
-            newcol = col
-        recodf_wgt_out[newcol] = np.array([matchdf[col][u].values for u in matchdf[col].columns]).T.tolist()
-
-    sce_df = apply_double_map(recodf, 'analysis_village/gump/rwt_outputs/min_SCE.txt', 'analysis_village/gump/rwt_outputs/pls_SCE.txt', 'CAFPYANA_SBN_v1_multisigma_SCE')
-    wmxthetaxw_df = apply_map(recodf, 'analysis_village/gump/rwt_outputs/XThetaXW.txt', 'WireMod_SBN_v1_multisigma_XThetaXW')
-    wmyz_df = apply_map(recodf, 'analysis_village/gump/rwt_outputs/YZ.txt', 'WireMod_SBN_v1_multisigma_YZ')
-
-    smear_df = apply_double_map(recodf, f'analysis_village/gump/rwt_outputs/min_{DETECTOR}_smear.txt', f'analysis_village/gump/rwt_outputs/pls_{DETECTOR}_smear.txt', f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_smear')
-    recodf_wgt_out[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_smear'] = np.array([smear_df[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_smear'][u].values for u in smear_df[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_smear'].columns]).T.tolist()
-
-    gain_df = apply_double_map(recodf, f'analysis_village/gump/rwt_outputs/min_{DETECTOR}_gain.txt', f'analysis_village/gump/rwt_outputs/pls_{DETECTOR}_gain.txt', f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_gain')
-    recodf_wgt_out[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_gain'] = np.array([gain_df[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_gain'][u].values for u in gain_df[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_gain'].columns]).T.tolist()
-
-    if DETECTOR == "ICARUS":
-        not_DETECTOR = "SBND"
-        recodf_wgt_out['CAFPYANA_SBN_v1_multisigma_SCE'] = np.array([np.ones_like(sce_df['CAFPYANA_SBN_v1_multisigma_SCE'][u].values) for u in sce_df['CAFPYANA_SBN_v1_multisigma_SCE'].columns]).T.tolist()
-        recodf_wgt_out['WireMod_SBN_v1_multisigma_XThetaXW'] = np.array([np.ones_like(wmxthetaxw_df['WireMod_SBN_v1_multisigma_XThetaXW'][u].values) for u in wmxthetaxw_df['WireMod_SBN_v1_multisigma_XThetaXW'].columns]).T.tolist()
-        recodf_wgt_out['WireMod_SBN_v1_multisigma_YZ'] = np.array([np.ones_like(wmyz_df['WireMod_SBN_v1_multisigma_YZ'][u].values) for u in wmyz_df['WireMod_SBN_v1_multisigma_YZ'].columns]).T.tolist()
-
-    elif DETECTOR == "SBND":
-        not_DETECTOR = "ICARUS"
-        recodf_wgt_out['CAFPYANA_SBN_v1_multisigma_SCE'] = np.array([sce_df['CAFPYANA_SBN_v1_multisigma_SCE'][u].values for u in sce_df['CAFPYANA_SBN_v1_multisigma_SCE'].columns]).T.tolist()
-        recodf_wgt_out['WireMod_SBN_v1_multisigma_XThetaXW'] = np.array([wmxthetaxw_df['WireMod_SBN_v1_multisigma_XThetaXW'][u].values for u in wmxthetaxw_df['WireMod_SBN_v1_multisigma_XThetaXW'].columns]).T.tolist()
-        recodf_wgt_out['WireMod_SBN_v1_multisigma_YZ'] = np.array([wmyz_df['WireMod_SBN_v1_multisigma_YZ'][u].values for u in wmyz_df['WireMod_SBN_v1_multisigma_YZ'].columns]).T.tolist()
-
-
-    recodf_wgt_out[f'CAFPYANA_SBN_v1_multisigma_{not_DETECTOR}_smear'] = np.array([np.ones_like(smear_df[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_smear'][u].values) for u in smear_df[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_smear'].columns]).T.tolist()
-    recodf_wgt_out[f'CAFPYANA_SBN_v1_multisigma_{not_DETECTOR}_gain'] = np.array([np.ones_like(gain_df[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_gain'][u].values) for u in gain_df[f'CAFPYANA_SBN_v1_multisigma_{DETECTOR}_gain'].columns]).T.tolist()
-
-    ## just get NC from here
-    mcnudf = pd.read_hdf(dfname, key=mcnudf_key)
-    matchdf = recodf.copy()
-    matchdf.columns = pd.MultiIndex.from_tuples([(col, '') for col in matchdf.columns])
-    matchdf = ph.multicol_merge(matchdf.reset_index(), mcnudf.reset_index(),
-                               left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
-                               right_on=[("__ntuple", ""), ("entry", ""), ("rec.mc.nu..index", "")],
-                               how="left") ## -- save all sllices
-
-    recodf = recodf.reset_index()
-    recodf = pd.concat([recodf, matchdf['is_nc'].reset_index()], axis = 1)
-    recodf['is_nc'] = recodf['is_nc'].fillna(0)
-    recodf_wgt_out = recodf_wgt_out.reset_index()
-    recodf = pd.concat([recodf, recodf_wgt_out], axis = 1)
-
-    recodf = recodf.reset_index()
-    recodf = pd.concat([recodf, matchdf['genie_mode'].reset_index()], axis = 1)
-    recodf['genie_mode'] = recodf['genie_mode'].fillna(0)
+    ## combine
     recodf_wgt_out = recodf_wgt_out.reset_index()
     recodf = pd.concat([recodf, recodf_wgt_out], axis = 1)
 
     return recodf
 
 def make_gump_ttree_data(dfname, split):
+
+    # This should be replaced with reading from df later
+    if 'ICARUSRun4' in dfname:
+        det_run = 4
+    if 'ICARUSRun2' in dfname:
+        det_run = 2
+    elif 'SBND' in dfname:
+        det_run = 1
+    elif 'ICARUS' in dfname:
+        det_run = 2
 
     with pd.HDFStore(dfname, mode='r') as store:
         keys = store.keys()
@@ -145,26 +200,9 @@ def make_gump_ttree_data(dfname, split):
 
     ## Figure out which detector this is
     DETECTOR = recodf.detector.iloc[0]
-    ## Apply cuts
-    recodf = recodf[slcfv_cut(recodf, DETECTOR)]
 
-    ### NuScore cut
-    recodf = recodf[cosmic_cut(recodf)]
-
-    ### Two prong cut
-    recodf = recodf[twoprong_cut(recodf)]
-
-    ### containment cut
-    recodf = recodf[mufv_cut(recodf, DETECTOR)]
-    recodf = recodf[pfv_cut(recodf, DETECTOR)]
-
-    ### PID cut
-    recodf = recodf[pid_cut(recodf.mu_chi2_of_mu_cand, recodf.mu_chi2_of_prot_cand, 
-                            recodf.prot_chi2_of_mu_cand, recodf.prot_chi2_of_prot_cand, 
-                            recodf.mu_len)]
-
-    ### crthitveto cut
-    if DETECTOR == "ICARUS":
-        recodf = recodf[crthitveto_cut(recodf)]
+    recodf = apply_flash(recodf, DETECTOR, det_run, dfname, split, ismc=True)
+    ## apply selection
+    recodf = all_cuts(recodf, DETECTOR, det_run)
 
     return recodf

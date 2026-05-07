@@ -144,20 +144,21 @@ def run_grid(inputfiles):
         flistForEachJob.append( [] )
 
     for i_line in range(0,len(inputfiles)):
-        flistForEachJob[i_line%ngrid].append(inputfiles[i])
+        flistForEachJob[i_line%ngrid].append(inputfiles[i_line])
 
     for i_flist in range(0,len(flistForEachJob)):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
+        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu 2 -i'
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
             if i_f == 0:
-                cmd += ' ' + flist[i_f]
+                cmd += ' ' + flist[i_f].split('/')[-1]
             else: 
-                cmd += ',' + flist[i_f]
-            #out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
+                cmd += ',' + flist[i_f].split('/')[-1]
+            out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
+        out.write('ls -alh\n')
         out.write(cmd)
         out.close()
 
@@ -179,13 +180,15 @@ def run_grid(inputfiles):
 --auth-methods="token" \\
 -e LC_ALL=C \\
 --role=Analysis \\
---resource-provides="usage_model=DEDICATED,OPPORTUNISTIC" \\
+--resource-provides="usage_model=OPPORTUNISTIC,DEDICATED,OFFSITE" \\
 --lines '+FERMIHTC_AutoRelease=True' --lines '+FERMIHTC_GraceMemory=1000' --lines '+FERMIHTC_GraceLifetime=3600' \\
 --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)' \\
 --tar_file_name "dropbox://$(pwd)/bin_dir.tar" \\
 -N %d \\
---disk 100GB \\
---expected-lifetime 10h \\
+--disk 10GB \\
+--cpu 2 \\
+--memory 2GB \\
+--expected-lifetime 1h \\
 "file://$(pwd)/grid_executable.sh" \\
 "%s" \\
 "%s"'''%(ngrid,OutputDir,args.output)

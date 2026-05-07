@@ -7,7 +7,7 @@ export CAFPYANA_DIR=$(pwd)
 # spack will override this one
 SPACK_ROOT_FNAL_TOOLS="/cvmfs/fermilab.opensciencegrid.org/packages/common/setup-env.sh"
 source "${SPACK_ROOT_FNAL_TOOLS}" > /dev/null 2>&1
-spack load sam-web-client@3.6%gcc@11.4.1 arch=linux-almalinux9-x86_64_v2
+spack load sam-web-client@3.6%gcc@11.4.1
 
 which samweb > /dev/null 2>&1 && echo "SAMWeb client set up" || echo "Warning: SAMWeb client not set up"
 

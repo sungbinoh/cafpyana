@@ -137,6 +137,13 @@ def make_spine_no_cuts_df(f):
 # and can be turned into ttree for PROfit
 
 def make_pandora_no_cuts_df(f):
+    if 'run2' or 'Run2' in f.file_path:
+        RUN = 2
+    elif 'run4' or 'Run4' in f.file_path:
+        RUN = 4
+    elif 'SBND' or 'sbnd' in f.file_path:
+        RUN = 1
+
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if det.empty:
         return pd.DataFrame()
@@ -374,6 +381,13 @@ def make_pandora_no_cuts_df(f):
         'p_dir_x': slcdf.p.pfp.trk.dir.x,
         'p_dir_y': slcdf.p.pfp.trk.dir.y,
         'p_dir_z': slcdf.p.pfp.trk.dir.z,
+        'parent_dcy_E': slcdf.slc.truth.parent_dcy_E, 
+        'parent_dcy_mode': slcdf.slc.truth.parent_dcy_mode, 
+        'parent_dcy_mom_x': slcdf.slc.truth.parent_dcy_mom.x, 
+        'parent_dcy_mom_y': slcdf.slc.truth.parent_dcy_mom.y, 
+        'parent_dcy_mom_z': slcdf.slc.truth.parent_dcy_mom.z, 
+        'parent_pdg': slcdf.slc.truth.parent_pdg, 
+
         'del_p': del_p,
         'del_Tp': del_Tp,
         'del_phi': del_phi,

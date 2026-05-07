@@ -29,7 +29,7 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
     isyst.index.name = "iwgt"
     nuniv = wgt_nuniv.sum()
 
-    wgts = ak.to_dataframe(f["recTree"]['rec.mc.nu.wgt.univ'].arrays(library="ak"), how=None)[0]
+    wgts = ak.to_dataframe(f["recTree"]['rec.mc.nu.wgt.univ'].arrays(library="ak"), how=None)[0].astype(np.float32)
     wgts["inu"] = wgts.index.get_level_values(1) // nuniv
     wgts["iwgt"] = wgts.index.get_level_values(1) % nuniv
     wgts = wgts.reset_index().set_index(["entry", "inu", "iwgt"]).drop(columns="subentry")
