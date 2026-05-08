@@ -4,6 +4,7 @@ __pycache__/
 *.df
 *.png
 *.root
+*.paths
 envs/cmake3
 envs/venv_py*
 envs/xrootd-*
