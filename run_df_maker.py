@@ -46,7 +46,7 @@ args = parser.parse_args()
 DEFAULT_GRID_PARAMS = {
     "memory":   "5GB",
     "cpu":      7,
-    "disk":     "10GB",
+    "disk":     "100GB",
     "lifetime": "1h",
 }
 
