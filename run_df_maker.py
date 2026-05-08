@@ -1,7 +1,8 @@
-#!/usr/bin/env python3 
+#!/usr/bin/env python3
 import os,sys,time
 import datetime
 import pathlib
+import hashlib
 #from TimeTools import *
 import argparse
 import tables
@@ -113,6 +114,14 @@ def run_pool(output, inputs, nproc):
         hdf_pd.put(key="split", value=split_df, format="fixed")
         print(f"Saved split info: {split_df.iloc[0]['n_split']} total splits")
 
+def _get_short_filename(full_path):
+    """Generate a short hash-based filename from a full file path."""
+    path_hash = hashlib.md5(full_path.encode()).hexdigest()[:6]
+    base_name = os.path.basename(full_path)
+    # Keep just the extension if it exists
+    name, ext = os.path.splitext(base_name)
+    return f"{path_hash}{ext}"
+
 def run_grid(inputfiles):
     grid_params = {**DEFAULT_GRID_PARAMS, **globals().get("GRID_PARAMS", {})}
 
@@ -149,9 +158,7 @@ def run_grid(inputfiles):
 
         with open(input_list_path, 'w') as list_out:
             for f in flist:
-                local_name = re.sub(r'^(?:root://[^/]+)?(?:/pnfs/fnal.gov/usr/)?', '', f)
-                local_name = local_name.lstrip('/')
-                local_name = local_name.replace('/', '__')
+                local_name = _get_short_filename(f)
                 list_out.write(local_name + '\n')
 
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
@@ -159,9 +166,7 @@ def run_grid(inputfiles):
         cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu 7 -l ' + input_list_name
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
-            local_name = re.sub(r'^(?:root://[^/]+)?(?:/pnfs/fnal.gov/usr/)?', '', flist[i_f])
-            local_name = local_name.lstrip('/')
-            local_name = local_name.replace('/', '__')
+            local_name = _get_short_filename(flist[i_f])
             out.write('xrdcp ' + flist[i_f] + ' ' + local_name + '\n') ## -- for checking auth
         out.write('echo "[run_%s.sh] input list file: %s"\n'%(i_flist, input_list_name))
         out.write('echo "[run_%s.sh] number of inputs:"\n'%(i_flist))
