@@ -204,7 +204,7 @@ def _loaddf(applyfs, preprocess, g):
                     dfs.append(df_histgenevt)
 
                 break
-            except (OSError, ValueError, RuntimeError, TimeoutError, KeyError) as e:
+            except (OSError, ValueError, RuntimeError, TimeoutError, KeyError, TypeError) as e:
                 dfs = None
                 if attempt + 1 < NTUPLE_READ_RETRIES and _is_transient_io_error(e):
                     wait_s = NTUPLE_RETRY_SLEEP * (attempt + 1)
