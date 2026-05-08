@@ -14,10 +14,10 @@ regen_systematics = [
     'GENIEReWeight_SBN_v1_multisigma_ZExpA2CCQE',
     'GENIEReWeight_SBN_v1_multisigma_ZExpA3CCQE',
     'GENIEReWeight_SBN_v1_multisigma_ZExpA4CCQE',
-    # 'ZExpPCAWeighter_SBNnusyst_b1',
-    # 'ZExpPCAWeighter_SBNnusyst_b2', 
-    # 'ZExpPCAWeighter_SBNnusyst_b3',
-    # 'ZExpPCAWeighter_SBNnusyst_b4'
+    'ZExpPCAWeighter_SBNnusyst_b1',
+    'ZExpPCAWeighter_SBNnusyst_b2',
+    'ZExpPCAWeighter_SBNnusyst_b3',
+    'ZExpPCAWeighter_SBNnusyst_b4'
 
     # "GENIEReWeight_SBN_v1_multisim_ZExpAVariationResponse",
 
