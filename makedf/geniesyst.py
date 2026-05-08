@@ -144,12 +144,12 @@ def geniesyst(f, nuind, multisim_nuniv=100, slim=False, systematics=None, ar23p=
 
     if ar23p:
         systematics_list = ar23p_genie_systematics + regen_systematics
-    if ar23p_only:
+    elif ar23p_only:
         systematics_list = ar23p_genie_systematics
     else:
         systematics_list = regen_systematics
     if systematics is None:
-        systematics = regen_systematics
+        systematics = systematics_list
 
     geniewgtdf = getsyst.getsyst(f, systematics, nuind, multisim_nuniv=multisim_nuniv, slim=slim, slimname="GENIE")
 

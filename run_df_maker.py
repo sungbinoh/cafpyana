@@ -149,7 +149,7 @@ def run_grid(inputfiles):
         flistForEachJob.append( [] )
 
     for i_line in range(0,len(inputfiles)):
-        flistForEachJob[i_line%ngrid].append(inputfiles[i])
+        flistForEachJob[i_line%ngrid].append(inputfiles[i_line])
 
     for i_flist in range(0,len(flistForEachJob)):
         flist = flistForEachJob[i_flist]
