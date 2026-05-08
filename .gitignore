@@ -18,7 +18,7 @@ envs/util-linux-2.39.3/
 #*
 .#
 *~
-*.ipynb_checkpoints/*
+*.ipynb_checkpoints*
 *__init__.py
 *jupyterhub.sqlite
 jupyterhub_cookie_secret

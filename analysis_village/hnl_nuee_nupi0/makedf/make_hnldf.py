@@ -240,6 +240,7 @@ def make_hnldf(f, applyPreselection=False, savePfp=False, trackScore=0.51):
         )
         slcdf = slcdf.set_index(pfp_idx_col, append=True)
 
+    # ── Apply a selection of 0 tracks + 1/2 showers ───────────────────────────
     else:
         # ── PFP sanity filter ─────────────────────────────────────────────────
         pfpdf = pfpdf[
