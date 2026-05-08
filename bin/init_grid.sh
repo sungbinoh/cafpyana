@@ -5,7 +5,6 @@ echo "BEARER_TOKEN_FILE is set to: $BEARER_TOKEN_FILE"
 ######################################################
 #### setup virtual python env if it is not already set
 ######################################################
-# Define the Python version and virtual environment name
 #!/bin/bash
 cd envs
 # Define the Python version and virtual environment name

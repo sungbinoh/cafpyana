@@ -1,13 +1,15 @@
-#!/usr/bin/env python3 
+#!/usr/bin/env python3
 import os,sys,time
 import datetime
 import pathlib
+import hashlib
 #from TimeTools import *
 import argparse
 import tables
 from pyanalib.ntuple_glob import NTupleGlob
 import pandas as pd
 import warnings
+import re
 
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 warnings.filterwarnings("ignore", category=tables.exceptions.NaturalNameWarning)
@@ -41,6 +43,13 @@ parser.add_argument('-split', dest='SplitSize', default=1.0, type=float, help="S
 
 args = parser.parse_args()
 
+DEFAULT_GRID_PARAMS = {
+    "memory":   "5GB",
+    "cpu":      7,
+    "disk":     "100GB",
+    "lifetime": "1h",
+}
+
 def run_pool(output, inputs, nproc):
     os.nice(10)
     ntuples = NTupleGlob(inputs, None)
@@ -54,13 +63,31 @@ def run_pool(output, inputs, nproc):
 
     dfss = ntuples.dataframes(nproc=nproc, fs=DFS, preprocess=PREPROCESS)
     output = pathlib.Path(output).with_suffix('.df')
-    k_idx = 0
     split_margin = args.SplitSize
     with pd.HDFStore(output) as hdf_pd:
         NAMES.append("histpotdf")
         NAMES.append("histgenevtdf")
-        size_counters = {k: 0 for k in NAMES}
-        df_buffers = {k: [] for k in NAMES}
+        split_idx = 0
+        split_bytes = 0.0
+        split_buffers = {k: [] for k in NAMES}
+
+        def _flush_split():
+            nonlocal split_idx, split_bytes, split_buffers
+            wrote_any = False
+            for k, buffer in split_buffers.items():
+                if not buffer:
+                    continue
+                concat_df = pd.concat(buffer, ignore_index=False)
+                this_key = f"{k}_{split_idx}"
+                hdf_pd.put(key=this_key, value=concat_df, format="fixed")
+                print(f"Saved {this_key}: {concat_df.memory_usage(deep=True).sum() / (1024**3):.4f} GB")
+                del concat_df
+                wrote_any = True
+
+            if wrote_any:
+                split_idx += 1
+            split_bytes = 0.0
+            split_buffers = {k: [] for k in NAMES}
 
         for dfs in dfss:
             this_NAMES = NAMES
@@ -68,58 +95,36 @@ def run_pool(output, inputs, nproc):
                 this_NAMES = ["histpotdf", "histgenevtdf"]
 
             for k, df in zip(reversed(this_NAMES), reversed(dfs)):
-                this_key = k + "_" + str(k_idx)
-                size_bytes = df.memory_usage(deep=True).sum() if df is not None else 0
+                if df is None:
+                    continue
+
+                size_bytes = df.memory_usage(deep=True).sum()
                 size_gb = size_bytes / (1024**3)
-                if len(dfs) == 2: ## no or empty recTree
-                    size_counters["histpotdf"] += size_gb
-                    df_buffers["histpotdf"].append(df)
-
-                    size_counters["histgenevtdf"] += size_gb
-                    df_buffers["histgenevtdf"].append(df)
-                else:
-                    size_counters[k] += size_gb
-                    if df is not None:
-                        df_buffers[k].append(df)  # accumulate
-
-                #print(f"{k}_{k_idx}: added {size_gb:.4f} GB (total {size_counters[k]:.4f} GB)")
-
+                split_buffers[k].append(df)
+                split_bytes += size_gb
                 del df
 
-            if any(val > split_margin for val in size_counters.values()):
-                # Concatenate and save accumulated DataFrames
-                for k, buffer in df_buffers.items():
-                    if buffer:  # only if buffer has data
-                        concat_df = pd.concat(buffer, ignore_index=False)
-                        this_key = k + "_" + str(k_idx)
-                        try:
-                            hdf_pd.put(key=this_key, value=concat_df, format="fixed")
-                            print(f"Saved {this_key}: {concat_df.memory_usage(deep=True).sum() / (1024**3):.4f} GB")
-                        except Exception as e:
-                            print(f"Table {this_key} failed to save, skipping. Exception: {str(e)}")
-                        del concat_df
-                # Reset counters and buffers
-                k_idx += 1
-                size_counters = {k: 0 for k in this_NAMES}
-                df_buffers = {k: [] for k in this_NAMES}
+            if split_bytes >= split_margin:
+                _flush_split()
 
-        for k, buffer in df_buffers.items():
-            if buffer:
-                concat_df = pd.concat(buffer, ignore_index=False)
-                this_key = k + "_" + str(k_idx)
-                try:
-                    hdf_pd.put(key=this_key, value=concat_df, format="fixed")
-                    print(f"Saved {this_key}: {concat_df.memory_usage(deep=True).sum() / (1024**3):.4f} GB")
-                except Exception as e:
-                    print(f"Table {this_key} failed to save, skipping. Exception: {str(e)}")
-                del concat_df
+        _flush_split()
 
         # Save the split count metadata
-        split_df = pd.DataFrame({"n_split": [k_idx + 1]})  # +1 because k_idx is 0-based
+        split_df = pd.DataFrame({"n_split": [split_idx]})
         hdf_pd.put(key="split", value=split_df, format="fixed")
         print(f"Saved split info: {split_df.iloc[0]['n_split']} total splits")
 
+def _get_short_filename(full_path):
+    """Generate a short hash-based filename from a full file path."""
+    path_hash = hashlib.md5(full_path.encode()).hexdigest()[:6]
+    base_name = os.path.basename(full_path)
+    # Keep just the extension if it exists
+    name, ext = os.path.splitext(base_name)
+    return f"{path_hash}{ext}"
+
 def run_grid(inputfiles):
+    grid_params = {**DEFAULT_GRID_PARAMS, **globals().get("GRID_PARAMS", {})}
+
     # 1) dir/file name style
     JobStartTime = datetime.datetime.now()
     timestamp =  JobStartTime.strftime('%Y_%m_%d_%H%M%S')
@@ -148,16 +153,24 @@ def run_grid(inputfiles):
 
     for i_flist in range(0,len(flistForEachJob)):
         flist = flistForEachJob[i_flist]
+        input_list_name = 'inputs_%s.list'%(i_flist)
+        input_list_path = MasterJobDir + '/' + input_list_name
+
+        with open(input_list_path, 'w') as list_out:
+            for f in flist:
+                local_name = _get_short_filename(f)
+                list_out.write(local_name + '\n')
+
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu 1 -i'
+        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu ' + str(grid_params['cpu']) + ' -l ' + input_list_name
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
-            if i_f == 0:
-                cmd += ' ' + flist[i_f].split('/')[-1]
-            else: 
-                cmd += ',' + flist[i_f].split('/')[-1]
-            out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
+            local_name = _get_short_filename(flist[i_f])
+            out.write('xrdcp ' + flist[i_f] + ' ' + local_name + '\n') ## -- for checking auth
+        out.write('echo "[run_%s.sh] input list file: %s"\n'%(i_flist, input_list_name))
+        out.write('echo "[run_%s.sh] number of inputs:"\n')
+        out.write('wc -l ' + input_list_name + '\n')
         out.write('ls -alh\n')
         out.write(cmd)
         out.close()
@@ -180,24 +193,24 @@ def run_grid(inputfiles):
     tar_cmd = 'tar cf bin_dir.tar ./'
     os.system(tar_cmd)
 
-    submitCMD = '''jobsub_submit \\
+    submitCMD = f'''jobsub_submit \\
 -G sbnd \\
 --auth-methods="token" \\
 -e LC_ALL=C \\
 --role=Analysis \\
 --resource-provides="usage_model=DEDICATED,OPPORTUNISTIC" \\
 -l '+SingularityImage=\\"/cvmfs/singularity.opensciencegrid.org/fermilab/fnal-wn-el9\:9.7\\"' \\
---lines '+FERMIHTC_AutoRelease=True' --lines '+FERMIHTC_GraceMemory=1000' --lines '+FERMIHTC_GraceLifetime=3600' \\
+--lines '+FERMIHTC_AutoRelease=True' --lines '+FERMIHTC_GraceMemory=2000' --lines '+FERMIHTC_GraceLifetime=3600' \\
 --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)' \\
 --tar_file_name "dropbox://$(pwd)/bin_dir.tar" \\
--N %d \\
---disk 100GB \\
---cpu 1 \\
---memory 10GB \\
---expected-lifetime 24h \\
+-N {ngrid} \\
+--disk {grid_params['disk']} \\
+--cpu {grid_params['cpu']} \\
+--memory {grid_params['memory']} \\
+--expected-lifetime {grid_params['lifetime']} \\
 "file://$(pwd)/grid_executable.sh" \\
-"%s" \\
-"%s"'''%(ngrid,OutputDir,args.output)
+"{OutputDir}" \\
+"{args.output}"'''
 
     print(submitCMD)
     os.system(submitCMD)
@@ -236,11 +249,12 @@ if __name__ == "__main__":
         ### check if it is grid mode for pool mode
         if args.NGridJobs == 0:
             print("Running Pool mode");
-            exec(open(args.config).read())
+            exec(open(args.config).read(), globals())
             run_pool(args.output, InputSamples, "auto" if args.NCPU < 0 else args.NCPU)
 
         elif args.NGridJobs > 0:
             print("Running Grid mode");
+            exec(open(args.config).read(), globals())
             run_grid(InputSamples)
             
         else:

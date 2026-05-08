@@ -62,6 +62,14 @@ echo "@@ source ${filesFromSender}/run_"${nProcess}".sh "
 ls -ltr
 
 cp ${filesFromSender}/run_${nProcess}.sh ./
+inputList=inputs_${nProcess}.list
+echo "@@ copy ${filesFromSender}/${inputList} ./"
+cp ${filesFromSender}/${inputList} ./
+if [ ! -f "${inputList}" ]; then
+  echo "@@ Missing input list: ${inputList}"
+  exit 1
+fi
+
 source run_${nProcess}.sh  &> log_${nProcess}.log
 ls -ltr
 

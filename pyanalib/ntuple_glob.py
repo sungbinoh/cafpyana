@@ -27,6 +27,75 @@ CPU_COUNT = multiprocessing.cpu_count()
 if CPU_COUNT == 0:
     CPU_COUNT = os.cpu_count()
 
+NTUPLE_OPEN_TIMEOUT = int(os.getenv("CAF_NTUPLE_OPEN_TIMEOUT", "300"))
+NTUPLE_READ_RETRIES = int(os.getenv("CAF_NTUPLE_READ_RETRIES", "3"))
+NTUPLE_RETRY_SLEEP = float(os.getenv("CAF_NTUPLE_RETRY_SLEEP", "4.0"))
+NTUPLE_MAX_REMOTE_NPROC = int(os.getenv("CAF_NTUPLE_MAX_REMOTE_NPROC", "8"))
+NTUPLE_REDIRECTORS = [r.strip() for r in os.getenv("CAF_XROOTD_REDIRECTORS", "").split(",") if r.strip()]
+
+
+def _is_remote_path(path):
+    return path.startswith("/pnfs") or path.startswith("root://") or path.startswith("xroot")
+
+
+def _normalize_remote_path(path):
+    # Convert pnfs to xroot URL's
+    if path.startswith("/pnfs"):
+        return path.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
+    # fix xroot URL's
+    if path.startswith("xroot"):
+        return path[1:]
+    return path
+
+
+def _candidate_paths(path):
+    path = _normalize_remote_path(path)
+    if not path.startswith("root://"):
+        return [path]
+
+    if not NTUPLE_REDIRECTORS:
+        return [path]
+
+    url_no_proto = path[len("root://"):]
+    host_sep = url_no_proto.find("/")
+    if host_sep < 0:
+        return [path]
+
+    suffix = url_no_proto[host_sep:]
+    candidates = [path]
+    for host in NTUPLE_REDIRECTORS:
+        if not host:
+            continue
+        candidates.append("root://%s%s" % (host, suffix))
+
+    # Preserve order and remove duplicates.
+    seen = set()
+    ordered = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            ordered.append(c)
+    return ordered
+
+
+def _is_transient_io_error(exc):
+    msg = str(exc).lower()
+    transient_markers = (
+        "operation expired",
+        "vector_read",
+        "timed out",
+        "timeout",
+        "pool unavailable",
+        "[1010]",
+        "[3012]",
+        "failed to open file",
+        "temporary failure",
+        "connection reset",
+        "socket",
+        "xrootd",
+    )
+    return any(marker in msg for marker in transient_markers)
+
 class NTupleProc(object):
     def __init__(self, f=None, name="None"):
         self.name = name
@@ -47,27 +116,21 @@ class NTupleProc(object):
         self.f = data["f"]
         self.name = data["name"]
 
-def _open_with_retries(path, attempts=3, sleep=5.0):
+def _open_with_retries(path, attempts=5, sleep=2.0, timeout=NTUPLE_OPEN_TIMEOUT):
     last_exc = None
-
-    # --- Try streaming with a "Pre-flight" check ---
+    candidates = _candidate_paths(path)
     for k in range(attempts):
-        try:
-            # 1. Open the file handle
-            f = uproot.open(path, timeout=300)
+        for candidate in candidates:
+            try:
+                return uproot.open(candidate, timeout=timeout)
+            except (OSError, ValueError, RuntimeError, TimeoutError) as e:
+                last_exc = e
+                continue
 
-            # 2. PRE-FLIGHT: Force a small read (getting keys)
-            # If the door is timing out, this will raise the 'Operation expired' error HERE.
-            _ = f.keys()
-
-            return f
-        except Exception as e:
-            last_exc = e
-            print(f"[Attempt {k+1}] Network lag for {os.path.basename(path)}. Error: {e}", flush=True)
-            time.sleep(sleep * (k + 1) + random.uniform(0, 3))
-
-    # If streaming fails after all attempts, raise the exception
-    # so _loaddf can trigger the local copy failover.
+        if k + 1 < attempts:
+            # Add jitter so many workers do not stampede back at once.
+            wait_s = sleep * (k + 1) * (1.0 + 0.25 * random.random())
+            time.sleep(wait_s)
     raise last_exc
 
 def _execute_load(f, applyfs, index, fname):
@@ -123,11 +186,7 @@ def _loaddf(applyfs, preprocess, g):
     index, fname = g
     original_fname = fname
 
-    # Convert pnfs to xroot URL's
-    if fname.startswith("/pnfs"):
-        fname = fname.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
-    elif fname.startswith("xroot"):
-        fname = fname[1:]
+    fname = _normalize_remote_path(fname)
 
     dfs = []
     tempfiles = []
@@ -142,14 +201,15 @@ def _loaddf(applyfs, preprocess, g):
             tempfiles.append(temp_file_name)
             fname = temp_file_name
 
+    dfs = None
     try:
         # ATTEMPT 1: Normal Streaming
         try:
-            with _open_with_retries(fname) as f:
+            with _open_with_retries(fname, attempts=max(1, NTUPLE_READ_RETRIES), sleep=NTUPLE_RETRY_SLEEP) as f:
                 dfs = _execute_load(f, applyfs, index, fname)
         except Exception as e:
             # If we hit an error (like XRootD Expired or exhausted retries), trigger failover
-            if "Operation expired" in str(e) or "vector_read" in str(e) or "I/O operation on closed file" in str(e):
+            if _is_transient_io_error(e) or "I/O operation on closed file" in str(e):
                 print(f"Streaming timeout for {os.path.basename(fname)}. Triggering local copy failover...", flush=True)
 
                 # Setup local scratch path using your environment variable!
@@ -212,7 +272,10 @@ class NTupleGlob(object):
 
         if nproc == "auto":
             CPU_COUNT_use = int(CPU_COUNT * 0.8)
-            nproc = min(CPU_COUNT_use, len(thisglob))
+            remote_inputs = sum(1 for path in thisglob if _is_remote_path(str(path)))
+            if len(thisglob) > 0 and remote_inputs == len(thisglob):
+                CPU_COUNT_use = min(CPU_COUNT_use, NTUPLE_MAX_REMOTE_NPROC)
+            nproc = max(1, min(CPU_COUNT_use, len(thisglob)))
         print("CPU_COUNT : " + str(CPU_COUNT) + ", len(thisglob): " + str(len(thisglob)) + ", nproc: " + str(nproc))
 
         ret = []

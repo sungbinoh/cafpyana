@@ -95,10 +95,10 @@ ar23p_genie_systematics = [
     'ZExpPCAWeighter_SBNNuSyst_multisigma_D_ZExp_b2',
     'ZExpPCAWeighter_SBNNuSyst_multisigma_D_ZExp_b3',
     'ZExpPCAWeighter_SBNNuSyst_multisigma_D_ZExp_b4',
-    'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b1',
-    'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b2',
-    'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b3',
-    'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b4',
+    # 'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b1',
+    # 'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b2',
+    # 'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b3',
+    # 'ZExpPCAWeighter_SBNNuSyst_multisigma_MvA_ZExp_b4',
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin1',
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin2',
     'CCQETemplateReweight_SBNNuSyst_multisigma_SF_q0bin3',
@@ -140,11 +140,16 @@ ar23p_genie_systematics = [
     'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin3'
 ]
 
-#regen_systematics = ar23p_genie_systematics + regen_systematics
+def geniesyst(f, nuind, multisim_nuniv=100, slim=False, systematics=None, ar23p=False, ar23p_only=False):
 
-def geniesyst(f, nuind, multisim_nuniv=100, slim=False, systematics=None):
+    if ar23p:
+        systematics_list = ar23p_genie_systematics + regen_systematics
+    elif ar23p_only:
+        systematics_list = ar23p_genie_systematics
+    else:
+        systematics_list = regen_systematics
     if systematics is None:
-        systematics = regen_systematics
+        systematics = systematics_list
 
     geniewgtdf = getsyst.getsyst(f, systematics, nuind, multisim_nuniv=multisim_nuniv, slim=slim, slimname="GENIE")
 
