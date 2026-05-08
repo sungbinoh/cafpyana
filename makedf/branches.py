@@ -41,8 +41,12 @@ trigger_info_branches = [
 
 opflashbranches = [
     "rec.opflashes.firsttime",
+    "rec.opflashes.firstpmt",
     "rec.opflashes.time",
+    "rec.opflashes.timewidth",
     "rec.opflashes.totalpe",
+    "rec.opflashes.center.x", "rec.opflashes.center.y", "rec.opflashes.center.z",
+    "rec.opflashes.width.x", "rec.opflashes.width.y", "rec.opflashes.width.z",
 ]
 
 numipotbranches = [
@@ -161,7 +165,7 @@ pfpbranches = [
 pfp_daughter_branch = [
     pfpbranch + "daughters"
 ]
-
+ 
 trkbranches = [
     trkbranch + "producer",
     trkbranch + "start.x", trkbranch + "start.y", trkbranch + "start.z",
@@ -178,11 +182,24 @@ trkbranches = [
     trkbranch + "crthit.distance",
     trkbranch + "crthit.hit.time",
     trkbranch + "crthit.hit.pe",
+    trkbranch + "chi2pid.0.pid_ndof",
+    trkbranch + "chi2pid.0.chi2_muon",
+    trkbranch + "chi2pid.0.chi2_proton",
+    trkbranch + "chi2pid.0.chi2_pion",
+    trkbranch + "chi2pid.0.pida",
+    trkbranch + "chi2pid.1.pid_ndof",
+    trkbranch + "chi2pid.1.chi2_muon",
+    trkbranch + "chi2pid.1.chi2_proton",
+    trkbranch + "chi2pid.1.chi2_pion",
+    trkbranch + "chi2pid.1.pida",
     trkbranch + "chi2pid.2.pid_ndof",
     trkbranch + "chi2pid.2.chi2_muon",
     trkbranch + "chi2pid.2.chi2_proton",
+    trkbranch + "chi2pid.2.chi2_pion",
     trkbranch + "chi2pid.2.pida",
+    trkbranch + 'calo.0.ke',   trkbranch + 'calo.1.ke', trkbranch + 'calo.2.ke',
 ] + pfpbranches
+
 
 trkmcsbranches = [
   trkbranch + "mcsP.seg_length",
@@ -192,6 +209,7 @@ trkmcsbranches = [
 shwbranches = [
     shwbranch + "start.x", shwbranch + "start.y", shwbranch + "start.z",
     shwbranch + "end.x",   shwbranch + "end.y", shwbranch + "end.z",
+    shwbranch + "dir.x",   shwbranch + "dir.y",   shwbranch + "dir.z",
     shwbranch + 'conversion_gap', 
     shwbranch + "density",
     shwbranch + "open_angle",
@@ -315,7 +333,7 @@ mcbranches = [
 ]
 
 mcprimbranches = [
-    "rec.mc.nu.prim.genE",
+    "rec.mc.nu.prim.genE", "rec.mc.nu.prim.endE",
     "rec.mc.nu.prim.length",
     "rec.mc.nu.prim.pdg",
     "rec.mc.nu.prim.genp.x",
@@ -323,7 +341,7 @@ mcprimbranches = [
     "rec.mc.nu.prim.genp.z",
     "rec.mc.nu.prim.start.x", "rec.mc.nu.prim.start.y", "rec.mc.nu.prim.start.z",
     "rec.mc.nu.prim.end.x", "rec.mc.nu.prim.end.y", "rec.mc.nu.prim.end.z",
-    "rec.mc.nu.prim.interaction_id", "rec.mc.nu.prim.crosses_tpc", "rec.mc.nu.prim.contained",
+    "rec.mc.nu.prim.interaction_id", "rec.mc.nu.prim.crosses_tpc", "rec.mc.nu.prim.contained", "rec.mc.nu.prim.end_process",
 ]
 
 mcprimvisEbranches = [

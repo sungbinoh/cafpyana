@@ -30,8 +30,25 @@ PDG = {
 ## ==== "<column name>": ["<particle name>", <KE cut in GeV>]
 ## ==== <particle name> is used to collect PID and mass from the "PDG" dictionary
 TRUE_KE_THRESHOLDS = {"nmu_27MeV": ["muon", 0.027],
+		      "np_0MeV": ["proton", 0.00],
+		      "np_10MeV": ["proton", 0.01],
                       "np_20MeV": ["proton", 0.02],
+		      "np_30MeV": ["proton", 0.03],
+		      "np_40MeV": ["proton", 0.04],
                       "np_50MeV": ["proton", 0.05],
+                      "np_60MeV": ["proton", 0.06],
+                      "np_70MeV": ["proton", 0.07],
+                      "np_80MeV": ["proton", 0.08],
+                      "np_90MeV": ["proton", 0.09],
+                      "np_100MeV": ["proton", 0.1],
+                      "np_150MeV": ["proton", 0.15],
+                      "np_200MeV": ["proton", 0.20],
+                      "np_250MeV": ["proton", 0.25],
+                      "np_300MeV": ["proton", 0.30],
+                      "np_350MeV": ["proton", 0.35],
+                      "np_400MeV": ["proton", 0.40],
+                      "np_450MeV": ["proton", 0.45],
+                      "np_500MeV": ["proton", 0.50],
                       "npi_30MeV": ["pipm", 0.03],
                       "nn_0MeV": ["neutron", 0.0]
                       }
@@ -360,8 +377,13 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     # particle counts w/ threshold
     for identifier, (particle, threshold) in TRUE_KE_THRESHOLDS.items():
         this_KE = mcprimdf[np.abs(mcprimdf.pdg)==PDG[particle][0]].genE - PDG[particle][2]
-        mcdf = multicol_add(mcdf, ((np.abs(mcprimdf.pdg)==PDG[particle][0]) & (this_KE > threshold)).groupby(level=[0,1]).sum().rename(identifier))
- 
+        if particle == "proton":
+            mask = (np.abs(mcprimdf.pdg)==PDG[particle][0]) & (this_KE > threshold) & (mcprimdf.contained == 1)
+        else:
+            mask = (np.abs(mcprimdf.pdg)==PDG[particle][0]) & (this_KE > threshold)
+
+        mcdf = multicol_add(mcdf, mask.groupby(level=[0,1]).sum().rename(identifier))
+
     # muon info
     mudf = mcprimdf[np.abs(mcprimdf.pdg)==13].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
     mudf.columns = pd.MultiIndex.from_tuples([tuple(["mu"] + list(c)) for c in mudf.columns])
@@ -420,12 +442,13 @@ def make_all_pandora_df(f):
     return pfpdf
 
 def make_pandora_df_calo_update(f, **trkArgs):
-    pandoradf = make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=True, requireFiducial=False, updatecalo=True, **trkArgs)
+    pandoradf = make_pandora_df(f, trkScoreCut=False, trkDistCut=-1, cutClearCosmic=False, requireFiducial=False, updatecalo=True, **trkArgs)
     return pandoradf
 
-def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, requireFiducial=False, updatecalo=False, **trkArgs):
+def make_pandora_df(f, trkScoreCut=False, trkDistCut=-1, cutClearCosmic=False, requireFiducial=False, updatecalo=False, **trkArgs):
     # load
-    trkdf = make_trkdf(f, trkScoreCut, **trkArgs)
+#    trkdf = make_trkdf(f, trkScoreCut, **trkArgs)
+    trkdf = make_pfpdf(f)
     if updatecalo:
         # check detector
         det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
