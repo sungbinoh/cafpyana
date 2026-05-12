@@ -197,7 +197,7 @@ shwbranches = [
     shwbranch + 'conversion_gap', 
     shwbranch + "density",
     shwbranch + "open_angle",
-    shwbranch + 'bestplane',
+    #shwbranch + 'bestplane',
     shwbranch + 'bestplane_for_energy', shwbranch + 'bestplane_for_dedx',
     shwbranch + 'bestplane_dEdx', shwbranch + 'bestplane_energy',
     shwbranch + 'plane.0.dEdx',   shwbranch + 'plane.1.dEdx', shwbranch + 'plane.2.dEdx',
