@@ -1,68 +1,24 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from plot_tools import *
 # Add the head direcoty to sys.path
 workspace_root = os.getcwd()  
 sys.path.insert(0, workspace_root + "/../../")
 
 # import this repo's classes
+from pyanalib.split_df_helpers import *
 import pyanalib.pandas_helpers as ph
 from makedf.util import *
-
+from loaddf import *
+from pot import *
+from gump_cuts import *
 import kinematics
 
-def load_data(file, nfiles=1):
-    """Load event, header, and mcnu data from HDF file."""
 
-    for s in range(nfiles):
-        print("df index:"+str(s))
-        df_evt = pd.read_hdf(file, "evt_"+str(s))
-        df_hdr = pd.read_hdf(file, "hdr_"+str(s))
-        df_mcnu = pd.read_hdf(file, "mcnu_"+str(s))
-        df_stub = pd.read_hdf(file, "stub_"+str(s))
-
-        matchdf = df_evt.copy()
-        matchdf.columns = pd.MultiIndex.from_tuples([(col, '') for col in matchdf.columns])
-        df_evt = ph.multicol_merge(matchdf.reset_index(), df_mcnu.reset_index(),
-                                    left_on=[("__ntuple", ""), ("entry", ""), ("tmatch_idx", "")],
-                                    right_on=[("__ntuple", ""), ("entry", ""), ("rec.mc.nu..index", "")],
-                                    how="left") ## -- save all sllices
-        cols_to_drop = []
-        for c in df_evt.columns:
-            if 'GENIE' in c[0] or 'Flux' in c[0]:
-                cols_to_drop.append(c)
-
-        df_evt.drop(columns=cols_to_drop, inplace=True)
-        del df_mcnu
-
-        if s == 0:
-            res_df_evt = df_evt
-            res_df_hdr = df_hdr
-            res_df_stub = df_stub
-        else:
-            res_df_evt = pd.concat([res_df_evt, df_evt])
-            res_df_hdr = pd.concat([res_df_hdr, df_hdr])
-            res_df_stub = pd.concat([res_df_stub, df_stub])
-
-        del df_evt
-        del df_hdr
-        del df_stub
-
-    return res_df_evt, res_df_hdr, res_df_stub
-
-def scale_pot(df, df_hdr, desired_pot):
-    """Scale DataFrame by desired POT."""
-    pot = sum(df_hdr.pot.tolist())
-    print(f"POT: {pot}\nScaling to: {desired_pot}")
-    scale = desired_pot / pot
-    df['glob_scale'] = scale
-    return pot, scale
-
-def apply_cuts(df_nd, df_nd_stub, df_fd, df_fd_stub, nd_POT, fd_POT, dffile_nd, dffile_fd):
+def apply_cuts(df_nd, df_fd, nd_POT, fd_POT, dffile_nd, dffile_fd):
     comp_sbnd = []
     comp_icarus = []
-    cut_labels = ["Initial Sample", "FV Cut", "NuScore Cut", "Two Prong", "PID", "Stub"]
+    cut_labels = ["Initial Sample", "FV Cut", "NuScore Cut", "Two Prong", "PID", "CRT Veto"]
     mode_labels = ['QE', 'MEC', 'RES', 'SIS/DIS', 'COH', "other"]
     det_labels = ("SBND", "ICARUS")
     
@@ -75,15 +31,8 @@ def apply_cuts(df_nd, df_nd_stub, df_fd, df_fd_stub, nd_POT, fd_POT, dffile_nd, 
     comp_icarus.append(icarus_comp)
 
     # FV Cut
-    nd_vtx = pd.DataFrame({'x': df_nd.slc_vtx_x,
-                           'y': df_nd.slc_vtx_y,
-                           'z': df_nd.slc_vtx_z})
-    fd_vtx = pd.DataFrame({'x': df_fd.slc_vtx_x,
-                           'y': df_fd.slc_vtx_y,
-                           'z': df_fd.slc_vtx_z})
-
-    df_nd = df_nd[fv_cut(nd_vtx, "SBND")]
-    df_fd = df_fd[fv_cut(fd_vtx, "ICARUS")]
+    df_nd = df_nd[slcfv_cut(df_nd, "SBND")]
+    df_fd = df_fd[slcfv_cut(df_fd, "ICARUS")]
     sbnd_comp, icarus_comp = make_all_plots(df_nd, df_fd, "FV Cut", mode_labels, top_labels, det_labels)
 
     comp_sbnd.append(sbnd_comp)
@@ -131,35 +80,9 @@ def apply_cuts(df_nd, df_nd_stub, df_fd, df_fd_stub, nd_POT, fd_POT, dffile_nd, 
     comp_sbnd.append(sbnd_comp)
     comp_icarus.append(icarus_comp)
 
-    # Stub cut
-    df_nd_stub = df_nd_stub.reset_index('rec.slc.reco.stub..index', drop=True)
-    sel = df_nd.set_index(['__ntuple', 'entry', 'rec.slc..index'], drop=True).index
-    sel = sel.intersection(df_nd_stub.index)
-    df_nd_stub = df_nd_stub.loc[sel]
-
-    df_nd_fp = df_nd[df_nd.is_sig != True]
-    fp_sel = df_nd_fp.set_index(['__ntuple', 'entry', 'rec.slc..index'], drop=True).index
-    fp_sel = fp_sel.intersection(df_nd_stub.index)
-    df_nd_fp_stub = df_nd_stub.loc[fp_sel]
-
-    df_fd_stub = df_fd_stub.reset_index('rec.slc.reco.stub..index', drop=True)
-    sel = df_fd.set_index(['__ntuple', 'entry', 'rec.slc..index'], drop=True).index
-    sel = sel.intersection(df_fd_stub.index)
-    df_fd_stub = df_fd_stub.loc[sel]
-
-    df_fd_fp = df_fd[df_fd.is_sig != True]
-    fp_sel = df_fd_fp.set_index(['__ntuple', 'entry', 'rec.slc..index'], drop=True).index
-    fp_sel = fp_sel.intersection(df_fd_stub.index)
-    df_fd_fp_stub = df_fd_stub.loc[fp_sel]
-
-    plot_stub_2d(df_nd_stub['length'], df_nd_stub['dqdx'], "SBND.png", "SBND Stub Cut")
-    plot_stub_2d(df_nd_fp_stub['length'], df_nd_fp_stub['dqdx'], "FPSBND.png", "False Positive SBND Stub Cut")
-    plot_stub_2d(df_fd_stub['length'], df_fd_stub['dqdx'], "ICARUS.png", "ICARUS Stub Cut")
-    plot_stub_2d(df_fd_fp_stub['length'], df_fd_fp_stub['dqdx'], "FPICARUS.png", "False Positive ICARUS Stub Cut")
-
-    df_nd = df_nd[stub_cut(df_nd)]
-    df_fd = df_fd[stub_cut(df_fd)]
-    sbnd_comp, icarus_comp = make_all_plots(df_nd, df_fd, "Stub Cut", mode_labels, top_labels, det_labels)
+    ### crthitveto cut
+    df_fd = df_fd[crthitveto_cut(df_fd)]
+    sbnd_comp, icarus_comp = make_all_plots(df_nd, df_fd, "CRT Veto", mode_labels, top_labels, det_labels)
     comp_sbnd.append(sbnd_comp)
     comp_icarus.append(icarus_comp)
 
@@ -171,17 +94,29 @@ def apply_cuts(df_nd, df_nd_stub, df_fd, df_fd_stub, nd_POT, fd_POT, dffile_nd, 
 
 def main():
     """Main analysis pipeline."""
-    dffile_nd = "/exp/sbnd/app/users/nrowe/cafpyana/sbnd_no_cuts.df"
-    dffile_fd = "/exp/sbnd/app/users/nrowe/cafpyana/icarus_no_cuts.df"
-    df_nd, df_nd_hdr, df_nd_stub = load_data(dffile_nd)
-    df_fd, df_fd_hdr, df_fd_stub = load_data(dffile_fd)
+    dffile_nd = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/SBND_SpringMC_rewgt_10.df"
+    dffile_fd = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/ICARUS_SpringMCOverlay_rewgt.df"
+
+    nd_dfs = load_dfs(dffile_nd, ['evt', 'mcnu', 'hdr'])
+    df_nd = nd_dfs['evt']
+    df_nd_hdr = nd_dfs['hdr']
+    df_nd_mc = nd_dfs['mcnu']
+
+    df_nd = tmatch(df_nd, df_nd_mc)
+
+    fd_dfs = load_dfs(dffile_fd, ['evt', 'mcnu', 'hdr'])
+    df_fd = fd_dfs['evt']
+    df_fd_hdr = fd_dfs['hdr']
+    df_fd_mc = fd_dfs['mcnu']
+
+    df_fd = tmatch(df_fd, df_fd_mc)
 
     des_nd_POT = 1e20
     des_fd_POT = 5e20
 
     nd_POT = scale_pot(df_nd, df_nd_hdr, des_nd_POT)
     fd_POT = scale_pot(df_fd, df_fd_hdr, des_fd_POT)
-    df_nd, df_fd = apply_cuts(df_nd, df_nd_stub, df_fd, df_fd_stub, nd_POT, fd_POT, dffile_nd, dffile_fd)
+    df_nd, df_fd = apply_cuts(df_nd, df_fd, nd_POT, fd_POT, dffile_nd, dffile_fd)
 
 if __name__ == "__main__":
     main()

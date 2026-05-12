@@ -1,4 +1,4 @@
 sh /exp/$(id -ng)/data/users/vito/podman/start_SL7dev.sh
 . /cvmfs/sbnd.opensciencegrid.org/products/sbnd/setup_sbnd.sh
 setup root v6_28_12 -q e26:p3915:prof
-root 'MakesBruce.C("input.root", "output.root")
+root -q 'MakesBruce.C("input.root", "output.root")'

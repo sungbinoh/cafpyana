@@ -144,20 +144,21 @@ def run_grid(inputfiles):
         flistForEachJob.append( [] )
 
     for i_line in range(0,len(inputfiles)):
-        flistForEachJob[i_line%ngrid].append(inputfiles[i])
+        flistForEachJob[i_line%ngrid].append(inputfiles[i_line])
 
     for i_flist in range(0,len(flistForEachJob)):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -i'
+        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu 1 -i'
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
             if i_f == 0:
-                cmd += ' ' + flist[i_f]
+                cmd += ' ' + flist[i_f].split('/')[-1]
             else: 
-                cmd += ',' + flist[i_f]
-            #out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
+                cmd += ',' + flist[i_f].split('/')[-1]
+            out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
+        out.write('ls -alh\n')
         out.write(cmd)
         out.close()
 
@@ -165,11 +166,16 @@ def run_grid(inputfiles):
 
     # 5) prepare a package for xrootd
     CAFPYANA_WD = os.environ['CAFPYANA_WD']
-    cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/XRootD " + MasterJobDir
-    cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.1/build/lib.linux-x86_64-3.9/pyxrootd " + MasterJobDir
+    cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/XRootD " + MasterJobDir
+    cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/pyxrootd " + MasterJobDir
     os.system(cp_XRootD)
     os.system(cp_pyxrootd)
 
+    # 6) git archive of the current branch's last commit
+    archive_repo = "git archive -o " + MasterJobDir + "/cafpyana.tar.gz HEAD"
+    os.system(archive_repo)
+
+    # 7) move to MasterJobDir to submit jobs
     os.chdir(MasterJobDir)
     tar_cmd = 'tar cf bin_dir.tar ./'
     os.system(tar_cmd)
@@ -180,12 +186,15 @@ def run_grid(inputfiles):
 -e LC_ALL=C \\
 --role=Analysis \\
 --resource-provides="usage_model=DEDICATED,OPPORTUNISTIC" \\
+-l '+SingularityImage=\\"/cvmfs/singularity.opensciencegrid.org/fermilab/fnal-wn-el9\:9.7\\"' \\
 --lines '+FERMIHTC_AutoRelease=True' --lines '+FERMIHTC_GraceMemory=1000' --lines '+FERMIHTC_GraceLifetime=3600' \\
 --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)' \\
 --tar_file_name "dropbox://$(pwd)/bin_dir.tar" \\
 -N %d \\
 --disk 100GB \\
---expected-lifetime 10h \\
+--cpu 1 \\
+--memory 10GB \\
+--expected-lifetime 24h \\
 "file://$(pwd)/grid_executable.sh" \\
 "%s" \\
 "%s"'''%(ngrid,OutputDir,args.output)

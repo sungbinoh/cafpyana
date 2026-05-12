@@ -140,7 +140,7 @@ ar23p_genie_systematics = [
     'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin3'
 ]
 
-regen_systematics = ar23p_genie_systematics + regen_systematics
+#regen_systematics = ar23p_genie_systematics + regen_systematics
 
 def geniesyst(f, nuind, multisim_nuniv=100, slim=False, systematics=None):
     if systematics is None:
@@ -152,4 +152,5 @@ def geniesyst(f, nuind, multisim_nuniv=100, slim=False, systematics=None):
         genie_cols = [c for c in geniewgtdf.columns if c[0] == "GENIE"]
         geniewgtdf = geniewgtdf[genie_cols]
         
+
     return geniewgtdf
