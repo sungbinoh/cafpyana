@@ -362,6 +362,44 @@ def make_cohpidf_slc(f):
     slcdf['is_muon_contained'] = is_muondf_contained
     slcdf['is_cpi_contained'] = is_cpidf_contained
 
+    muon_start_x = muondf.pfp.trk.start.x
+    muon_start_y = muondf.pfp.trk.start.y
+    muon_start_z = muondf.pfp.trk.start.z
+    muon_end_x = muondf.pfp.trk.end.x
+    muon_end_y = muondf.pfp.trk.end.y
+    muon_end_z = muondf.pfp.trk.end.z
+    muon_start_x = make_slc_var(muon_start_x)
+    muon_start_y = make_slc_var(muon_start_y)
+    muon_start_z = make_slc_var(muon_start_z)
+    muon_end_x = make_slc_var(muon_end_x)
+    muon_end_y = make_slc_var(muon_end_y)
+    muon_end_z = make_slc_var(muon_end_z)
+    slcdf['muon_start_x'] = muon_start_x
+    slcdf['muon_start_y'] = muon_start_y
+    slcdf['muon_start_z'] = muon_start_z
+    slcdf['muon_end_x'] = muon_end_x
+    slcdf['muon_end_y'] = muon_end_y
+    slcdf['muon_end_z'] = muon_end_z
+
+    cpi_start_x = cpidf.pfp.trk.start.x
+    cpi_start_y = cpidf.pfp.trk.start.y
+    cpi_start_z = cpidf.pfp.trk.start.z
+    cpi_end_x = cpidf.pfp.trk.end.x
+    cpi_end_y = cpidf.pfp.trk.end.y
+    cpi_end_z = cpidf.pfp.trk.end.z
+    cpi_start_x = make_slc_var(cpi_start_x)
+    cpi_start_y = make_slc_var(cpi_start_y)
+    cpi_start_z = make_slc_var(cpi_start_z)
+    cpi_end_x = make_slc_var(cpi_end_x)
+    cpi_end_y = make_slc_var(cpi_end_y)
+    cpi_end_z = make_slc_var(cpi_end_z)
+    slcdf['cpi_start_x'] = cpi_start_x
+    slcdf['cpi_start_y'] = cpi_start_y
+    slcdf['cpi_start_z'] = cpi_start_z
+    slcdf['cpi_end_x'] = cpi_end_x
+    slcdf['cpi_end_y'] = cpi_end_y
+    slcdf['cpi_end_z'] = cpi_end_z
+
     #print("is_muondf_contained")
     #print(is_muondf_contained.value_counts())
     #print("is_cpidf_contained")
@@ -472,7 +510,6 @@ def make_cohpidf_slc(f):
                            left_on=[('entry', ''), ('tmatch_idx','')],
                            right_on=[('entry', ''), ('rec.mc.nu..index', '')],
                            how="left") ## -- save all sllices
-    #print(slcdf)
     return slcdf
 
 def make_cohpi_nudf(f):
