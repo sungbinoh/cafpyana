@@ -93,6 +93,7 @@ def make_mcnuwgtdf_slim(f):
 
 # TODO: zip the nuniv configs
 def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nuniv=100, wgt_types=["bnb","genie"], slim=False, genie_systematics=None):
+    print(wgt_types)
     # ----- sbnd or icarus? -----
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
     if (1 == det.unique()):
@@ -108,13 +109,21 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nun
         else:
             df_list = []
             if "bnb" in wgt_types:
+                print(f"file: {f}")
+                print("bnb in wgt_types")
                 bnbwgtdf = bnbsyst.bnbsyst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
+                print("bnbwgtdf:", bnbwgtdf)
                 df_list.append(bnbwgtdf)
             if "genie" in wgt_types:
+                print(f"file: {f}")
+                print("genie in wgt_types")
                 geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim, systematics=genie_systematics)
+                print("geniewgtdf:", geniewgtdf)
                 df_list.append(geniewgtdf)
-
+            print(df_list)
             wgtdf = pd.concat(df_list, axis=1)
+            print(mcdf)
+            print(wgtdf)
             mcdf = multicol_concat(mcdf, wgtdf)
 
     return mcdf
@@ -392,6 +401,14 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     mcdf.loc[:, ('p','dir','x')] = mcdf.p.genp.x/mcdf.p.totp
     mcdf.loc[:, ('p','dir','y')] = mcdf.p.genp.y/mcdf.p.totp
     mcdf.loc[:, ('p','dir','z')] = mcdf.p.genp.z/mcdf.p.totp
+
+    # endpoints
+    mcdf.loc[:, ('mu','end','x')] = mcdf.mu.end.x
+    mcdf.loc[:, ('mu','end','y')] = mcdf.mu.end.y
+    mcdf.loc[:, ('mu','end','z')] = mcdf.mu.end.z
+    mcdf.loc[:, ('p','end','x')] = mcdf.p.end.x
+    mcdf.loc[:, ('p','end','y')] = mcdf.p.end.y
+    mcdf.loc[:, ('p','end','z')] = mcdf.p.end.z
 
     return mcdf
 

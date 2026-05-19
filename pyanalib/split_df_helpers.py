@@ -8,8 +8,12 @@ so that very large samples can be handled in chunks.
 import pandas as pd
 
 def get_n_split(file):
-    this_split_df = pd.read_hdf(file, key="split")
-    this_n_split = this_split_df.n_split.iloc[0]
+    try:
+        this_split_df = pd.read_hdf(file, key="split")
+        this_n_split = this_split_df.n_split.iloc[0]
+    except KeyError:
+        print('split key not found, assuming only single split.')
+        this_n_split = 1
     return this_n_split
 
 def print_keys(file):
