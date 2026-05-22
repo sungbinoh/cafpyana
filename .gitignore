@@ -3,6 +3,7 @@
 __pycache__/
 *.df
 *.png
+*.pdf
 *.root
 envs/cmake3
 envs/venv_py39_cafpyana/

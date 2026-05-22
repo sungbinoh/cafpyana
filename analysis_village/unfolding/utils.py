@@ -167,7 +167,7 @@ def get_genie_univs(cov_type="rate",
 
         elif cov_type == "rate":
             signal_univ, _ = np.histogram(ret["var_sel_reco"], 
-                                          weights=evtdf_signal[univ_col],
+                                          weights=evtdf_signal[univ_col] * ret["wgt_sel_reco"],
                                           bins=bins)
 
         else:
@@ -198,7 +198,7 @@ def get_genie_univs(cov_type="rate",
     bkg_sec_rec_cv = []
     for this_evtdf in evtdf_div_topo[1:]:
         var, wgt = get_clipped_evts(this_evtdf, var_config.var_evt_reco_col, bins)
-        background_cv, _   = np.histogram(var, bins=bins)
+        background_cv, _   = np.histogram(var, bins=bins, weights=wgt)
         background_cv = background_cv.astype(np.float64)
         background_cv *= scale_factor
         bkg_sec_rec_cv.append(background_cv)

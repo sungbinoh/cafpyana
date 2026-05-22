@@ -13,7 +13,7 @@ colors = ['#d62728',  # Red
 
 
 mode_list_with_offbeam = [1, 2, 0, 3, 4, 5, 6, -1, -2, -3]
-mode_labels_with_offbeam = ["Signal", "Non-Sig. CCCOH", "NC", "QE", "2p2h", "RES", "DIS", "Non-FV", "Others", "Intime Cosmics"]
+mode_labels_with_offbeam = ["Signal", "Non-Sig. CCCOH", "NC", "QE", "2p2h", "RES", "DIS", "Non-FV", "Others", "Data-Driven Non-Beam"]
 colors = ['#d62728',  # Red            
           '#1f77b4',  # Blue
           '#ff7f0e',  # Orange
