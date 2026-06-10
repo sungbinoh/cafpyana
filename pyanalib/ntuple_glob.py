@@ -1,24 +1,26 @@
-#import glob
-import XRootD.client.glob_funcs as glob
-import numpy as np
-import uproot
-import pandas as pd
-from tqdm.auto import tqdm
-import subprocess
-from multiprocessing import Pool
+# Standard library imports
 import multiprocessing
 import os
-import dill
+import random
+import subprocess
 import sys
-from functools import partial
-import time
-import uuid
 import tempfile
-
+import time
 import traceback
+import uuid
+from functools import partial
+from multiprocessing import Pool
 
-from makedf.makedf import make_histpotdf
-from makedf.makedf import make_histgenevtdf
+# Third-party imports
+import dill
+import numpy as np
+import pandas as pd
+import uproot
+import XRootD.client.glob_funcs as glob
+from tqdm.auto import tqdm
+
+# Local application/custom imports
+from makedf.makedf import make_histgenevtdf, make_histpotdf
 
 CPU_COUNT = multiprocessing.cpu_count()
 
@@ -45,68 +47,36 @@ class NTupleProc(object):
         self.f = data["f"]
         self.name = data["name"]
 
-#def _open_with_retries(path, attempts=5, sleep=2.0):
-#    last_exc = None
-#    for k in range(attempts):
-#        try:
-#            return uproot.open(path, timeout=120)
-#        except (OSError, ValueError) as e:
-#            last_exc = e
-#            if k + 1 < attempts:
-#                time.sleep(sleep * (k + 1))
-#    raise last_exc
-
 def _open_with_retries(path, attempts=3, sleep=5.0):
     last_exc = None
-    
-    # --- PHASE 1: Try streaming with a "Pre-flight" check ---
+
+    # --- Try streaming with a "Pre-flight" check ---
     for k in range(attempts):
         try:
             # 1. Open the file handle
             f = uproot.open(path, timeout=300)
-            
+
             # 2. PRE-FLIGHT: Force a small read (getting keys)
             # If the door is timing out, this will raise the 'Operation expired' error HERE.
-            _ = f.keys() 
-            
+            _ = f.keys()
+
             return f
         except Exception as e:
             last_exc = e
             print(f"[Attempt {k+1}] Network lag for {os.path.basename(path)}. Error: {e}", flush=True)
             time.sleep(sleep * (k + 1) + random.uniform(0, 3))
 
-    # --- PHASE 2: Fallback to Local Copy (The Reliable Way) ---
-    print(f"!!! Streaming timed out. Switching to local copy: {path}", flush=True)
-    
-    scratch_dir = os.environ.get('_CONDOR_SCRATCH_DIR', '/tmp')
-    # Use uuid to prevent filename collisions in multiprocessing
-    local_path = os.path.join(scratch_dir, f"{uuid.uuid4()}_{os.path.basename(path)}")
-
-    try:
-        # -f (force), -s (silent), -N (no progress bar)
-        cmd = f"xrdcp -f -s {path} {local_path}"
-        subprocess.run(cmd, shell=True, check=True, timeout=600)
-        
-        # Open the local file (No more 'Operation expired' errors!)
-        return uproot.open(local_path)
-    except Exception as e:
-        print(f"CRITICAL: Even xrdcp failed for {path}. Pool might be offline.", flush=True)
-        raise last_exc
-
-import os
-import uuid
-import tempfile
-import traceback
-import subprocess
-import uproot
+    # If streaming fails after all attempts, raise the exception
+    # so _loaddf can trigger the local copy failover.
+    raise last_exc
 
 def _execute_load(f, applyfs, index, fname):
     """Internal helper to process an open file handle."""
     results = []
-    
+
     # 1. Read TotalEvents immediately to check file validity
     totevt = f['TotalEvents'].values()[0]
-    
+
     # --- PHASE A: Main Trees ---
     if "recTree" not in f:
         print(f"File ({fname}) missing recTree. Skipping main DFS.", flush=True)
@@ -114,11 +84,11 @@ def _execute_load(f, applyfs, index, fname):
         print(f"File ({fname}) has 0 in TotalEvents. Skipping main DFS.", flush=True)
     else:
         for i, applyf in enumerate(applyfs):
-            df = applyf(f) 
+            df = applyf(f)
             if df is not None:
                 # CRITICAL: Deep copy ensures data is in RAM, not 'linked' to the file
                 df = df.copy(deep=True)
-                
+
                 # Metadata tagging
                 df["__ntuple"] = index
                 df.set_index("__ntuple", append=True, inplace=True)
@@ -146,13 +116,13 @@ def _execute_load(f, applyfs, index, fname):
         results.append(df_histgenevt.reorder_levels(new_order))
     except Exception as e:
         print(f"Warning: Could not read TotalGenEvents from {os.path.basename(fname)}: {e}", flush=True)
-        
+
     return results
 
 def _loaddf(applyfs, preprocess, g):
     index, fname = g
     original_fname = fname
-    
+
     # Convert pnfs to xroot URL's
     if fname.startswith("/pnfs"):
         fname = fname.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
@@ -178,24 +148,24 @@ def _loaddf(applyfs, preprocess, g):
             with _open_with_retries(fname) as f:
                 dfs = _execute_load(f, applyfs, index, fname)
         except Exception as e:
-            # If we hit the specific XRootD "Expired" error, trigger the failover
-            if "Operation expired" in str(e) or "vector_read" in str(e):
+            # If we hit an error (like XRootD Expired or exhausted retries), trigger failover
+            if "Operation expired" in str(e) or "vector_read" in str(e) or "I/O operation on closed file" in str(e):
                 print(f"Streaming timeout for {os.path.basename(fname)}. Triggering local copy failover...", flush=True)
-                
-                # Setup local scratch path
-                scratch_dir = "/scratch/7DayLifetime/sungbino/tmp_failover"
+
+                # Setup local scratch path using your environment variable!
+                scratch_dir = os.getenv("CAFPYANA_TMP_SCRATCH", "/scratch/7DayLifetime/sungbino/tmp_failover")
                 os.makedirs(scratch_dir, exist_ok=True)
                 local_copy_path = os.path.join(scratch_dir, f"{uuid.uuid4()}_{os.path.basename(original_fname)}")
-                
+
                 # XRDCP the file (Robust)
                 subprocess.run(["xrdcp", "-s", "-f", fname, local_copy_path], check=True)
-                
+
                 # ATTEMPT 2: Process the local file
                 with uproot.open(local_copy_path) as f_local:
                     dfs = _execute_load(f_local, applyfs, index, local_copy_path)
                     print(f"Successfully recovered {os.path.basename(fname)} via local copy.", flush=True)
             else:
-                # If it's a different error, don't bother copying; just raise it.
+                # If it's a completely different error, don't bother copying; just raise it.
                 raise e
 
     except Exception as e:
@@ -209,7 +179,7 @@ def _loaddf(applyfs, preprocess, g):
     for tmp in tempfiles:
         if os.path.exists(tmp):
             os.remove(tmp)
-            
+
     # 2. Local failover copy
     if local_copy_path and os.path.exists(local_copy_path):
         try:
@@ -236,7 +206,7 @@ class NTupleGlob(object):
         if not isinstance(fs, list):
             fs = [fs]
 
-        thisglob = self.glob 
+        thisglob = self.glob
         if maxfile:
             thisglob = thisglob[:maxfile]
 
@@ -244,7 +214,7 @@ class NTupleGlob(object):
             CPU_COUNT_use = int(CPU_COUNT * 0.8)
             nproc = min(CPU_COUNT_use, len(thisglob))
         print("CPU_COUNT : " + str(CPU_COUNT) + ", len(thisglob): " + str(len(thisglob)) + ", nproc: " + str(nproc))
-        
+
         ret = []
 
         try:
@@ -257,5 +227,3 @@ class NTupleGlob(object):
             print('Received Ctrl-C. Returning dataframes collected so far.')
 
         return ret
-
-

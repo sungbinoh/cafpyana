@@ -49,8 +49,10 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
 
             if slim:
                 for i in range(multisim_nuniv):
-                    np.random.seed(hash(s+str(i)) % (2**32))
+                    seed_input = s + str(i) + str(id(f))
+                    np.random.seed(hash(seed_input) % (2**32))
                     wgt = 1 + (s_morph - 1) * 2 * np.abs(np.random.normal(0, 1)) # std -> unc.
+                    wgt = np.maximum(wgt, 0)
                     systs_slim[(slimname, f"univ_{i}")] = systs_slim[(slimname, f"univ_{i}")].values * wgt
 
             else:
@@ -67,11 +69,12 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
 
                 if slim and isigma == 0: # use ps1
                     for i in range(multisim_nuniv):
-                        np.random.seed(hash(s+str(i)) % (2**32))
+                        seed_input = s + str(i) + str(id(f))
+                        np.random.seed(hash(seed_input) % (2**32))
                         wgt = 1 + (s_ps - 1) * np.random.normal(0, 1)
                         wgt = wgt.reset_index(level=2, drop=True)  # Drop the 'iwgt' level to match systs_slim index
+                        wgt = np.maximum(wgt, 0)
                         systs_slim[(slimname, f"univ_{i}")] = systs_slim[(slimname, f"univ_{i}")].values * wgt
-    
                 else:
                     this_systs.append(s_ps.droplevel(2))
                     this_systs.append(s_ms.droplevel(2))
@@ -118,3 +121,97 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
         systs_match.index = nuind.index
         return systs_match
 
+def print_syst_all(f):
+    if "globalTree" not in f:
+        print("no globalTree")
+
+    globalTree = f["globalTree"]
+    wgt_names = [n for n in f["globalTree"]['global/wgts/wgts.name'].arrays(library="np")['wgts.name'][0]]
+    wgt_types = f["globalTree"]['global/wgts/wgts.type'].arrays(library="np")['wgts.type'][0]
+    wgt_nuniv = f["globalTree"]['global/wgts/wgts.nuniv'].arrays(library="np")['wgts.nuniv'][0]
+    for i in range(len(wgt_names)):
+        print(f"Index: {i:<3} | Name: {wgt_names[i]:<30} | Type: {wgt_types[i]:<5} | Univ: {wgt_nuniv[i]}")
+
+def get_all_syst_df(f, multisim_nuniv=1000):
+    ## adding this function to open globaltree only once for each flat.caf
+    if "globalTree" not in f:
+        print("no globalTree")
+        #return pd.DataFrame(index=nuind.index)
+
+    globalTree = f["globalTree"]
+    wgt_names = [n for n in globalTree['global/wgts/wgts.name'].arrays(library="np")['wgts.name'][0]]
+    wgt_types = globalTree['global/wgts/wgts.type'].arrays(library="np")['wgts.type'][0]
+    wgt_nuniv = globalTree['global/wgts/wgts.nuniv'].arrays(library="np")['wgts.nuniv'][0]
+
+    nuniv = wgt_nuniv.sum()
+
+    # 1. Load DataFrame and explicitly extract the first column as a pure Series
+    wgts_df = ak.to_dataframe(f["recTree"]['rec.mc.nu.wgt.univ'].arrays(library="ak"), how=None)[0]
+    wgts_series = wgts_df.iloc[:, 0].copy()
+
+    # 2. Calculate indices
+    idx_entry = wgts_series.index.get_level_values(0)
+    idx_subentry = wgts_series.index.get_level_values(1)
+
+    inu = idx_subentry // nuniv
+    iwgt = idx_subentry % nuniv
+
+    # 3. Apply MultiIndex and unstack ONCE.
+    # Since wgts_series is a 1D Series, unstacking creates a DataFrame with flat integer columns (0, 1, 2...)
+    wgts_series.index = pd.MultiIndex.from_arrays(
+        [idx_entry, inu, iwgt],
+        names=["entry", "inu", "iwgt"]
+    )
+    df_wgts = wgts_series.unstack("iwgt")
+
+    # 4. Dictionary construction
+    systs_dict = {}
+    start_col = 0
+
+    for isyst in range(len(wgt_names)):
+        s = wgt_names[isyst]
+        w_type = wgt_types[isyst]
+        w_nuniv = wgt_nuniv[isyst]
+
+        if w_type == 3 and w_nuniv == 1: # morph unisim
+            systs_dict[(s, "morph")] = df_wgts[start_col]
+
+        elif w_type == 3 and w_nuniv > 1: # +/- sigma unisim
+            nsigma = w_nuniv // 2
+            for isigma in range(nsigma):
+                systs_dict[(s, f"ps{isigma+1}")] = df_wgts[start_col + 2*isigma]
+                systs_dict[(s, f"ms{isigma+1}")] = df_wgts[start_col + 2*isigma + 1]
+
+            # check if we also saved the 0-sigma weight (conventionally put last)
+            if w_nuniv % 2 != 0:
+                systs_dict[(s, "cv")] = df_wgts[start_col + w_nuniv - 1]
+            else:
+                systs_dict[(s, "cv")] = pd.Series(1.0, index=df_wgts.index)
+
+        elif w_type == 0: # multisim
+            limit = min(w_nuniv, multisim_nuniv)
+            for i in range(limit):
+                systs_dict[(s, f"univ_{i}")] = df_wgts[start_col + i]
+
+        else:
+            raise Exception(f"Cannot decode systematic uncertainty: {s}")
+
+        # Advance the pointer
+        start_col += w_nuniv
+
+    # 5. Build final DataFrame
+    systs = pd.DataFrame(systs_dict)
+
+    return systs
+
+def filter_systs_nuind(f, systs, nuind):
+    ## use outputs of the "get_wgts_df_and_list" above as input for this function
+    if "globalTree" not in f:
+        return pd.DataFrame(index=nuind.index)
+
+    nuidx = pd.MultiIndex.from_arrays([nuind.index.get_level_values(0), nuind])
+
+    systs_match = systs.reindex(nuidx, fill_value=1.0)
+    systs_match.index = nuind.index
+
+    return systs_match

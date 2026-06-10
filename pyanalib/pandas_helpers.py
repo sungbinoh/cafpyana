@@ -182,5 +182,45 @@ def pad_column_name(col, pad_ref): # TODO: merge with the above "pad" function
     extended_name = col + ("",) * ndummies
     return extended_name
 
+def add_upper_level_to_df(level_name, df):
+    """
+    Prepend a new top level to all columns of a DataFrame, handling both string and MultiIndex columns.
 
+    :param level_name: Name of the new top-level column label.
+    :type level_name: str
+    :param df: Input DataFrame.
+    :type df: pandas.DataFrame
+    :return: DataFrame with ``level_name`` prepended to all column levels.
+    :rtype: pandas.DataFrame
+    """
+    df.columns = pd.MultiIndex.from_tuples(
+        [(level_name,) + (col if isinstance(col, tuple) else (col,)) 
+         for col in df.columns]
+    )
+    return df
 
+def rename_to_XYZ(df, cols_to_rename):
+    """
+    Rename columns with I0, I1, I2 to x, y, z respectively, but only if they are immediately preceded by 
+    one of the specified column names.
+
+    :param df: Input DataFrame with columns to rename.
+    :type df: pandas.DataFrame
+    :param cols_to_rename: List of column names that should trigger the renaming of
+    I0, I1, I2 to x, y, z when they immediately follow them.
+    :type cols_to_rename: list of str
+    :return: DataFrame with specified columns renamed to x, y, z where applicable.
+    :rtype: pandas.DataFrame
+    """
+
+    coordinates_map = {"I0": "x", "I1": "y", "I2": "z"}
+
+    def rename_col(c):
+        new_col = c
+        for col_level, col_val in enumerate(c):
+            if col_val in cols_to_rename and col_level + 1 < len(c):
+                next_level = col_level + 1
+                new_col = c[:next_level] + (coordinates_map.get(c[next_level], c[next_level]),) + c[next_level + 1:]
+        return new_col
+
+    df.columns = pd.MultiIndex.from_tuples([rename_col(c) for c in df.columns])
