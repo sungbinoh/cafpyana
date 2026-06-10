@@ -167,7 +167,7 @@ def get_genie_univs(cov_type="rate",
 
         elif cov_type == "rate":
             signal_univ, _ = np.histogram(ret["var_sel_reco"], 
-                                          weights=evtdf_signal[univ_col],
+                                          weights=evtdf_signal[univ_col] * ret["wgt_sel_reco"],
                                           bins=bins)
 
         else:
@@ -198,7 +198,7 @@ def get_genie_univs(cov_type="rate",
     bkg_sec_rec_cv = []
     for this_evtdf in evtdf_div_topo[1:]:
         var, wgt = get_clipped_evts(this_evtdf, var_config.var_evt_reco_col, bins)
-        background_cv, _   = np.histogram(var, bins=bins)
+        background_cv, _   = np.histogram(var, bins=bins, weights=wgt)
         background_cv = background_cv.astype(np.float64)
         background_cv *= scale_factor
         bkg_sec_rec_cv.append(background_cv)
@@ -564,7 +564,8 @@ def plot_univ_hists(univ_events,
                     approval="internal",
                     textloc=[0.05, 0.55],
                     save_fig=False, 
-                    save_name=None): 
+                    save_name=None,
+                    ylabel="Events / Bin"): 
 
     assert univ_events.shape[1] == len(cv_events) 
     n_univ = univ_events.shape[0]
@@ -611,7 +612,7 @@ def plot_univ_hists(univ_events,
     plt.xlim(var_config.bins[0], var_config.bins[-1])
     plt.xlabel(var_config.var_labels[1])
     #plt.ylim(-1, )
-    plt.ylabel("Events / Bin")
+    plt.ylabel(ylabel)
     plt.title(syst_name + " syst.: " + categ_name)
 
     plt.legend(frameon=False, fontsize=12)
@@ -626,7 +627,7 @@ def plot_univ_hists(univ_events,
     if save_fig:
         plt.savefig(save_name+".pdf", bbox_inches='tight')
 
-    plt.show();
+    plt.show()
 
 
 def plot_frac_unc(frac_unc, 
@@ -651,7 +652,7 @@ def plot_frac_unc(frac_unc,
 
     if save_fig:
         plt.savefig(save_name+".pdf", bbox_inches='tight')
-    plt.show();
+    plt.show()
 
 
 def plot_heatmap(matrix, 
@@ -693,7 +694,7 @@ def plot_heatmap(matrix,
 
     if save_fig:
         plt.savefig("{}.png".format(save_fig_name), bbox_inches='tight', dpi=300)
-    plt.show();
+    plt.show()
 
 def plot_overlay_with_cov(
     data,
