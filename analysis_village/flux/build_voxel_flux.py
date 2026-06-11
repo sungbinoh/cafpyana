@@ -19,7 +19,7 @@ from tqdm.auto import tqdm
 # ---------------------------------------------------------------------------
 # Job direcotories
 # ---------------------------------------------------------------------------
-DEFAULT_BASE_DIR = Path("/pnfs/sbnd/scratch/users/munjung/beammc_20cm")
+DEFAULT_BASE_DIR = Path("/pnfs/sbnd/persistent/users/sungbino/flux/gen2/beammc_20cm")
 DEFAULT_PRODUCTION = "production_BooNE_50m_I174000A"
 DEFAULT_CACHE_DIR = Path("/exp/sbnd/data/users/munjung/flux/SBND_dk2nu")
 DEFAULT_VOXEL_SIZE = 20
