@@ -693,6 +693,44 @@ def make_spine_part_mcpart_df(f, get_best_match=True):
 
     return spinepart_mcpart_df
 
+def make_spine_reco_int_df(f):
+    """
+    SPINE dataframe maker which containes all SPINE reco and true interaction variables
+    matched with MC nu dataframe.
+    
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
+
+    :return: SPINE reco interactions dataframe
+    :rtype: pd.DataFrame   
+    """
+    # Get reco tree from file.
+    rec_tree = f["recTree"]
+
+    # Load SPINE interaction and matches branches.
+    spineint_df             = loadbranches(rec_tree, spineint_branches)
+
+    return spineint_df
+
+def make_spine_true_int_df(f):
+    """
+    SPINE dataframe maker which containes all SPINE true interaction variables
+    matched with MC nu dataframe.
+    
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
+
+    :return: SPINE true interactions dataframe
+    :rtype: pd.DataFrame   
+    """
+    # Get reco tree from file.
+    rec_tree = f["recTree"]
+
+    # Load SPINE interaction.
+    spinetint_df             = loadbranches(rec_tree, spinetint_branches)
+    
+    return spinetint_df
+
 def make_spine_int_df(f, get_best_match=True):
     """
     SPINE dataframe maker which containes all SPINE reco and true interaction variables
@@ -765,6 +803,40 @@ def make_spine_int_df(f, get_best_match=True):
     rename_to_XYZ(spineint_matched_with_true_df, cols_to_rename)
 
     return spineint_matched_with_true_df
+
+def make_spine_reco_part_df(f):
+    """
+    SPINE dataframe maker which containes all SPINE reco particle variables 
+    matched with MC nu dataframe.
+    
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
+
+    :return: SPINE reco particles dataframe
+    :rtype: pd.DataFrame   
+    """
+    rec_tree = f["recTree"]
+
+    spinepart_df                = loadbranches(rec_tree, spinepart_branches)
+
+    return spinepart_df
+
+def make_spine_true_part_df(f):
+    """
+    SPINE dataframe maker which containes all SPINE true particle variables 
+    matched with MC nu dataframe.
+    
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
+
+    :return: SPINE true particles dataframe
+    :rtype: pd.DataFrame   
+    """
+    rec_tree = f["recTree"]
+
+    spinetpart_df               = loadbranches(rec_tree, spinetpart_branches)
+
+    return spinetpart_df
 
 def make_spine_part_df(f, get_best_match=True):
     """
