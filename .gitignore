@@ -20,3 +20,6 @@ envs/logs
 *__init__.py
 *jupyterhub.sqlite
 jupyterhub_cookie_secret
+
+# grid sample lists -- large, site/environment-specific, regenerable via samweb
+data/sample_lists/sbnd/*.list

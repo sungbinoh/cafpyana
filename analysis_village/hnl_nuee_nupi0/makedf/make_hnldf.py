@@ -5,6 +5,24 @@ import warnings
 warnings.filterwarnings('ignore')
 
 #----------------------------------------------------------------------------------#
+# Lightweight per-event truth+header table, used for DetVar cross-file matching
+#----------------------------------------------------------------------------------#
+
+def make_mcnulite_df_hnl(f):
+    """One row per event: highest-energy true neutrino + run/subrun/evt/pot.
+
+    Used only for external (physics-level) event matching between CV and DV
+    detector-variation samples in detvar/store.py — mirrors
+    analysis_village/nuecc/makedf/make_nueccdf.py's make_mcnulite_df_nuecc.
+    """
+    rse_df = make_hdrdf(f)
+    nu_df = loadbranches(f["recTree"], ["rec.mc.nu.E", "rec.mc.nu.pdg"]).rec.mc.nu
+    nu_df = nu_df.sort_values("E").groupby(level=[0, 1]).nth(-1)
+    names = nu_df.index.names
+    df = nu_df.reset_index().merge(rse_df.reset_index(), on='entry').set_index(names)
+    return df
+
+#----------------------------------------------------------------------------------#
 # Functions to read MC neutrinos
 #----------------------------------------------------------------------------------#
 
@@ -17,7 +35,9 @@ def make_mcnudf_hnl(f,**args):
     return mcdf
 
 def make_hnldf_mcnu_wgt(f):
-    df = make_hnldf_mcnu(f,include_weights=True)
+    # slim=False: keep every individual systematic knob (GENIE/Flux/G4),
+    # not the collapsed single-column-per-category "slim" weight.
+    df = make_hnldf_mcnu(f,include_weights=True,slim=False)
     return df
 
 def make_hnldf_mcnu_nopreselect_savepfp(f):
@@ -43,7 +63,9 @@ def make_hnldf_mcnu(f, include_weights=False,multisim_nuniv=100,slim=True,applyP
 #----------------------------------------------------------------------------------#
 
 def make_hnldf_mevprtl_wgt(f):
-    df = make_hnldf_mevprtl(f,include_weights=True)
+    # slim=False: keep every individual systematic knob (Flux/G4),
+    # not the collapsed single-column-per-category "slim" weight.
+    df = make_hnldf_mevprtl(f,include_weights=True,slim=False)
     return df
 
 def make_hnldf_mevprtl_nopreselect_savepfp(f):

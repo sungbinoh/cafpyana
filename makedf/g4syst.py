@@ -10,5 +10,5 @@ g4_systematics = [
 ]
 
 def g4syst(f, nuind, multisim_nuniv=250,slim=False):
-    return getsyst.getsyst(f, g4_systematics, nuind, multisim_nuniv=multisim_nuniv, slim=slim)
+    return getsyst.getsyst(f, g4_systematics, nuind, multisim_nuniv=multisim_nuniv, slim=slim, slimname="G4")
 

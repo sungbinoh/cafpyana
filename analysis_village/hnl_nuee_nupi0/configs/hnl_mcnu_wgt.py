@@ -1,7 +1,7 @@
 from analysis_village.hnl_nuee_nupi0.makedf.make_hnldf import * 
 
 GRID_PARAMS = {
-    "memory":   "5GB",
+    "memory":   "4GB",
     "cpu":      10,
     "disk":     "100GB",
     "lifetime": "1h",
