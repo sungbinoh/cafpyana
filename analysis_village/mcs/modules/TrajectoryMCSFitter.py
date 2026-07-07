@@ -63,8 +63,10 @@ def fitMcsPrepare(traj):
     dtheta_yz = []
     dtheta_xz_rot = []
     dtheta_yz_rot = []
+    dtheta_xz_prime = []
+    dtheta_yz_prime = []
     for p in range(len(segradlengths)):
-        pcdir1 = linearRegression(traj, breakpoints[p], breakpoints[p+1])
+        pcdir1 = linearRegression(traj, breakpoints[p], breakpoints[p+1]) # normalized to 1
         if pcdir1 is None:
             return None
         if (p > 0):
@@ -74,6 +76,8 @@ def fitMcsPrepare(traj):
                 dtheta_yz.append(-999)
                 dtheta_xz_rot.append(-999)
                 dtheta_yz_rot.append(-999)
+                dtheta_xz_prime.append(-999)
+                dtheta_yz_prime.append(-999)
                 logging.info("bad breakpoint")
 
             # TODO: cut on hits
@@ -110,7 +114,24 @@ def fitMcsPrepare(traj):
                 angle_yz_rot = 1e3*np.arctan2(rotated_pcdir1[0], rotated_pcdir1[2])
                 dtheta_xz_rot.append(angle_xz_rot)
                 dtheta_yz_rot.append(angle_yz_rot)
-                
+
+                # Follow angle definitions in https://arxiv.org/pdf/2605.03048
+                ## z' is muon dir of the previous segment
+                this_zprime = pcdir0 / np.linalg.norm(pcdir0)
+                ## y' = z' X x & x' = -z' X y'
+                this_xvec = np.array([1, 0, 0])
+                this_yprime = np.cross(this_zprime, this_xvec)
+                this_yprime /= np.linalg.norm(this_yprime)
+                this_xprime = np.cross(-1. * this_zprime, this_yprime)
+                ## now, collect pcdir1's compoments in x',y',z'
+                pcdir1_xprime = np.dot(this_xprime, pcdir1)
+                pcdir1_yprime = np.dot(this_yprime, pcdir1)
+                pcdir1_zprime = np.dot(this_zprime, pcdir1)
+                theta_xz_prime = 1e3*np.arctan2(pcdir1_xprime, pcdir1_zprime)
+                theta_yz_prime = 1e3*np.arctan2(pcdir1_yprime, pcdir1_zprime)
+                dtheta_xz_prime.append(theta_xz_prime)
+                dtheta_yz_prime.append(theta_yz_prime)
+
         pcdir0 = pcdir1
     
     cumseglens = np.array(cumseglens)
@@ -118,28 +139,39 @@ def fitMcsPrepare(traj):
     cumlenbwd = (cumseglens[-1]-cumseglens[::-1])[:-2]
 
     resranges = np.array(resranges)
-    resranges_fwd = resranges[:-2]
+    #print(resranges)
+    resranges_fwd = resranges[:-2] # R.R. at the begining of seg0
+    resranges_fwd_brk_p = resranges[1:-1] # R.R. at breaking points of the two segments (seg0 ~ pcdir0, seg1 ~ pcdir1)
+    resranges_fwd_next_seg_end = resranges[2:] # R.R. at the end of the seg 1
     resranges_bwd = (resranges[0]-resranges[::-1])[:-2]
     resranges_fwd_P = muonRangeP(resranges_fwd)/1e3 # [GeV]
-
-    
-
-
-    
+    resranges_mid_seg0 = (resranges_fwd + resranges_fwd_brk_p) / 2. # R.R. on midpoint of seg0
+    resranges_mid_seg1 = (resranges_fwd_brk_p + resranges_fwd_next_seg_end) / 2. # R.R. on midpoint of seg1
+    resranges_mid_seg0_P = muonRangeP(resranges_mid_seg0)/1e3 # [GeV] # P_range for midpoint in seg0
+    resranges_mid_seg1_P = muonRangeP(resranges_mid_seg1)/1e3 # [GeV] # P_range for midpoint in seg1
+    resranges_mid_mean_P = (resranges_mid_seg0_P + resranges_mid_seg1_P) / 2. # [GeV], mean of the P_range at the two midpoints
     segdf = pd.DataFrame( {"breakpoint": range(len(dtheta))
                            , "dtheta": dtheta
                            , "dtheta_xz": dtheta_xz
                            , "dtheta_yz": dtheta_yz
                            , "angle_xz_rot": dtheta_xz_rot
                            , "angle_yz_rot": dtheta_yz_rot
+                           , "dtheta_xz_prime": dtheta_xz_prime
+                           , "dtheta_yz_prime": dtheta_yz_prime
                            , "segradlengths": segradlengths[:-1]
                            , "cumlenfwd": cumlenfwd
                            , "cumlenbwd": cumlenbwd
                            , "resranges_fwd": resranges_fwd
+                           , "resranges_fwd_brk_p": resranges_fwd_brk_p
+                           , "resranges_fwd_next_seg_end": resranges_fwd_next_seg_end
                            , "resranges_bwd": resranges_bwd
                            , "resranges_fwd_P": resranges_fwd_P
+                           , "resranges_mid_seg0_P": resranges_mid_seg0_P
+                           , "resranges_mid_seg1_P": resranges_mid_seg1_P
+                           , "resranges_mid_mean_P": resranges_mid_mean_P
                            } )
 
+    #print(segdf)
     return segdf
 
 

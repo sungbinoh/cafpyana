@@ -385,7 +385,7 @@ def make_muon_traj_df(f):
 
     muon_hit_df = make_muon_hit_df(f)
 
-    print(muon_hit_df)
+    #print(muon_hit_df)
 
     this_sp_dfs = []
     grouped = muon_hit_df.groupby(level=['entry', 'rec.slc..index', 'rec.slc.reco.pfp..index'])
