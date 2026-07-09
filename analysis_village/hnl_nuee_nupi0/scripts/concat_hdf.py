@@ -66,6 +66,7 @@ def concat_hdf_files(directory, keys2load, output_dir=None, pattern="*.df", n_ma
     for file_idx, file in enumerate(tqdm(files, desc="Concatenating files")):
         n_splits = get_n_split(file)
         n_load = n_splits if n_max_concat is None else min(n_max_concat, n_splits)
+
         file_dfs = load_dfs(file, keys2load, n_max_concat=n_load)
         for key in keys2load:
             df = file_dfs[key].copy()
@@ -131,6 +132,9 @@ def main():
     args = parser.parse_args()
 
     keys2load = args.keys
+    if keys2load:
+        print(f"Keys: {keys2load}")
+
     if not keys2load:
         files = sorted(glob.glob(os.path.join(args.directory, args.pattern)))
         if not files:

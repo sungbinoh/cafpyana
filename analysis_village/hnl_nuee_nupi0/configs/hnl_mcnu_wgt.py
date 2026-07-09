@@ -4,7 +4,7 @@ GRID_PARAMS = {
     "memory":   "4GB",
     "cpu":      10,
     "disk":     "100GB",
-    "lifetime": "1h",
+    "lifetime": "2h",
 }
 
 DFS =   [make_hnldf_mcnu_wgt, make_hdrdf, make_potdf_bnb, make_mcnudf]

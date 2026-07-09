@@ -17,3 +17,7 @@ corner
 lz4
 xxhash
 fsspec-xrootd
+seaborn
+scikit-learn
+pyhf
+xgboost
