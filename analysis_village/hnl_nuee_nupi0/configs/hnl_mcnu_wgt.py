@@ -9,7 +9,5 @@ GRID_PARAMS = {
 
 DFS =   [make_hnldf_mcnu_wgt, make_hdrdf, make_potdf_bnb, make_mcnudf]
 NAMES = ["rec", "hdr", "pot", "mcnu"]
-#DFS   =   [make_hnldf_mcnu_wgt, make_hdrdf, make_potdf_bnb]
-#NAMES = ["rec", "hdr", "pot"]
 
 

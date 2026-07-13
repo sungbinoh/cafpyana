@@ -151,7 +151,7 @@ def make_mevprtldf(f, branches = mevprtltruthbranches, include_weights=False, mu
                 bnbwgtdf = bnbsyst.bnbsyst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
                 df_list.append(bnbwgtdf)
             if "g4" in wgt_types:
-                g4wgtdf = g4syst.g4syst(f, mcdf.ind)
+                g4wgtdf = g4syst.g4syst(f, mcdf.ind, multisim_nuniv=multisim_nuniv, slim=slim)
                 df_list.append(g4wgtdf)
 
             wgtdf = pd.concat(df_list, axis=1)

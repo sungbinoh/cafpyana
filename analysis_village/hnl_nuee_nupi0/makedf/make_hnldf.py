@@ -63,8 +63,6 @@ def make_hnldf_mcnu(f, include_weights=False,multisim_nuniv=100,slim=True,applyP
 #----------------------------------------------------------------------------------#
 
 def make_hnldf_mevprtl_wgt(f):
-    # slim=False: keep every individual systematic knob (Flux/G4),
-    # not the collapsed single-column-per-category "slim" weight.
     df = make_hnldf_mevprtl(f,include_weights=True,slim=False)
     return df
 
