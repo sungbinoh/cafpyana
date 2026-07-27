@@ -719,7 +719,13 @@ extra_weights = [
     "GENIEReWeight_SBN_v3_FrKin_PiProBias_N",
 ]
 
-gump_genie_reknob_systematics = gump_ar23_weights + gump_ar23p_weights + extra_weights
+g4_weights = [
+    "reinteractions_piminus_Geant4",
+    "reinteractions_piplus_Geant4",
+    "reinteractions_proton_Geant4"
+]
+
+gump_genie_reknob_systematics = gump_ar23_weights + gump_ar23p_weights + extra_weights + g4_weights
 
 def make_gump_nuslimwgtdf(f):
     return make_mcnudf(f, include_weights=True, slim=True, genie_systematics=gump_genie_systematics)
