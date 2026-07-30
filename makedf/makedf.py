@@ -623,6 +623,18 @@ def make_stubs(f, det="ICARUS"):
     #return pd.concat(df_tosave, axis=1)
 
 def make_all_spine_df(f, get_best_match=True, **trkArgs):
+    """
+    SPINE dataframe maker which containes all SPINE reco and true interaction and particle variables.
+
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
+    :param get_best_match: `True` if a best match selection is needed.
+    :type get_best_match: bool
+
+    :return: Full SPINE dataframe
+    :rtype: pd.DataFrame
+    """
+
     # Load SPINE interactions dataframe
     spine_int_df = make_spine_int_df(f, get_best_match)
 
@@ -695,8 +707,7 @@ def make_spine_part_mcpart_df(f, get_best_match=True):
 
 def make_spine_reco_int_df(f):
     """
-    SPINE dataframe maker which containes all SPINE reco and true interaction variables
-    matched with MC nu dataframe.
+    SPINE dataframe maker which containes all SPINE reco interaction variables.
     
     :param f: file handle to the input ROOT file
     :type f: uproot4.open file handle
@@ -717,8 +728,7 @@ def make_spine_reco_int_df(f):
 
 def make_spine_true_int_df(f):
     """
-    SPINE dataframe maker which containes all SPINE true interaction variables
-    matched with MC nu dataframe.
+    SPINE dataframe maker which containes all SPINE true interaction variables.
     
     :param f: file handle to the input ROOT file
     :type f: uproot4.open file handle
@@ -739,8 +749,7 @@ def make_spine_true_int_df(f):
 
 def make_spine_int_df(f, get_best_match=True):
     """
-    SPINE dataframe maker which containes all SPINE reco and true interaction variables
-    matched with MC nu dataframe.
+    SPINE dataframe maker which containes all SPINE reco and true interaction variables.
     
     :param f: file handle to the input ROOT file
     :type f: uproot4.open file handle
@@ -808,8 +817,7 @@ def make_spine_int_df(f, get_best_match=True):
 
 def make_spine_reco_part_df(f):
     """
-    SPINE dataframe maker which containes all SPINE reco particle variables 
-    matched with MC nu dataframe.
+    SPINE dataframe maker which containes all SPINE reco particle variables.
     
     :param f: file handle to the input ROOT file
     :type f: uproot4.open file handle
@@ -828,8 +836,7 @@ def make_spine_reco_part_df(f):
 
 def make_spine_true_part_df(f):
     """
-    SPINE dataframe maker which containes all SPINE true particle variables 
-    matched with MC nu dataframe.
+    SPINE dataframe maker which containes all SPINE true particle variables.
     
     :param f: file handle to the input ROOT file
     :type f: uproot4.open file handle
@@ -850,8 +857,7 @@ def make_spine_true_part_df(f):
 
 def make_spine_part_df(f, get_best_match=True):
     """
-    SPINE dataframe maker which containes all SPINE reco and true particle variables 
-    matched with MC nu dataframe.
+    SPINE dataframe maker which containes all SPINE reco and true particle variables.
     
     :param f: file handle to the input ROOT file
     :type f: uproot4.open file handle
