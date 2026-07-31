@@ -176,6 +176,12 @@ flux_syst = [
  'piplus_Flux'
 ]
 
+g4_syst = [
+ 'reinteractions_piminus_Geant4',
+ 'reinteractions_piplus_Geant4',
+ 'reinteractions_proton_Geant4',
+]
+
 truthvars = {
   "true_E": ("nu_E", ""),
   "true_nu_pdg": ("pdg", ""),
@@ -226,6 +232,7 @@ def load_one(fname, idf,
     detector=None, # One of SBND, ICARUS, ICARUS Run4
     include_syst=True, nuniv=100, spline=False, xsec_univ=False, xsec_spline=False,# systematic handling
     reweight_aFF=False, pot_univ=False, flux_univ=True, sep_flux_univ=False,
+    reweight_aFF=False, pot_univ=False, flux_univ=True, sep_flux_univ=False, g4_univ=True,
     pot_spline=False, detvar_spline=False,
     load_truth=True, load_crt=False, match_Enu=True, # load extra information
     offbeampot=False, # POT handling
@@ -410,6 +417,10 @@ def load_one(fname, idf,
     if flux_univ:
         for i in range(min(100, nuniv)):
             skim["flux_univ%i" % i] = np.prod([wgt[s]["univ_%i" % i] for s in flux_syst], axis=0)
+
+    if g4_univ:
+        for i in range(min(100, nuniv)):
+            skim["g4_univ%i" % i] = np.prod([wgt[s]["univ_%i" % i] for s in g4_syst], axis=0)
 
     if pot_univ:
         rng = np.random.default_rng(seed=24601) # repeatable random numbers
@@ -653,6 +664,11 @@ def match_common_evts(mrgs, dfs, pots):
 class FluxSystematic(syst.WeightSystematic):
     def __init__(self, df, scale="glob_scale"):
         wgts = ["flux_univ%i" % i for i in range(100)]
+        super().__init__(df, wgts, scale=scale)
+
+class G4Systematic(syst.WeightSystematic):
+    def __init__(self, df, scale="glob_scale"):
+        wgts = ["g4_univ%i" % i for i in range(100)]
         super().__init__(df, wgts, scale=scale)
 
 class XSecSystematic(syst.WeightSystematic):
