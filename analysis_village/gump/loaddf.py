@@ -208,7 +208,14 @@ def scale_pot(df, pot, desired_pot):
 
 def _cache_key(fname, idf, **kwargs):
     """Build a deterministic hash from the input file path, split index, and all keyword args."""
-    key_dict = {"fname": os.path.abspath(fname), "idf": idf}
+    key_dict = {"fname": os.path.abspath(fname), "idf": idf, "_cache_version": _CACHE_VERSION}
+    # Include the input file's identity, not just its path, so regenerating a .df in
+    # place busts the cache instead of silently serving the old df *and* the old POT.
+    # NB: this also means re-syncing the .df directory (which rewrites mtimes) forces
+    # a full re-load even if the contents are unchanged.
+    st = os.stat(fname)
+    key_dict["_fsize"] = st.st_size
+    key_dict["_fmtime"] = int(st.st_mtime)
     # Only include serializable kwargs (skip preselection function)
     for k, v in sorted(kwargs.items()):
         if callable(v):
@@ -246,8 +253,12 @@ def load_one(fname, idf,
     if cache_dir is not None:
         cache_hash = _cache_key(fname, idf, detector=detector, include_syst=include_syst,
             nuniv=nuniv, spline=spline, xsec_univ=xsec_univ, xsec_spline=xsec_spline, reweight_aFF=reweight_aFF, pot_univ=pot_univ,
+            flux_univ=flux_univ, sep_flux_univ=sep_flux_univ, g4_univ=g4_univ,
             load_truth=load_truth, load_crt=load_crt,
-            match_Enu=match_Enu, offbeampot=offbeampot, preselection=preselection)
+            match_Enu=match_Enu, offbeampot=offbeampot, preselection=preselection,
+            drops=drops, lightmem=lightmem,
+            flashname=flashname, hdrname=hdrname, evtname=evtname,
+            wgtname=wgtname, mcname=mcname, crtname=crtname)
         cache_file = os.path.join(cache_dir, cache_hash + ".h5")
         if os.path.exists(cache_file):
             try:
