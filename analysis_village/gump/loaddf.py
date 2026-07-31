@@ -384,7 +384,7 @@ def load_one(fname, idf,
         if "crthit" in df.columns: del df["crthit"]
 
         crtdf = pd.read_hdf(fname, crtname % idf)
-        crthit = ((crt.time > -1) & (crt.time < 1.8) & (crt.plane != 50)).groupby(level=[0, 1]).any()
+        crthit = ((crtdf.time > -1) & (crtdf.time < 1.8) & (crtdf.plane != 50)).groupby(level=[0, 1]).any()
         crthit.name = "crthit"
         df = df.join(crthit, on=["__ntuple", "entry"])
 
