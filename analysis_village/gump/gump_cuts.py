@@ -250,12 +250,40 @@ def flash_cut(df):
 
     return pd.Series(np_mask, index=df.index) 
 
-def cosmic_cut(df, is_old=False):
-    if is_old:
-        return (df.nu_score > 0.4)
-    else:
-        df = add_opening_angle_mu_p(df)
-        return (df.nu_score > 0.4) & (df["mu_p_opening_angle_deg"] < 155)
+# Final optimized selection
+# opt to ratio, min mu len 40, shared track score, per-detector PID
+# opt used the most updated calo treatment (no EMB IC, no sqmear15, double SBND 13)
+SBND_CUTS = {
+    "nu_score_th": 0.35,
+    "max_opening_angle": 160,
+    "musel_track_score_min": 0.5,
+    "musel_muscore_th": 38,
+    "musel_pscore_th": 82,
+    "musel_len_th_min": 40,
+    "musel_len_th_max": 400,
+    "psel_muscore_th": 0,
+    "psel_pscore_th": 141,
+}
+
+ICARUS_CUTS = {
+    "nu_score_th": 0.35,
+    "max_opening_angle": 160,
+    "musel_track_score_min": 0.5,
+    "musel_muscore_th": 111,
+    "musel_pscore_th": 74,
+    "musel_len_th_min": 40,
+    "musel_len_th_max": 400,
+    "psel_muscore_th": 0,
+    "psel_pscore_th": 92,
+}
+
+def _det_cut_th(detector, key):
+    return np.where(detector == "SBND", SBND_CUTS[key], ICARUS_CUTS[key])
+
+def cosmic_cut(df):
+    df = add_opening_angle_mu_p(df)
+    return (df.nu_score > _det_cut_th(df.detector, "nu_score_th")) & \
+           (df["mu_p_opening_angle_deg"] < _det_cut_th(df.detector, "max_opening_angle"))
 
 def add_opening_angle_mu_p(df, out_col="mu_p_opening_angle_deg", degrees=True):
     mu = df[["mu_dir_x", "mu_dir_y", "mu_dir_z"]].to_numpy(dtype=float)
@@ -284,24 +312,21 @@ def del_p_cut(df):
 def twoprong_cut(df):
     return (np.isnan(df.other_shw_length) & np.isnan(df.other_trk_length))
 
-def pid_cut(df, is_old=False):
+def pid_cut(df):
     return pid_cut_df(df.mu_chi2_of_mu_cand, df.mu_chi2_of_prot_cand,
-        df.prot_chi2_of_mu_cand, df.prot_chi2_of_prot_cand, df.mu_len, is_old=is_old)
+        df.prot_chi2_of_mu_cand, df.prot_chi2_of_prot_cand, df.mu_len,
+        df.mu_track_score, df.detector)
 
 def pid_cut_df(mu_chi2_mu_cand, mu_chi2_prot_cand, prot_chi2_mu_cand,
-            prot_chi2_prot_cand, mu_len, is_old=False):
-    if is_old:
-        MUSEL_MUSCORE_TH, MUSEL_PSCORE_TH, MUSEL_LEN_TH = 15, 90, 50
-    else:
-        MUSEL_MUSCORE_TH, MUSEL_PSCORE_TH, MUSEL_LEN_TH = 30, 80, 25
+            prot_chi2_prot_cand, mu_len, mu_track_score, detector):
+    mu_cut = (mu_track_score > _det_cut_th(detector, "musel_track_score_min")) & \
+             (mu_chi2_mu_cand < _det_cut_th(detector, "musel_muscore_th")) & \
+             (prot_chi2_mu_cand > _det_cut_th(detector, "musel_pscore_th")) & \
+             (mu_len > _det_cut_th(detector, "musel_len_th_min")) & \
+             (mu_len < _det_cut_th(detector, "musel_len_th_max"))
 
-    mu_cut = (mu_chi2_mu_cand < MUSEL_MUSCORE_TH) & \
-             (prot_chi2_mu_cand > MUSEL_PSCORE_TH) & \
-             (mu_len > MUSEL_LEN_TH)
-
-    PSEL_MUSCORE_TH, PSEL_PSCORE_TH = 0, 90
-    p_cut = (mu_chi2_prot_cand > PSEL_MUSCORE_TH) & \
-            (prot_chi2_prot_cand < PSEL_PSCORE_TH)
+    p_cut = (mu_chi2_prot_cand > _det_cut_th(detector, "psel_muscore_th")) & \
+            (prot_chi2_prot_cand < _det_cut_th(detector, "psel_pscore_th"))
 
     return mu_cut & p_cut
 
@@ -358,7 +383,7 @@ def cathode_cut(df):
 
         return ~intersects_prism_vectorized(p_start, p_prot, (-5., -200., 0.), (5., 200., 500.)) & ~intersects_prism_vectorized(p_start, p_mu, (-5., -200., 0.), (5., 200., 500.))
     else:
-        return (df.nu_E_calo > -999)
+        return pd.Series(True, df.index)
 
 def intersects_prism_vectorized(p1_array, p2_array, prism_min=(-200., 100., 250.), prism_max=(200., 200., 500.), solid=True):
     """
@@ -437,9 +462,7 @@ def all_cuts(recodf, DETECTOR=None, det_run=None):
     two_prong_mask = twoprong_cut(recodf)
 
     ### PID cut
-    pid_mask = pid_cut_df(recodf.mu_chi2_of_mu_cand, recodf.mu_chi2_of_prot_cand,
-                            recodf.prot_chi2_of_mu_cand, recodf.prot_chi2_of_prot_cand,
-                            recodf.mu_len)
+    pid_mask = pid_cut(recodf)
 
     return presel_mask & cosmic_mask & flash_mask & two_prong_mask & pid_mask
 
