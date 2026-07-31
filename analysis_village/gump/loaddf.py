@@ -297,6 +297,9 @@ def load_one(fname, idf,
         df = df[preselection(df)]
 
     match = hdr[["run", "evt"]]
+    # The columns that identify an event across samples. Everything merged onto `match`
+    # after this point is metadata carried along as a column, NOT part of the key --
+    # in particular AVnu, which is derived from gc._fv_cut and so depends on `detector`.
     match_ind = list(match.columns)
     # if needed, include neutrino energy in matching information
     if match_Enu:
@@ -338,7 +341,7 @@ def load_one(fname, idf,
     print(f"[{os.path.basename(fname)} idf={idf}] dedup: dropped "
           f"{n_dup_pairs} duplicated {tuple(dedup_cols)} keys ({n_dup_rows} hdr rows)")
 
-    match = match.set_index(list(match.columns), append=True).droplevel([0,1]).sort_index()
+    match = match.set_index(match_ind, append=True).droplevel([0,1]).sort_index()
 
     # LOAD POT
     if offbeampot:
@@ -355,6 +358,18 @@ def load_one(fname, idf,
             pot = trig.gate_delta.sum()*(1-1/20.)/N_GATES_ON_PER_5e12POT*5e12
     else:
         pot = hdr.pot.sum()
+
+    # CORRECT POT FOR THE DEDUP
+    # The dedup above dropped events from `match`/`df`, but `hdr` (and the ICARUS
+    # trigger table) still describe every event, so the POT just computed covers
+    # events that are no longer in the frame. Scale it by the surviving fraction.
+    # This treats POT as uniform per event -- the same assumption `match_common_evts`
+    # makes -- which is the best available: for MC the POT sits only on the
+    # first_in_subrun records, so filtering `hdr` directly would charge the full
+    # subrun POT to whichever record happened to be dropped.
+    if n_dup_rows > 0:
+        pot *= 1. - n_dup_rows / len(hdr)
+
     # LOAD TRUTH
     if load_truth:
         mcdf = pd.read_hdf(fname, mcname % idf)
@@ -580,6 +595,7 @@ def load(fname, maxdf=None, **kwargs):
         matches.append(match)
     df = pd.concat(dfs).reset_index(drop=True)
     match = pd.concat(matches)
+    n_match_before = len(match)
 
     # CROSS-IDF DEDUP
     # `load_one` only sees one idf (split) at a time. The same physical event can
@@ -604,6 +620,8 @@ def load(fname, maxdf=None, **kwargs):
         match = match[~dup_mask]
         df_pairs = pd.MultiIndex.from_arrays([df[name] for name in dedup_levels])
         df = df[~df_pairs.isin(bad_pairs)]
+        # As in load_one: the events are gone, so their POT must go with them.
+        pots *= 1. - n_dup_rows / n_match_before
         print(f"[{os.path.basename(fname)}] cross-idf dedup: dropped "
               f"{n_dup_pairs} duplicated {tuple(dedup_levels)} keys "
               f"({n_dup_rows} match rows)")
@@ -642,23 +660,50 @@ def loadl(flist, progress=True, njob=None, **kwargs):
     return df, matches, pots
 
 def match_common_evts(mrgs, dfs, pots):
+    """Restrict every sample to the events common to all of them.
+
+    All output frames hold the *same* set of physical events, so they are all given
+    the *same* POT, taken from the group's nominal (index 0 by convention -- see
+    SDETVARS in the signal-box notebooks and DETVAR_FILES in mcdata_comparison.py).
+
+    Deriving the POT per member instead (`common_frac_i * pots[i]`, what this used to
+    do) is only equivalent when every sample has the same number of CAF records per
+    generated POT. When it does not -- e.g. a production that lost event records but
+    still books the full POT of those jobs -- the CV and the variation end up with
+    different normalizations for identical events, and that shows up downstream as a
+    flat normalization detector systematic that is pure bookkeeping.
+    """
     common_ind = mrgs[0].index
     for m in mrgs[1:]:
         common_ind = common_ind.intersection(m.index)
 
     common_df = pd.DataFrame({"common": 1}, index=common_ind)
 
+    # NB: isin(), not common_ind.size -- Index.intersection returns unique values, so
+    # against a match index with repeated keys the size ratio understates the fraction
+    # of rows actually kept.
+    common_frac = float(mrgs[0].index.isin(common_ind).mean())
+    pot_common = common_frac * pots[0]
+
+    # The members should agree on events-per-POT: they are the same generated events
+    # reconstructed differently. If they do not, one of the samples is missing event
+    # records relative to its own POT bookkeeping, and the matched result is only as
+    # trustworthy as that sample.
+    rates = [m.index.size / p for m, p in zip(mrgs, pots) if p > 0]
+    if len(rates) > 1 and max(rates) / min(rates) - 1 > 0.02:
+        print("WARNING: match_common_evts members disagree on events-per-POT by %.1f%% "
+              "(%s) -- check the inputs for missing events before trusting the "
+              "normalization." % (100*(max(rates)/min(rates) - 1),
+                                  ", ".join("%.4g" % r for r in rates)))
+
     outdfs = []
-    outpots = []
-    for m, df, p in zip(mrgs, dfs, pots):
-        common_frac = common_ind.size / m.index.size
-        outpots.append(common_frac*p)
+    for df in dfs:
         outdf = df.merge(common_df, left_on=common_ind.names, right_index=True, how="left")
         outdf["common"] = outdf["common"].fillna(0)
         outdf = outdf[outdf.common == 1]
         outdfs.append(outdf)
 
-    return outdfs, outpots
+    return outdfs, [pot_common]*len(pots)
 
 # Systematic class helpers for what is in these files
 class FluxSystematic(syst.WeightSystematic):
