@@ -206,6 +206,12 @@ class StatSampleSystematic(object):
         # Poisson variance of weighted events is square of weights
         w = self.df.loc[self.df[cut], self.scale]**2
         var = np.histogramdd([self.df.loc[self.df[cut], v].fillna(fillna) for v in var], bins=bins, weights=w)[0].flatten()*self.norm
+
+        if shapeonly:
+            diff = outern([b[1:] - b[:-1] for b in bins])
+            norm = np.sum(NCV*diff)
+            return np.diag(var)/norm**2
+
         return np.diag(var)
 
 class CorrelatedSystematic(Systematic):
