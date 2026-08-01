@@ -253,6 +253,7 @@ def flash_cut(df):
 # Final optimized selection
 # opt to ratio, min mu len 40, shared track score, per-detector PID
 # opt used the most updated calo treatment (no EMB IC, no sqmear15, double SBND 13)
+
 SBND_CUTS = {
     "nu_score_th": 0.35,
     "max_opening_angle": 160,
