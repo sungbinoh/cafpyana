@@ -234,6 +234,46 @@ def _write_cache(cache_file, df, match, pot):
     with h5py.File(cache_file, "a") as cf:
         cf.attrs["pot"] = pot
 
+# Track-splitting planes for the split_tracks argument: region -> (dim, coord).
+# Same planes as TrackSplittingCorrection.py / the signal-box track-split
+# systematic: the cathodes sit at the center of each ICARUS drift volume.
+SPLIT_REGIONS = {
+    "Z=0":          ("z", 0.0),
+    "East Cathode": ("x", 0.5*(gc.ICARUSRun4FVCuts["C0"]["x"]["min"] + gc.ICARUSRun4FVCuts["C0"]["x"]["max"])),
+    "West Cathode": ("x", 0.5*(gc.ICARUSRun4FVCuts["C1"]["x"]["min"] + gc.ICARUSRun4FVCuts["C1"]["x"]["max"])),
+}
+
+# Nominal binding-energy shift [GeV] for shift_binding_E, as in the signal-box
+# BE systematic
+BE_SHIFT = 0.025
+
+# Columns syst.split_tracks recomputes on the plane-crossing rows
+_SPLIT_COLS = ["mu_end_x", "mu_end_y", "mu_end_z", "mu_len",
+               "nu_E_calo", "del_p", "del_Tp", "del_phi", "mu_E", "mu_T"]
+
+def _apply_variations(df, shift_binding_E, split_tracks):
+    """Apply the requested variations to a loaded df.
+
+    split_tracks names a plane in SPLIT_REGIONS; every muon crossing it is
+    truncated there (syst.split_tracks) and its kinematics recomputed in place.
+    shift_binding_E recomputes the reco kinematics under BE -> BE + BE_SHIFT
+    (syst.shift_binding_energy; needs genie_mode, i.e. load_truth on MC).
+
+    Run after the cache read/write on purpose: the cache always holds the
+    unvaried df, so one cached load serves every variant and adding a variation
+    does not bust the existing cache.
+    """
+    if split_tracks is not None:
+        dim, coord = SPLIT_REGIONS[split_tracks]
+        s, crosses = syst.split_tracks(df, dim, coord)
+        # positional assignment: index labels are not guaranteed unique
+        rows = np.flatnonzero(crosses)
+        for c in _SPLIT_COLS:
+            df.iloc[rows, df.columns.get_loc(c)] = s[c].to_numpy()
+    if shift_binding_E:
+        df = syst.shift_binding_energy(df, BE_SHIFT)
+    return df
+
 #@profile
 def load_one(fname, idf,
     detector=None, # One of SBND, ICARUS, ICARUS Run4
@@ -243,6 +283,7 @@ def load_one(fname, idf,
     load_truth=True, load_crt=False, match_Enu=True, # load extra information
     offbeampot=False, # POT handling
     preselection=None, # apply preselection cut
+    shift_binding_E=False, split_tracks=None, # variations applied to the output df (see _apply_variations)
     cache_dir=None, # directory to cache output; None disables caching
     flashname=FLASH, hdrname=HDR, evtname=EVT, wgtname=WGT, mcname=MC, crtname=CRT, drops=None, lightmem=False): # override default table names
 
@@ -268,7 +309,7 @@ def load_one(fname, idf,
                 raise err 
             with h5py.File(cache_file, "r") as cf:
                 pot = float(cf.attrs["pot"])
-            return df, match, pot
+            return _apply_variations(df, shift_binding_E, split_tracks), match, pot
 
     df =  pd.read_hdf(fname, evtname % idf)
     hdr = pd.read_hdf(fname, hdrname % idf)
@@ -434,7 +475,7 @@ def load_one(fname, idf,
     if not include_syst:
         if cache_dir is not None:
             _write_cache(cache_file, df, match, pot)
-        return df, match, pot
+        return _apply_variations(df, shift_binding_E, split_tracks), match, pot
 
     # LOAD WEIGHTS
     wgt = pd.read_hdf(fname, wgtname % idf) 
@@ -585,7 +626,7 @@ def load_one(fname, idf,
     if cache_dir is not None:
         _write_cache(cache_file, mrg, match, pot)
 
-    return mrg, match, pot
+    return _apply_variations(mrg, shift_binding_E, split_tracks), match, pot
 
 
 def load(fname, maxdf=None, **kwargs):
