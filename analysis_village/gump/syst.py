@@ -98,6 +98,114 @@ def shift_binding_energy(df, dBE, fraction=1.0, scale="glob_scale"):
     s[scale] = s[scale]*fraction
     return pd.concat([cv, s])
 
+def v_variation(df, setvars):
+    df = df[[c for c in df.columns if "univ" not in c]].copy()
+    
+    for (new, old) in setvars:
+        # Raise an error immediately if the 'new' column doesn't exist
+        if new not in df.columns:
+            raise KeyError(f"Column '{new}' does not exist in the DataFrame.")
+            
+        # Only overwrite rows where 'old' is NOT NaN
+        is_not_nan = df[old].notna()
+        df.loc[is_not_nan, new] = df.loc[is_not_nan, old]
+            
+    return df
+
+def v_chi2alpha(df):
+    setvars = [
+        ("mu_chi2_of_mu_cand", "mu_chi2alpha_p_of_mu_cand"),
+        ("mu_chi2_of_prot_cand",  "mu_chi2alpha_p_of_prot_cand"),
+        ("prot_chi2_of_mu_cand", "prot_chi2alpha_p_of_mu_cand"),
+        ("prot_chi2_of_prot_cand",  "prot_chi2alpha_p_of_prot_cand"),
+    ]
+    return v_variation(df, setvars)
+
+def v_chi2beta(df):
+    setvars = [
+        ("mu_chi2_of_mu_cand", "mu_chi2beta_p_of_mu_cand"),
+        ("mu_chi2_of_prot_cand",  "mu_chi2beta_p_of_prot_cand"),
+        ("prot_chi2_of_mu_cand", "prot_chi2beta_p_of_mu_cand"),
+        ("prot_chi2_of_prot_cand",  "prot_chi2beta_p_of_prot_cand"),
+    ]
+    return v_variation(df, setvars)
+
+def v_chi2R(df):
+    setvars = [
+        ("mu_chi2_of_mu_cand", "mu_chi2R_p_of_mu_cand"),
+        ("mu_chi2_of_prot_cand",  "mu_chi2R_p_of_prot_cand"),
+        ("prot_chi2_of_mu_cand", "prot_chi2R_p_of_mu_cand"),
+        ("prot_chi2_of_prot_cand",  "prot_chi2R_p_of_prot_cand"),
+    ]
+    return v_variation(df, setvars)
+
+def v_flashscale(df, updn):
+    TRIG_PE_SCALE     = {1: 0.642, 2: 0.632, 4: 0.358}  # Run -> best-fit s
+    TRIG_PE_SCALE_UNC = {1: 0.005, 2: 0.024, 4: 0.017}  # Run -> unc. on s
+
+    # 1. Map the dictionaries to the 'Run' column to get Series for both parts
+    unc_series = df["Run"].map(TRIG_PE_SCALE_UNC).astype(float)
+    scale_series = df["Run"].map(TRIG_PE_SCALE).astype(float)
+
+    # 2. Divide the two Series element-wise
+    f = unc_series / scale_series
+
+    # 3. Perform your vectorized math
+    df["flash_maxpe_var"] = df["flash_maxpe"] * (1 - updn * f)
+
+    setvars = [
+        ("flash_maxpe", "flash_maxpe_var"),
+    ]
+    ret = v_variation(df, setvars)
+
+    # Note: Added axis=1 here because drop defaults to dropping rows
+    return ret.drop("flash_maxpe_var", axis=1)
+
+def v_chi2smear(df):
+    setvars = [
+        ("mu_chi2_of_mu_cand", "mu_chi2smear13_of_mu_cand"),
+        ("mu_chi2_of_prot_cand",  "mu_chi2smear13_of_prot_cand"),
+        ("prot_chi2_of_mu_cand", "prot_chi2smear13_of_mu_cand"),
+        ("prot_chi2_of_prot_cand",  "prot_chi2smear13_of_prot_cand"),
+    ]
+    return v_variation(df, setvars)
+
+def v_chi2hi(df):
+    setvars = [
+        ("mu_chi2_of_mu_cand", "mu_chi2hi_of_mu_cand"),
+        ("mu_chi2_of_prot_cand",  "mu_chi2hi_of_prot_cand"),
+        ("prot_chi2_of_mu_cand", "prot_chi2hi_of_mu_cand"),
+        ("prot_chi2_of_prot_cand",  "prot_chi2hi_of_prot_cand"),
+    ]
+    return v_variation(df, setvars)
+
+def v_chi2lo(df):
+    setvars = [
+        ("mu_chi2_of_mu_cand", "mu_chi2lo_of_mu_cand"),
+        ("mu_chi2_of_prot_cand",  "mu_chi2lo_of_prot_cand"),
+        ("prot_chi2_of_mu_cand", "prot_chi2lo_of_mu_cand"),
+        ("prot_chi2_of_prot_cand",  "prot_chi2lo_of_prot_cand"),
+    ]
+    return v_variation(df, setvars)
+
+def v_chi22hi(df):
+    setvars = [
+        ("mu_chi2_of_mu_cand", "mu_chi22hi_of_mu_cand"),
+        ("mu_chi2_of_prot_cand",  "mu_chi22hi_of_prot_cand"),
+        ("prot_chi2_of_mu_cand", "prot_chi22hi_of_mu_cand"),
+        ("prot_chi2_of_prot_cand",  "prot_chi22hi_of_prot_cand"),
+    ]
+    return v_variation(df, setvars)
+
+def v_chi22lo(df):
+    setvars = [
+        ("mu_chi2_of_mu_cand", "mu_chi22lo_of_mu_cand"),
+        ("mu_chi2_of_prot_cand",  "mu_chi22lo_of_prot_cand"),
+        ("prot_chi2_of_mu_cand", "prot_chi22lo_of_mu_cand"),
+        ("prot_chi2_of_prot_cand",  "prot_chi22lo_of_prot_cand"),
+    ]
+    return v_variation(df, setvars)
+
 class SystematicList(object):
     def __init__(self, systs):
         self.systs = systs
