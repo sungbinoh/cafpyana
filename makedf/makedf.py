@@ -623,6 +623,18 @@ def make_stubs(f, det="ICARUS"):
     #return pd.concat(df_tosave, axis=1)
 
 def make_all_spine_df(f, get_best_match=True, **trkArgs):
+    """
+    SPINE dataframe maker which containes all SPINE reco and true interaction and particle variables.
+
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
+    :param get_best_match: `True` if a best match selection is needed.
+    :type get_best_match: bool
+
+    :return: Full SPINE dataframe
+    :rtype: pd.DataFrame
+    """
+
     # Load SPINE interactions dataframe
     spine_int_df = make_spine_int_df(f, get_best_match)
 
@@ -693,10 +705,51 @@ def make_spine_part_mcpart_df(f, get_best_match=True):
 
     return spinepart_mcpart_df
 
+def make_spine_reco_int_df(f):
+    """
+    SPINE dataframe maker which containes all SPINE reco interaction variables.
+    
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
+
+    :return: SPINE reco interactions dataframe
+    :rtype: pd.DataFrame   
+    """
+    # Get reco tree from file.
+    rec_tree = f["recTree"]
+
+    # Load SPINE interaction and matches branches.
+    spineint_df             = loadbranches(rec_tree, spineint_branches)
+
+    cols_to_rename = ["vertex"]
+    rename_to_XYZ(spineint_df, cols_to_rename)
+
+    return spineint_df
+
+def make_spine_true_int_df(f):
+    """
+    SPINE dataframe maker which containes all SPINE true interaction variables.
+    
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
+
+    :return: SPINE true interactions dataframe
+    :rtype: pd.DataFrame   
+    """
+    # Get reco tree from file.
+    rec_tree = f["recTree"]
+
+    # Load SPINE interaction.
+    spinetint_df             = loadbranches(rec_tree, spinetint_branches)
+
+    cols_to_rename = ["momentum", "reco_vertex", "vertex", "position"]
+    rename_to_XYZ(spinetint_df, cols_to_rename)
+    
+    return spinetint_df
+
 def make_spine_int_df(f, get_best_match=True):
     """
-    SPINE dataframe maker which containes all SPINE reco and true interaction variables
-    matched with MC nu dataframe.
+    SPINE dataframe maker which containes all SPINE reco and true interaction variables.
     
     :param f: file handle to the input ROOT file
     :type f: uproot4.open file handle
@@ -710,8 +763,8 @@ def make_spine_int_df(f, get_best_match=True):
     rec_tree = f["recTree"]
 
     # Load SPINE interaction and matches branches.
-    spinetint_df            = loadbranches(rec_tree, spinetint_branches)
-    spineint_df             = loadbranches(rec_tree, spineint_branches)
+    spinetint_df            = make_spine_true_int_df(f)
+    spineint_df             = make_spine_reco_int_df(f)
     spineint_matchids_df    = loadbranches(rec_tree, spineint_matched_branches)
     spineint_matchovrlp_df  = loadbranches(rec_tree, spineint_matchovrlp_branches)
 
@@ -760,16 +813,51 @@ def make_spine_int_df(f, get_best_match=True):
         validate=validate_matched_with_true
     ).set_index(("rec.dlp..index"), append=True)
 
-    # Rename I0-I1-I2 variables to x-y-z
-    cols_to_rename = ["momentum", "end_point", "start_point", "start_dir", "end_dir", "reco_vertex", "vertex"]
-    rename_to_XYZ(spineint_matched_with_true_df, cols_to_rename)
-
     return spineint_matched_with_true_df
+
+def make_spine_reco_part_df(f):
+    """
+    SPINE dataframe maker which containes all SPINE reco particle variables.
+    
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
+
+    :return: SPINE reco particles dataframe
+    :rtype: pd.DataFrame   
+    """
+    rec_tree = f["recTree"]
+
+    spinepart_df                = loadbranches(rec_tree, spinepart_branches)
+
+    cols_to_rename = ["start_dir", "start_point", "end_dir", "end_point", "momentum"]
+    rename_to_XYZ(spinepart_df, cols_to_rename)
+
+    return spinepart_df
+
+def make_spine_true_part_df(f):
+    """
+    SPINE dataframe maker which containes all SPINE true particle variables.
+    
+    :param f: file handle to the input ROOT file
+    :type f: uproot4.open file handle
+
+    :return: SPINE true particles dataframe
+    :rtype: pd.DataFrame   
+    """
+    rec_tree = f["recTree"]
+
+    spinetpart_df               = loadbranches(rec_tree, spinetpart_branches)
+
+    cols_to_rename = ["first_step", "start_dir", "reco_start_dir", "start_point", 
+                      "last_step", "end_dir", "reco_end_dir", "end_point", "end_position", "end_momentum",
+                      "position", "parent_position", "ancestor_position", "momentum", "reco_momentum"]
+    rename_to_XYZ(spinetpart_df, cols_to_rename)
+
+    return spinetpart_df
 
 def make_spine_part_df(f, get_best_match=True):
     """
-    SPINE dataframe maker which containes all SPINE reco and true particle variables 
-    matched with MC nu dataframe.
+    SPINE dataframe maker which containes all SPINE reco and true particle variables.
     
     :param f: file handle to the input ROOT file
     :type f: uproot4.open file handle
@@ -781,8 +869,8 @@ def make_spine_part_df(f, get_best_match=True):
     """
     rec_tree = f["recTree"]
 
-    spinepart_df                = loadbranches(rec_tree, spinepart_branches)
-    spinetpart_df               = loadbranches(rec_tree, spinetpart_branches)
+    spinepart_df                = make_spine_reco_part_df(f)
+    spinetpart_df               = make_spine_true_part_df(f)
     spinepart_matchids_df       = loadbranches(rec_tree, spinepart_matched_branches)
     spinepart_matchovrlp_df     = loadbranches(rec_tree, spinepart_matchovrlp_branches)
 
@@ -830,10 +918,6 @@ def make_spine_part_df(f, get_best_match=True):
         how="left",
         validate=validate_matched_with_true
     ).set_index(["rec.dlp..index", "rec.dlp.particles..index"], append=True)
-
-    # Rename I0-I1-I2 variables to x-y-z
-    cols_to_rename = ["momentum", "end_point", "start_point", "start_dir", "end_dir", "vertex"] 
-    rename_to_XYZ(spinepart_matched_with_true_df, cols_to_rename)
 
     return spinepart_matched_with_true_df
 
