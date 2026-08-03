@@ -176,6 +176,12 @@ flux_syst = [
  'piplus_Flux'
 ]
 
+g4_syst = [
+ 'reinteractions_piminus_Geant4',
+ 'reinteractions_piplus_Geant4',
+ 'reinteractions_proton_Geant4',
+]
+
 truthvars = {
   "true_E": ("nu_E", ""),
   "true_nu_pdg": ("pdg", ""),
@@ -202,7 +208,14 @@ def scale_pot(df, pot, desired_pot):
 
 def _cache_key(fname, idf, **kwargs):
     """Build a deterministic hash from the input file path, split index, and all keyword args."""
-    key_dict = {"fname": os.path.abspath(fname), "idf": idf}
+    key_dict = {"fname": os.path.abspath(fname), "idf": idf, "_cache_version": _CACHE_VERSION}
+    # Include the input file's identity, not just its path, so regenerating a .df in
+    # place busts the cache instead of silently serving the old df *and* the old POT.
+    # NB: this also means re-syncing the .df directory (which rewrites mtimes) forces
+    # a full re-load even if the contents are unchanged.
+    st = os.stat(fname)
+    key_dict["_fsize"] = st.st_size
+    key_dict["_fmtime"] = int(st.st_mtime)
     # Only include serializable kwargs (skip preselection function)
     for k, v in sorted(kwargs.items()):
         if callable(v):
@@ -221,15 +234,131 @@ def _write_cache(cache_file, df, match, pot):
     with h5py.File(cache_file, "a") as cf:
         cf.attrs["pot"] = pot
 
+# Track-splitting planes for the split_tracks argument: region -> (dim, coord).
+# Same planes as TrackSplittingCorrection.py / the signal-box track-split
+# systematic: the cathodes sit at the center of each ICARUS drift volume.
+SPLIT_REGIONS = {
+    "Z=0":          ("z", 0.0),
+    "East Cathode": ("x", 0.5*(gc.ICARUSRun4FVCuts["C0"]["x"]["min"] + gc.ICARUSRun4FVCuts["C0"]["x"]["max"])),
+    "West Cathode": ("x", 0.5*(gc.ICARUSRun4FVCuts["C1"]["x"]["min"] + gc.ICARUSRun4FVCuts["C1"]["x"]["max"])),
+}
+
+# Fraction of the plane-crossing muons that split_tracks actually splits, per
+# region: the Run2+Run4 combined values measured by TrackSplittingCorrection.py
+# (TrackSplittingCorrection-2026-08-01.md), as used by the signal-box track-split
+# systematic.
+SPLIT_FRAC = {"Z=0": 0.0960, "East Cathode": 0.0447, "West Cathode": 0.0398}
+
+# Run periods each plane applies to. The east cathode lies outside the Run 2 muon
+# fiducial volume (the East-East TPC was off in Run 2), so it has Run 4 crossers
+# only -- same table as TrackSplittingCorrection.split_points().
+SPLIT_RUNS = {"Z=0": [2, 4], "East Cathode": [4], "West Cathode": [2, 4]}
+
+# Nominal binding-energy shift [GeV] for shift_binding_E, as in the signal-box
+# BE systematic
+BE_SHIFT = 0.025
+
+# Fraction of events the binding-energy shift is applied to, as in the signal-box
+# BE systematic (eres_ar23_ar25.BE_FRACTION, mcdata_comparison)
+BE_FRACTION = 0.5
+
+# Columns syst.split_tracks recomputes on the plane-crossing rows
+_SPLIT_COLS = ["mu_end_x", "mu_end_y", "mu_end_z", "mu_len",
+               "nu_E_calo", "del_p", "del_Tp", "del_phi", "mu_E", "mu_T"]
+
+def _weight_col(df):
+    """The column the mixture weight is folded into.
+
+    _apply_variations runs inside load_one, before scale_pot creates glob_scale;
+    cvwgt is always there by then and scale_pot computes glob_scale = scale*cvwgt,
+    so folding into cvwgt propagates. Prefer glob_scale when it already exists so
+    this is also correct on an already-scaled frame.
+    """
+    return "glob_scale" if "glob_scale" in df.columns else "cvwgt"
+
+def _mix(df, varied, rows, frac):
+    """Deterministic f-weighted mixture of a variation applied to `rows`.
+
+    The affected rows enter twice -- unvaried at (1-f)*w and varied at f*w --
+    and every other row is left alone, so histogramming the result with the
+    weight column reproduces (1-f)*nominal + f*varied exactly, with no added MC
+    statistical noise. Same convention as syst.TrackSplittingSystematic and
+    syst.shift_binding_energy(fraction=...).
+
+    `rows` is positional (index labels are not guaranteed unique), and `varied`
+    holds exactly those rows, already carrying their unscaled weights.
+    """
+    w = _weight_col(df)
+    df = df.copy()
+    wi = df.columns.get_loc(w)
+    df.iloc[rows, wi] = df.iloc[rows, wi].to_numpy()*(1 - frac)
+    varied = varied.copy()
+    varied[w] = varied[w].to_numpy()*frac
+    return pd.concat([df, varied])
+
+def _apply_variations(df, shift_binding_E, split_tracks,
+                      shift_fraction=None, split_fraction=None):
+    """Apply the requested variations to a loaded df.
+
+    split_tracks names a plane in SPLIT_REGIONS; muons crossing it are truncated
+    there (syst.split_tracks), restricted to the runs the plane applies to
+    (SPLIT_RUNS). shift_binding_E recomputes the reco kinematics under
+    BE -> BE + BE_SHIFT (syst.shift_binding_energy; needs genie_mode, i.e.
+    load_truth on MC).
+
+    Each variation is applied to only a fraction of the events -- SPLIT_FRAC[region]
+    and BE_FRACTION, the values measured for / used by the signal-box systematics --
+    as the deterministic f-weighted mixture described in _mix. Pass
+    split_fraction / shift_fraction to override; 1.0 varies every affected event
+    in place, as before the fractions existed.
+
+    With a fraction below 1 the returned frame therefore has MORE ROWS than the
+    input and duplicate index labels, though the total weight is unchanged: the
+    split adds a copy of the crossing rows, the BE shift a copy of every row (it
+    goes through syst.shift_binding_energy's own mixture -- see below). Cut
+    columns must be evaluated downstream of this (loaddf computes none itself):
+    the split moves mu_end_*, which the FV cuts read.
+
+    Run after the cache read/write on purpose: the cache always holds the
+    unvaried df, so one cached load serves every variant and adding a variation
+    does not bust the existing cache.
+    """
+    if split_tracks is not None:
+        dim, coord = SPLIT_REGIONS[split_tracks]
+        f = SPLIT_FRAC[split_tracks] if split_fraction is None else split_fraction
+        s, crosses = syst.split_tracks(df, dim, coord, runs=SPLIT_RUNS[split_tracks])
+        # positional assignment: index labels are not guaranteed unique
+        rows = np.flatnonzero(crosses)
+        if len(rows) == 0:
+            pass # no crossers -> nothing to vary (and nothing to concat)
+        elif f >= 1.0:
+            for c in _SPLIT_COLS:
+                df.iloc[rows, df.columns.get_loc(c)] = s[c].to_numpy()
+        else:
+            df = _mix(df, s, rows, f)
+    if shift_binding_E:
+        f = BE_FRACTION if shift_fraction is None else shift_fraction
+        # hand off to shift_binding_energy's own mixture rather than mixing the
+        # stored CV rows in here with _mix: its unshifted half is *rebuilt* by
+        # recompute_kinematics, and that recompute does not reproduce the stored
+        # CV columns exactly (~5 MeV in nu_E_calo, more in del_p/del_phi), so
+        # mixing against the stored CV would give a different universe than the
+        # signal-box systematic. Costs a whole-frame copy, which is why the
+        # caller should slim the frame first if memory is tight.
+        df = syst.shift_binding_energy(df, BE_SHIFT, fraction=f, scale=_weight_col(df))
+    return df
+
 #@profile
 def load_one(fname, idf,
     detector=None, # One of SBND, ICARUS, ICARUS Run4
     include_syst=True, nuniv=100, spline=False, xsec_univ=False, xsec_spline=False,# systematic handling
-    reweight_aFF=False, pot_univ=False, flux_univ=True, sep_flux_univ=False,
-    pot_spline=False, detvar_spline=False,
+    reweight_aFF=False, pot_univ=False, flux_univ=True, sep_flux_univ=False, g4_univ=True,
+    pot_spline=False, detvar_spline=False, spline_dir="rwt_outputs",
     load_truth=True, load_crt=False, match_Enu=True, # load extra information
     offbeampot=False, # POT handling
     preselection=None, # apply preselection cut
+    shift_binding_E=False, split_tracks=None, # variations applied to the output df (see _apply_variations)
+    shift_fraction=None, split_fraction=None, # fraction of events each variation is applied to (None -> BE_FRACTION / SPLIT_FRAC)
     cache_dir=None, # directory to cache output; None disables caching
     flashname=FLASH, hdrname=HDR, evtname=EVT, wgtname=WGT, mcname=MC, crtname=CRT, drops=None, lightmem=False): # override default table names
 
@@ -239,8 +368,12 @@ def load_one(fname, idf,
     if cache_dir is not None:
         cache_hash = _cache_key(fname, idf, detector=detector, include_syst=include_syst,
             nuniv=nuniv, spline=spline, xsec_univ=xsec_univ, xsec_spline=xsec_spline, reweight_aFF=reweight_aFF, pot_univ=pot_univ,
+            flux_univ=flux_univ, sep_flux_univ=sep_flux_univ, g4_univ=g4_univ,
             load_truth=load_truth, load_crt=load_crt,
-            match_Enu=match_Enu, offbeampot=offbeampot, preselection=preselection)
+            match_Enu=match_Enu, offbeampot=offbeampot, preselection=preselection,
+            drops=drops, lightmem=lightmem,
+            flashname=flashname, hdrname=hdrname, evtname=evtname,
+            wgtname=wgtname, mcname=mcname, crtname=crtname)
         cache_file = os.path.join(cache_dir, cache_hash + ".h5")
         if os.path.exists(cache_file):
             try:
@@ -251,7 +384,7 @@ def load_one(fname, idf,
                 raise err 
             with h5py.File(cache_file, "r") as cf:
                 pot = float(cf.attrs["pot"])
-            return df, match, pot
+            return _apply_variations(df, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
     df =  pd.read_hdf(fname, evtname % idf)
     hdr = pd.read_hdf(fname, hdrname % idf)
@@ -290,6 +423,9 @@ def load_one(fname, idf,
         df = df[preselection(df)]
 
     match = hdr[["run", "evt"]]
+    # The columns that identify an event across samples. Everything merged onto `match`
+    # after this point is metadata carried along as a column, NOT part of the key --
+    # in particular AVnu, which is derived from gc._fv_cut and so depends on `detector`.
     match_ind = list(match.columns)
     # if needed, include neutrino energy in matching information
     if match_Enu:
@@ -331,7 +467,7 @@ def load_one(fname, idf,
     print(f"[{os.path.basename(fname)} idf={idf}] dedup: dropped "
           f"{n_dup_pairs} duplicated {tuple(dedup_cols)} keys ({n_dup_rows} hdr rows)")
 
-    match = match.set_index(list(match.columns), append=True).droplevel([0,1]).sort_index()
+    match = match.set_index(match_ind, append=True).droplevel([0,1]).sort_index()
 
     # LOAD POT
     if offbeampot:
@@ -348,6 +484,18 @@ def load_one(fname, idf,
             pot = trig.gate_delta.sum()*(1-1/20.)/N_GATES_ON_PER_5e12POT*5e12
     else:
         pot = hdr.pot.sum()
+
+    # CORRECT POT FOR THE DEDUP
+    # The dedup above dropped events from `match`/`df`, but `hdr` (and the ICARUS
+    # trigger table) still describe every event, so the POT just computed covers
+    # events that are no longer in the frame. Scale it by the surviving fraction.
+    # This treats POT as uniform per event -- the same assumption `match_common_evts`
+    # makes -- which is the best available: for MC the POT sits only on the
+    # first_in_subrun records, so filtering `hdr` directly would charge the full
+    # subrun POT to whichever record happened to be dropped.
+    if n_dup_rows > 0:
+        pot *= 1. - n_dup_rows / len(hdr)
+
     # LOAD TRUTH
     if load_truth:
         mcdf = pd.read_hdf(fname, mcname % idf)
@@ -362,7 +510,7 @@ def load_one(fname, idf,
         if "crthit" in df.columns: del df["crthit"]
 
         crtdf = pd.read_hdf(fname, crtname % idf)
-        crthit = ((crt.time > -1) & (crt.time < 1.8) & (crt.plane != 50)).groupby(level=[0, 1]).any()
+        crthit = ((crtdf.time > -1) & (crtdf.time < 1.8) & (crtdf.plane != 50)).groupby(level=[0, 1]).any()
         crthit.name = "crthit"
         df = df.join(crthit, on=["__ntuple", "entry"])
 
@@ -402,7 +550,7 @@ def load_one(fname, idf,
     if not include_syst:
         if cache_dir is not None:
             _write_cache(cache_file, df, match, pot)
-        return df, match, pot
+        return _apply_variations(df, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
     # LOAD WEIGHTS
     wgt = pd.read_hdf(fname, wgtname % idf) 
@@ -410,6 +558,10 @@ def load_one(fname, idf,
     if flux_univ:
         for i in range(min(100, nuniv)):
             skim["flux_univ%i" % i] = np.prod([wgt[s]["univ_%i" % i] for s in flux_syst], axis=0)
+
+    if g4_univ:
+        for i in range(min(100, nuniv)):
+            skim["g4_univ%i" % i] = np.prod([wgt[s]["univ_%i" % i] for s in g4_syst], axis=0)
 
     if pot_univ:
         rng = np.random.default_rng(seed=24601) # repeatable random numbers
@@ -549,7 +701,7 @@ def load_one(fname, idf,
     if cache_dir is not None:
         _write_cache(cache_file, mrg, match, pot)
 
-    return mrg, match, pot
+    return _apply_variations(mrg, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
 
 def load(fname, maxdf=None, **kwargs):
@@ -569,6 +721,7 @@ def load(fname, maxdf=None, **kwargs):
         matches.append(match)
     df = pd.concat(dfs).reset_index(drop=True)
     match = pd.concat(matches)
+    n_match_before = len(match)
 
     # CROSS-IDF DEDUP
     # `load_one` only sees one idf (split) at a time. The same physical event can
@@ -593,6 +746,8 @@ def load(fname, maxdf=None, **kwargs):
         match = match[~dup_mask]
         df_pairs = pd.MultiIndex.from_arrays([df[name] for name in dedup_levels])
         df = df[~df_pairs.isin(bad_pairs)]
+        # As in load_one: the events are gone, so their POT must go with them.
+        pots *= 1. - n_dup_rows / n_match_before
         print(f"[{os.path.basename(fname)}] cross-idf dedup: dropped "
               f"{n_dup_pairs} duplicated {tuple(dedup_levels)} keys "
               f"({n_dup_rows} match rows)")
@@ -631,28 +786,60 @@ def loadl(flist, progress=True, njob=None, **kwargs):
     return df, matches, pots
 
 def match_common_evts(mrgs, dfs, pots):
+    """Restrict every sample to the events common to all of them.
+
+    All output frames hold the *same* set of physical events, so they are all given
+    the *same* POT, taken from the group's nominal (index 0 by convention -- see
+    SDETVARS in the signal-box notebooks and DETVAR_FILES in mcdata_comparison.py).
+
+    Deriving the POT per member instead (`common_frac_i * pots[i]`, what this used to
+    do) is only equivalent when every sample has the same number of CAF records per
+    generated POT. When it does not -- e.g. a production that lost event records but
+    still books the full POT of those jobs -- the CV and the variation end up with
+    different normalizations for identical events, and that shows up downstream as a
+    flat normalization detector systematic that is pure bookkeeping.
+    """
     common_ind = mrgs[0].index
     for m in mrgs[1:]:
         common_ind = common_ind.intersection(m.index)
 
     common_df = pd.DataFrame({"common": 1}, index=common_ind)
 
+    # NB: isin(), not common_ind.size -- Index.intersection returns unique values, so
+    # against a match index with repeated keys the size ratio understates the fraction
+    # of rows actually kept.
+    common_frac = float(mrgs[0].index.isin(common_ind).mean())
+    pot_common = common_frac * pots[0]
+
+    # The members should agree on events-per-POT: they are the same generated events
+    # reconstructed differently. If they do not, one of the samples is missing event
+    # records relative to its own POT bookkeeping, and the matched result is only as
+    # trustworthy as that sample.
+    rates = [m.index.size / p for m, p in zip(mrgs, pots) if p > 0]
+    if len(rates) > 1 and max(rates) / min(rates) - 1 > 0.02:
+        print("WARNING: match_common_evts members disagree on events-per-POT by %.1f%% "
+              "(%s) -- check the inputs for missing events before trusting the "
+              "normalization." % (100*(max(rates)/min(rates) - 1),
+                                  ", ".join("%.4g" % r for r in rates)))
+
     outdfs = []
-    outpots = []
-    for m, df, p in zip(mrgs, dfs, pots):
-        common_frac = common_ind.size / m.index.size
-        outpots.append(common_frac*p)
+    for df in dfs:
         outdf = df.merge(common_df, left_on=common_ind.names, right_index=True, how="left")
         outdf["common"] = outdf["common"].fillna(0)
         outdf = outdf[outdf.common == 1]
         outdfs.append(outdf)
 
-    return outdfs, outpots
+    return outdfs, [pot_common]*len(pots)
 
 # Systematic class helpers for what is in these files
 class FluxSystematic(syst.WeightSystematic):
     def __init__(self, df, scale="glob_scale"):
         wgts = ["flux_univ%i" % i for i in range(100)]
+        super().__init__(df, wgts, scale=scale)
+
+class G4Systematic(syst.WeightSystematic):
+    def __init__(self, df, scale="glob_scale"):
+        wgts = ["g4_univ%i" % i for i in range(100)]
         super().__init__(df, wgts, scale=scale)
 
 class XSecSystematic(syst.WeightSystematic):
