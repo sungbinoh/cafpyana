@@ -243,21 +243,81 @@ SPLIT_REGIONS = {
     "West Cathode": ("x", 0.5*(gc.ICARUSRun4FVCuts["C1"]["x"]["min"] + gc.ICARUSRun4FVCuts["C1"]["x"]["max"])),
 }
 
+# Fraction of the plane-crossing muons that split_tracks actually splits, per
+# region: the Run2+Run4 combined values measured by TrackSplittingCorrection.py
+# (TrackSplittingCorrection-2026-08-01.md), as used by the signal-box track-split
+# systematic.
+SPLIT_FRAC = {"Z=0": 0.0960, "East Cathode": 0.0447, "West Cathode": 0.0398}
+
+# Run periods each plane applies to. The east cathode lies outside the Run 2 muon
+# fiducial volume (the East-East TPC was off in Run 2), so it has Run 4 crossers
+# only -- same table as TrackSplittingCorrection.split_points().
+SPLIT_RUNS = {"Z=0": [2, 4], "East Cathode": [4], "West Cathode": [2, 4]}
+
 # Nominal binding-energy shift [GeV] for shift_binding_E, as in the signal-box
 # BE systematic
 BE_SHIFT = 0.025
+
+# Fraction of events the binding-energy shift is applied to, as in the signal-box
+# BE systematic (eres_ar23_ar25.BE_FRACTION, mcdata_comparison)
+BE_FRACTION = 0.5
 
 # Columns syst.split_tracks recomputes on the plane-crossing rows
 _SPLIT_COLS = ["mu_end_x", "mu_end_y", "mu_end_z", "mu_len",
                "nu_E_calo", "del_p", "del_Tp", "del_phi", "mu_E", "mu_T"]
 
-def _apply_variations(df, shift_binding_E, split_tracks):
+def _weight_col(df):
+    """The column the mixture weight is folded into.
+
+    _apply_variations runs inside load_one, before scale_pot creates glob_scale;
+    cvwgt is always there by then and scale_pot computes glob_scale = scale*cvwgt,
+    so folding into cvwgt propagates. Prefer glob_scale when it already exists so
+    this is also correct on an already-scaled frame.
+    """
+    return "glob_scale" if "glob_scale" in df.columns else "cvwgt"
+
+def _mix(df, varied, rows, frac):
+    """Deterministic f-weighted mixture of a variation applied to `rows`.
+
+    The affected rows enter twice -- unvaried at (1-f)*w and varied at f*w --
+    and every other row is left alone, so histogramming the result with the
+    weight column reproduces (1-f)*nominal + f*varied exactly, with no added MC
+    statistical noise. Same convention as syst.TrackSplittingSystematic and
+    syst.shift_binding_energy(fraction=...).
+
+    `rows` is positional (index labels are not guaranteed unique), and `varied`
+    holds exactly those rows, already carrying their unscaled weights.
+    """
+    w = _weight_col(df)
+    df = df.copy()
+    wi = df.columns.get_loc(w)
+    df.iloc[rows, wi] = df.iloc[rows, wi].to_numpy()*(1 - frac)
+    varied = varied.copy()
+    varied[w] = varied[w].to_numpy()*frac
+    return pd.concat([df, varied])
+
+def _apply_variations(df, shift_binding_E, split_tracks,
+                      shift_fraction=None, split_fraction=None):
     """Apply the requested variations to a loaded df.
 
-    split_tracks names a plane in SPLIT_REGIONS; every muon crossing it is
-    truncated there (syst.split_tracks) and its kinematics recomputed in place.
-    shift_binding_E recomputes the reco kinematics under BE -> BE + BE_SHIFT
-    (syst.shift_binding_energy; needs genie_mode, i.e. load_truth on MC).
+    split_tracks names a plane in SPLIT_REGIONS; muons crossing it are truncated
+    there (syst.split_tracks), restricted to the runs the plane applies to
+    (SPLIT_RUNS). shift_binding_E recomputes the reco kinematics under
+    BE -> BE + BE_SHIFT (syst.shift_binding_energy; needs genie_mode, i.e.
+    load_truth on MC).
+
+    Each variation is applied to only a fraction of the events -- SPLIT_FRAC[region]
+    and BE_FRACTION, the values measured for / used by the signal-box systematics --
+    as the deterministic f-weighted mixture described in _mix. Pass
+    split_fraction / shift_fraction to override; 1.0 varies every affected event
+    in place, as before the fractions existed.
+
+    With a fraction below 1 the returned frame therefore has MORE ROWS than the
+    input and duplicate index labels, though the total weight is unchanged: the
+    split adds a copy of the crossing rows, the BE shift a copy of every row (it
+    goes through syst.shift_binding_energy's own mixture -- see below). Cut
+    columns must be evaluated downstream of this (loaddf computes none itself):
+    the split moves mu_end_*, which the FV cuts read.
 
     Run after the cache read/write on purpose: the cache always holds the
     unvaried df, so one cached load serves every variant and adding a variation
@@ -265,13 +325,27 @@ def _apply_variations(df, shift_binding_E, split_tracks):
     """
     if split_tracks is not None:
         dim, coord = SPLIT_REGIONS[split_tracks]
-        s, crosses = syst.split_tracks(df, dim, coord)
+        f = SPLIT_FRAC[split_tracks] if split_fraction is None else split_fraction
+        s, crosses = syst.split_tracks(df, dim, coord, runs=SPLIT_RUNS[split_tracks])
         # positional assignment: index labels are not guaranteed unique
         rows = np.flatnonzero(crosses)
-        for c in _SPLIT_COLS:
-            df.iloc[rows, df.columns.get_loc(c)] = s[c].to_numpy()
+        if len(rows) == 0:
+            pass # no crossers -> nothing to vary (and nothing to concat)
+        elif f >= 1.0:
+            for c in _SPLIT_COLS:
+                df.iloc[rows, df.columns.get_loc(c)] = s[c].to_numpy()
+        else:
+            df = _mix(df, s, rows, f)
     if shift_binding_E:
-        df = syst.shift_binding_energy(df, BE_SHIFT)
+        f = BE_FRACTION if shift_fraction is None else shift_fraction
+        # hand off to shift_binding_energy's own mixture rather than mixing the
+        # stored CV rows in here with _mix: its unshifted half is *rebuilt* by
+        # recompute_kinematics, and that recompute does not reproduce the stored
+        # CV columns exactly (~5 MeV in nu_E_calo, more in del_p/del_phi), so
+        # mixing against the stored CV would give a different universe than the
+        # signal-box systematic. Costs a whole-frame copy, which is why the
+        # caller should slim the frame first if memory is tight.
+        df = syst.shift_binding_energy(df, BE_SHIFT, fraction=f, scale=_weight_col(df))
     return df
 
 #@profile
@@ -284,6 +358,7 @@ def load_one(fname, idf,
     offbeampot=False, # POT handling
     preselection=None, # apply preselection cut
     shift_binding_E=False, split_tracks=None, # variations applied to the output df (see _apply_variations)
+    shift_fraction=None, split_fraction=None, # fraction of events each variation is applied to (None -> BE_FRACTION / SPLIT_FRAC)
     cache_dir=None, # directory to cache output; None disables caching
     flashname=FLASH, hdrname=HDR, evtname=EVT, wgtname=WGT, mcname=MC, crtname=CRT, drops=None, lightmem=False): # override default table names
 
@@ -309,7 +384,7 @@ def load_one(fname, idf,
                 raise err 
             with h5py.File(cache_file, "r") as cf:
                 pot = float(cf.attrs["pot"])
-            return _apply_variations(df, shift_binding_E, split_tracks), match, pot
+            return _apply_variations(df, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
     df =  pd.read_hdf(fname, evtname % idf)
     hdr = pd.read_hdf(fname, hdrname % idf)
@@ -475,7 +550,7 @@ def load_one(fname, idf,
     if not include_syst:
         if cache_dir is not None:
             _write_cache(cache_file, df, match, pot)
-        return _apply_variations(df, shift_binding_E, split_tracks), match, pot
+        return _apply_variations(df, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
     # LOAD WEIGHTS
     wgt = pd.read_hdf(fname, wgtname % idf) 
@@ -626,7 +701,7 @@ def load_one(fname, idf,
     if cache_dir is not None:
         _write_cache(cache_file, mrg, match, pot)
 
-    return _apply_variations(mrg, shift_binding_E, split_tracks), match, pot
+    return _apply_variations(mrg, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
 
 def load(fname, maxdf=None, **kwargs):
