@@ -780,7 +780,10 @@ def make_gump_nudf(f, is_slc=False):
     muon_p_series = magdf(nudf.mu.genp)
     proton_p_series = magdf(nudf.p.genp)
     
-    true_tki = transverse_kinematics(muon_p_series, nudf.mu.genp, proton_p_series, nudf.mu.genp)
+    muon_dir_series = nudf.mu.genp.div(muon_p_series, axis=0)
+    proton_dir_series = nudf.p.genp.div(proton_p_series, axis=0)
+
+    true_tki = transverse_kinematics(muon_p_series, muon_dir_series, proton_p_series, proton_dir_series)
     true_del_p = true_tki['del_p']
 
     true_nu_E = nudf.E
