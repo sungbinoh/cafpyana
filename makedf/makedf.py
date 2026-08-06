@@ -3,6 +3,7 @@ from .branches import *
 from .util import *
 from .calo import *
 from . import numisyst, g4syst, geniesyst, bnbsyst, getenv
+from . import genie_evtrec
 from makedf import chi2pid
 
 pd.set_option('future.no_silent_downcasting', True)
@@ -153,6 +154,118 @@ def make_geniedf(f):
     df = df.reset_index().set_index('entry')
     df = df.rename(columns={'subentry': 'pindex'},level=0)
     return df
+
+# ---------------------------------------------------------------------------
+# Raw GENIE event record (GHEP particle stack) -> DataFrame.
+#
+# make_genie_evtrec_df supersedes the (partial) make_geniedf above: it captures
+# the full GHEP stack and works on BOTH kinds of flat CAF:
+#   - ICARUS-style files, where GenieEvtRecTree is split into flat StdHep* branches
+#     (read directly with uproot), and
+#   - SBND-style files, where GenieEvtRecTree stores the raw genie::NtpMCEventRecord
+#     object that uproot cannot deserialize (read via pyROOT + the GENIE libraries;
+#     see makedf/genie_evtrec.py).
+# Both paths produce an identical schema so downstream code is production-agnostic.
+# ---------------------------------------------------------------------------
+
+# per-particle physics columns, one row per GHEP particle, index (entry, pindex)
+_GENIE_PART_COLS = ["pdg", "status", "rescat", "px", "py", "pz", "E",
+                    "vx", "vy", "vz", "vt",
+                    "fmother", "lmother", "fdaughter", "ldaughter"]
+# per-event columns, broadcast onto every particle row of the same tree entry
+_GENIE_EVT_COLS = ["nstdhep", "evtnum", "xsec", "diff_xsec", "weight", "prob",
+                   "vtx_x", "vtx_y", "vtx_z", "vtx_t"]
+
+def _build_genie_evtrec_df(d):
+    """Assemble the unified GENIE-event-record DataFrame from a dict of arrays
+    (as returned by genie_evtrec.read_genie_evtrec or _genie_evtrec_from_stdhep)."""
+    idx = pd.MultiIndex.from_arrays([d["entry"], d["pindex"]], names=["entry", "pindex"])
+    df = pd.DataFrame({c: d[c] for c in _GENIE_PART_COLS}, index=idx)
+
+    ev = d["event"]
+    evdf = pd.DataFrame({c: ev[c] for c in _GENIE_EVT_COLS},
+                        index=pd.Index(ev["entry"], name="entry"))
+    if len(df):
+        ent = df.index.get_level_values("entry")
+        for c in _GENIE_EVT_COLS:
+            df[c] = evdf[c].reindex(ent).values
+    else:
+        for c in _GENIE_EVT_COLS:
+            df[c] = pd.Series(dtype=evdf[c].dtype if len(evdf) else "float64")
+    return df
+
+def _genie_evtrec_from_stdhep(tree):
+    """Read the flat StdHep* branches (ICARUS-style) into the common dict-of-arrays."""
+    def a(branch):
+        return tree["GenieEvtRec." + branch].array(library="np")
+    def opt(branch, like):
+        # optional branch: fall back to zeros shaped like a reference jagged array
+        if "GenieEvtRec." + branch in tree:
+            return a(branch)
+        return np.array([np.zeros(len(x), dtype=np.int32) for x in like], dtype=object)
+
+    pdg = a("StdHepPdg")
+    counts = np.array([len(x) for x in pdg], dtype=np.int64)
+    nevt = len(pdg)
+
+    def cat_i(arrs):
+        return (np.concatenate([np.asarray(x) for x in arrs]).astype(np.int32)
+                if nevt else np.empty(0, np.int32))
+    def cat4(arrs, col):
+        return (np.concatenate([np.asarray(x).reshape(-1, 4)[:, col] for x in arrs])
+                if nevt else np.empty(0, np.float64))
+
+    p4, x4 = a("StdHepP4"), a("StdHepX4")
+    d = {
+        "entry": np.repeat(np.arange(nevt, dtype=np.int32), counts),
+        "pindex": (np.concatenate([np.arange(c, dtype=np.int32) for c in counts])
+                   if nevt else np.empty(0, np.int32)),
+        "pdg": cat_i(pdg), "status": cat_i(a("StdHepStatus")),
+        "rescat": cat_i(opt("StdHepRescat", pdg)),
+        "px": cat4(p4, 0), "py": cat4(p4, 1), "pz": cat4(p4, 2), "E": cat4(p4, 3),
+        "vx": cat4(x4, 0), "vy": cat4(x4, 1), "vz": cat4(x4, 2), "vt": cat4(x4, 3),
+        "fmother": cat_i(a("StdHepFm")), "lmother": cat_i(a("StdHepLm")),
+        "fdaughter": cat_i(a("StdHepFd")), "ldaughter": cat_i(a("StdHepLd")),
+    }
+    vtx = np.stack([np.asarray(v) for v in a("EvtVtx")]) if nevt else np.empty((0, 4))
+    d["event"] = {
+        "entry": np.arange(nevt, dtype=np.int32),
+        "nstdhep": np.asarray(a("StdHepN"), dtype=np.int32),
+        "evtnum": np.asarray(a("EvtNum"), dtype=np.int32),
+        "xsec": np.asarray(a("EvtXSec"), dtype=np.float64),
+        "diff_xsec": np.asarray(a("EvtDXSec"), dtype=np.float64),
+        "weight": np.asarray(a("EvtWght"), dtype=np.float64),
+        "prob": np.asarray(a("EvtProb"), dtype=np.float64),
+        "vtx_x": vtx[:, 0], "vtx_y": vtx[:, 1], "vtx_z": vtx[:, 2], "vtx_t": vtx[:, 3],
+    }
+    return d
+
+def make_genie_evtrec_df(f):
+    """Save the raw GENIE event record (the full GHEP particle stack) to a DataFrame.
+
+    Returns one row per GENIE particle, indexed by (entry, pindex) where `entry` is the
+    GenieEvtRecTree entry (linked to a neutrino interaction via rec.mc.nu.genie_evtrec_idx)
+    and `pindex` is the particle's position in the GHEP record.  Columns are the
+    per-particle fields (pdg, status, rescat, 4-momentum px/py/pz/E, 4-position
+    vx/vy/vz/vt, and mother/daughter links) plus the per-event header (nstdhep, evtnum,
+    xsec, diff_xsec, weight, prob, vertex vtx_x/y/z/t) broadcast onto each particle row.
+
+    Momenta/energies are in GeV.  Returns an empty DataFrame if the file has no
+    GenieEvtRecTree.
+    """
+    if "GenieEvtRecTree" not in f:
+        return pd.DataFrame([])
+    tree = f["GenieEvtRecTree"]
+    if "GenieEvtRec.StdHepPdg" in tree.keys():
+        # ICARUS-style: flat StdHep branches, uproot can read them directly
+        d = _genie_evtrec_from_stdhep(tree)
+    else:
+        # SBND-style: raw genie::NtpMCEventRecord object, read via pyROOT + GENIE libs
+        path = getattr(f, "file_path", None)
+        if path is None:
+            path = f._file.file_path
+        d = genie_evtrec.read_genie_evtrec(path)
+    return _build_genie_evtrec_df(d)
 
 def make_mchdf(f, include_weights=False):
     mcdf = loadbranches(f["recTree"], mchbranches).rec.mc.prtl
