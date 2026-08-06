@@ -35,7 +35,7 @@ SBND_CALO_PARAMS = {
 
 # calo variations
 # variations on recombination parameters are taken from the ICARUS measurement uncertainties
-CALO_VARIATIONS = {
+SBND_CALO_VARIATIONS = {
     "cv": SBND_CALO_PARAMS,
     "ccal_p": {**SBND_CALO_PARAMS, "c_cal_frac": [1.02, 1.02, 1.02]},
     "ccal_m": {**SBND_CALO_PARAMS, "c_cal_frac": [0.98, 0.98, 0.98]},
@@ -45,6 +45,18 @@ CALO_VARIATIONS = {
     "beta_m": {**SBND_CALO_PARAMS, "beta_90": [0.204-0.008, 0.204-0.008]},
     "R_p": {**SBND_CALO_PARAMS, "R_emb": [1.25+0.02, 1.25+0.02]},
     "R_m": {**SBND_CALO_PARAMS, "R_emb": [1.25-0.02, 1.25-0.02]},
+}
+
+ICARUS_CALO_VARIATIONS = {
+    "cv": ICARUS_CALO_PARAMS,
+    "ccal_p": {**ICARUS_CALO_PARAMS, "c_cal_frac": [1.01, 1.01, 1.01]},
+    "ccal_m": {**ICARUS_CALO_PARAMS, "c_cal_frac": [0.98, 0.98, 0.98]},
+    "alpha_p": {**ICARUS_CALO_PARAMS, "alpha_emb": 0.904+0.008},
+    "alpha_m": {**ICARUS_CALO_PARAMS, "alpha_emb": 0.904-0.008},
+    "beta_p": {**ICARUS_CALO_PARAMS, "beta_90": 0.204+0.008},
+    "beta_m": {**ICARUS_CALO_PARAMS, "beta_90": 0.204-0.008},
+    "R_p": {**ICARUS_CALO_PARAMS, "R_emb": 1.25+0.02},
+    "R_m": {**ICARUS_CALO_PARAMS, "R_emb": 1.25-0.02},
 }
 
 
@@ -180,7 +192,7 @@ def dqdx(dqdxdf, gain=None, calibrate=None, isMC=False):
 
     return dqdx*gain_perhit
 
-def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False, smear=-1, scale=1, new_calo_params=None):
+def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False, smear=-1, sqrt_smear=-1, scale=1, new_calo_params=None):
     dqdx_v = dqdx(dqdxdf, gain=gain, calibrate=calibrate, isMC=isMC)
     if gain == "SBND":
 
@@ -196,15 +208,26 @@ def dedx(dqdxdf, gain=None, calibrate=None, plane=2, isMC=False, smear=-1, scale
         dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, this_alpha_emb, this_beta_90, this_R_emb)
 
     elif gain == "ICARUS":
-        scalegain = ICARUS_CALO_PARAMS['c_cal_frac'][plane]
-        dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
+        if new_calo_params is None:
+            calo_params = ICARUS_CALO_PARAMS
+        else:
+            calo_params = new_calo_params
+
+        scalegain = calo_params['c_cal_frac'][plane]
+        this_alpha_emb = calo_params["alpha_emb"]
+        this_beta_90 = calo_params["beta_90"]
+        this_R_emb = calo_params["R_emb"]
+
+        dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho, this_alpha_emb, this_beta_90, this_R_emb)
 
     else:
         scalegain = 1.
         dedx = calo.recombination_cor(scale*dqdx_v/scalegain, dqdxdf.phi, dqdxdf.efield, dqdxdf.rho)
 
     if smear > 0:
-        dedx = dedx*np.random.normal(loc=1., scale=smear, size=dedx.size)
+        dedx = dedx*np.clip(np.random.normal(loc=1., scale=smear, size=dedx.size), 0, 2)
+    elif sqrt_smear > 0:
+        dedx = dedx*np.clip(np.random.normal(loc=1., scale=sqrt_smear/np.sqrt(dedx/5.), size=dedx.size), 0, 2)
 
     return dedx
 

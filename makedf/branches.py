@@ -41,6 +41,7 @@ trigger_info_branches = [
 
 opflashbranches = [
     "rec.opflashes.firsttime",
+    "rec.opflashes.cryo",
     "rec.opflashes.time",
     "rec.opflashes.totalpe",
 ]
@@ -129,6 +130,7 @@ crthitbranches = [
   "rec.crt_hits.t0",
   "rec.crt_hits.pe",
   "rec.crt_hits.plane",
+  "rec.crt_hits.truth.bestmatch_id",
 ]
 
 
@@ -195,7 +197,7 @@ shwbranches = [
     shwbranch + 'conversion_gap', 
     shwbranch + "density",
     shwbranch + "open_angle",
-    shwbranch + 'bestplane',
+    shwbranch + 'bestplane_for_energy', shwbranch + 'bestplane_for_dedx',
     shwbranch + 'bestplane_dEdx', shwbranch + 'bestplane_energy',
     shwbranch + 'plane.0.dEdx',   shwbranch + 'plane.1.dEdx', shwbranch + 'plane.2.dEdx',
     shwbranch + 'plane.0.energy', shwbranch + 'plane.1.energy', shwbranch + 'plane.2.energy',
@@ -311,6 +313,10 @@ mcbranches = [
     "rec.mc.nu.genie_mode",
     "rec.mc.nu.parent_pdg",
     "rec.mc.nu.parent_dcy_E",
+    "rec.mc.nu.parent_dcy_mode",
+    "rec.mc.nu.parent_dcy_mom.x",
+    "rec.mc.nu.parent_dcy_mom.y",
+    "rec.mc.nu.parent_dcy_mom.z",
     "rec.mc.nu.genie_evtrec_idx",
 ]
 

@@ -3,6 +3,7 @@ from .branches import *
 from .util import *
 from .calo import *
 from . import numisyst, g4syst, geniesyst, bnbsyst, getenv
+from . import genie_evtrec
 from makedf import chi2pid
 
 pd.set_option('future.no_silent_downcasting', True)
@@ -113,7 +114,6 @@ def make_mcnudf(f, include_weights=False, multisim_nuniv=100, genie_multisim_nun
             if "genie" in wgt_types:
                 geniewgtdf = geniesyst.geniesyst(f, mcdf.ind, multisim_nuniv=genie_multisim_nuniv, slim=slim, systematics=genie_systematics)
                 df_list.append(geniewgtdf)
-
             wgtdf = pd.concat(df_list, axis=1)
             mcdf = multicol_concat(mcdf, wgtdf)
 
@@ -154,6 +154,118 @@ def make_geniedf(f):
     df = df.reset_index().set_index('entry')
     df = df.rename(columns={'subentry': 'pindex'},level=0)
     return df
+
+# ---------------------------------------------------------------------------
+# Raw GENIE event record (GHEP particle stack) -> DataFrame.
+#
+# make_genie_evtrec_df supersedes the (partial) make_geniedf above: it captures
+# the full GHEP stack and works on BOTH kinds of flat CAF:
+#   - ICARUS-style files, where GenieEvtRecTree is split into flat StdHep* branches
+#     (read directly with uproot), and
+#   - SBND-style files, where GenieEvtRecTree stores the raw genie::NtpMCEventRecord
+#     object that uproot cannot deserialize (read via pyROOT + the GENIE libraries;
+#     see makedf/genie_evtrec.py).
+# Both paths produce an identical schema so downstream code is production-agnostic.
+# ---------------------------------------------------------------------------
+
+# per-particle physics columns, one row per GHEP particle, index (entry, pindex)
+_GENIE_PART_COLS = ["pdg", "status", "rescat", "px", "py", "pz", "E",
+                    "vx", "vy", "vz", "vt",
+                    "fmother", "lmother", "fdaughter", "ldaughter"]
+# per-event columns, broadcast onto every particle row of the same tree entry
+_GENIE_EVT_COLS = ["nstdhep", "evtnum", "xsec", "diff_xsec", "weight", "prob",
+                   "vtx_x", "vtx_y", "vtx_z", "vtx_t"]
+
+def _build_genie_evtrec_df(d):
+    """Assemble the unified GENIE-event-record DataFrame from a dict of arrays
+    (as returned by genie_evtrec.read_genie_evtrec or _genie_evtrec_from_stdhep)."""
+    idx = pd.MultiIndex.from_arrays([d["entry"], d["pindex"]], names=["entry", "pindex"])
+    df = pd.DataFrame({c: d[c] for c in _GENIE_PART_COLS}, index=idx)
+
+    ev = d["event"]
+    evdf = pd.DataFrame({c: ev[c] for c in _GENIE_EVT_COLS},
+                        index=pd.Index(ev["entry"], name="entry"))
+    if len(df):
+        ent = df.index.get_level_values("entry")
+        for c in _GENIE_EVT_COLS:
+            df[c] = evdf[c].reindex(ent).values
+    else:
+        for c in _GENIE_EVT_COLS:
+            df[c] = pd.Series(dtype=evdf[c].dtype if len(evdf) else "float64")
+    return df
+
+def _genie_evtrec_from_stdhep(tree):
+    """Read the flat StdHep* branches (ICARUS-style) into the common dict-of-arrays."""
+    def a(branch):
+        return tree["GenieEvtRec." + branch].array(library="np")
+    def opt(branch, like):
+        # optional branch: fall back to zeros shaped like a reference jagged array
+        if "GenieEvtRec." + branch in tree:
+            return a(branch)
+        return np.array([np.zeros(len(x), dtype=np.int32) for x in like], dtype=object)
+
+    pdg = a("StdHepPdg")
+    counts = np.array([len(x) for x in pdg], dtype=np.int64)
+    nevt = len(pdg)
+
+    def cat_i(arrs):
+        return (np.concatenate([np.asarray(x) for x in arrs]).astype(np.int32)
+                if nevt else np.empty(0, np.int32))
+    def cat4(arrs, col):
+        return (np.concatenate([np.asarray(x).reshape(-1, 4)[:, col] for x in arrs])
+                if nevt else np.empty(0, np.float64))
+
+    p4, x4 = a("StdHepP4"), a("StdHepX4")
+    d = {
+        "entry": np.repeat(np.arange(nevt, dtype=np.int32), counts),
+        "pindex": (np.concatenate([np.arange(c, dtype=np.int32) for c in counts])
+                   if nevt else np.empty(0, np.int32)),
+        "pdg": cat_i(pdg), "status": cat_i(a("StdHepStatus")),
+        "rescat": cat_i(opt("StdHepRescat", pdg)),
+        "px": cat4(p4, 0), "py": cat4(p4, 1), "pz": cat4(p4, 2), "E": cat4(p4, 3),
+        "vx": cat4(x4, 0), "vy": cat4(x4, 1), "vz": cat4(x4, 2), "vt": cat4(x4, 3),
+        "fmother": cat_i(a("StdHepFm")), "lmother": cat_i(a("StdHepLm")),
+        "fdaughter": cat_i(a("StdHepFd")), "ldaughter": cat_i(a("StdHepLd")),
+    }
+    vtx = np.stack([np.asarray(v) for v in a("EvtVtx")]) if nevt else np.empty((0, 4))
+    d["event"] = {
+        "entry": np.arange(nevt, dtype=np.int32),
+        "nstdhep": np.asarray(a("StdHepN"), dtype=np.int32),
+        "evtnum": np.asarray(a("EvtNum"), dtype=np.int32),
+        "xsec": np.asarray(a("EvtXSec"), dtype=np.float64),
+        "diff_xsec": np.asarray(a("EvtDXSec"), dtype=np.float64),
+        "weight": np.asarray(a("EvtWght"), dtype=np.float64),
+        "prob": np.asarray(a("EvtProb"), dtype=np.float64),
+        "vtx_x": vtx[:, 0], "vtx_y": vtx[:, 1], "vtx_z": vtx[:, 2], "vtx_t": vtx[:, 3],
+    }
+    return d
+
+def make_genie_evtrec_df(f):
+    """Save the raw GENIE event record (the full GHEP particle stack) to a DataFrame.
+
+    Returns one row per GENIE particle, indexed by (entry, pindex) where `entry` is the
+    GenieEvtRecTree entry (linked to a neutrino interaction via rec.mc.nu.genie_evtrec_idx)
+    and `pindex` is the particle's position in the GHEP record.  Columns are the
+    per-particle fields (pdg, status, rescat, 4-momentum px/py/pz/E, 4-position
+    vx/vy/vz/vt, and mother/daughter links) plus the per-event header (nstdhep, evtnum,
+    xsec, diff_xsec, weight, prob, vertex vtx_x/y/z/t) broadcast onto each particle row.
+
+    Momenta/energies are in GeV.  Returns an empty DataFrame if the file has no
+    GenieEvtRecTree.
+    """
+    if "GenieEvtRecTree" not in f:
+        return pd.DataFrame([])
+    tree = f["GenieEvtRecTree"]
+    if "GenieEvtRec.StdHepPdg" in tree.keys():
+        # ICARUS-style: flat StdHep branches, uproot can read them directly
+        d = _genie_evtrec_from_stdhep(tree)
+    else:
+        # SBND-style: raw genie::NtpMCEventRecord object, read via pyROOT + GENIE libs
+        path = getattr(f, "file_path", None)
+        if path is None:
+            path = f._file.file_path
+        d = genie_evtrec.read_genie_evtrec(path)
+    return _build_genie_evtrec_df(d)
 
 def make_mchdf(f, include_weights=False):
     mcdf = loadbranches(f["recTree"], mchbranches).rec.mc.prtl
@@ -372,6 +484,11 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     pdf = mcprimdf[mcprimdf.pdg==2212].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
     pdf.columns = pd.MultiIndex.from_tuples([tuple(["p"] + list(c)) for c in pdf.columns])
 
+    # sub-leading proton
+    p2df = mcprimdf[mcprimdf.pdg==2212].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).tail(2).groupby(level=[0,1]).first()
+    p2df.columns = pd.MultiIndex.from_tuples([tuple(["p2"] + list(c)) for c in p2df.columns])
+    p2df = p2df[p2df.p2.length != pdf.p.length] # remove single-proton slices
+
     # electron info
     edf = mcprimdf[np.abs(mcprimdf.pdg)==11].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
     edf.columns = pd.MultiIndex.from_tuples([tuple(["e"] + list(c)) for c in edf.columns])
@@ -379,19 +496,40 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     mcdf = multicol_merge(mcdf, mudf, left_index=True, right_index=True, how="left", validate="one_to_one")
     mcdf = multicol_merge(mcdf, cpidf, left_index=True, right_index=True, how="left", validate="one_to_one")
     mcdf = multicol_merge(mcdf, pdf, left_index=True, right_index=True, how="left", validate="one_to_one")
+    mcdf = multicol_merge(mcdf, p2df, left_index=True, right_index=True, how="left", validate="one_to_one")
     mcdf = multicol_merge(mcdf, edf, left_index=True, right_index=True, how="left", validate="one_to_one")
 
     # primary track variables
     mcdf.loc[:, ('mu','totp','')] = np.sqrt(mcdf.mu.genp.x**2 + mcdf.mu.genp.y**2 + mcdf.mu.genp.z**2)
+    mcdf.loc[:, ('e','totp','')] = np.sqrt(mcdf.e.genp.x**2 + mcdf.e.genp.y**2 + mcdf.e.genp.z**2)
+    mcdf.loc[:, ('cpi','totp','')] = np.sqrt(mcdf.cpi.genp.x**2 + mcdf.cpi.genp.y**2 + mcdf.cpi.genp.z**2)
     mcdf.loc[:, ('p','totp','')] = np.sqrt(mcdf.p.genp.x**2 + mcdf.p.genp.y**2 + mcdf.p.genp.z**2)
+    mcdf.loc[:, ('p2','totp','')] = np.sqrt(mcdf.p2.genp.x**2 + mcdf.p2.genp.y**2 + mcdf.p2.genp.z**2)
 
     # opening angles
     mcdf.loc[:, ('mu','dir','x')] = mcdf.mu.genp.x/mcdf.mu.totp
     mcdf.loc[:, ('mu','dir','y')] = mcdf.mu.genp.y/mcdf.mu.totp
     mcdf.loc[:, ('mu','dir','z')] = mcdf.mu.genp.z/mcdf.mu.totp
+    mcdf.loc[:, ('e','dir','x')] = mcdf.e.genp.x/mcdf.e.totp
+    mcdf.loc[:, ('e','dir','y')] = mcdf.e.genp.y/mcdf.e.totp
+    mcdf.loc[:, ('e','dir','z')] = mcdf.e.genp.z/mcdf.e.totp
+    mcdf.loc[:, ('cpi','dir','x')] = mcdf.cpi.genp.x/mcdf.cpi.totp
+    mcdf.loc[:, ('cpi','dir','y')] = mcdf.cpi.genp.y/mcdf.cpi.totp
+    mcdf.loc[:, ('cpi','dir','z')] = mcdf.cpi.genp.z/mcdf.cpi.totp
     mcdf.loc[:, ('p','dir','x')] = mcdf.p.genp.x/mcdf.p.totp
     mcdf.loc[:, ('p','dir','y')] = mcdf.p.genp.y/mcdf.p.totp
     mcdf.loc[:, ('p','dir','z')] = mcdf.p.genp.z/mcdf.p.totp
+    mcdf.loc[:, ('p2','dir','x')] = mcdf.p2.genp.x/mcdf.p2.totp
+    mcdf.loc[:, ('p2','dir','y')] = mcdf.p2.genp.y/mcdf.p2.totp
+    mcdf.loc[:, ('p2','dir','z')] = mcdf.p2.genp.z/mcdf.p2.totp
+
+    # endpoints
+    mcdf.loc[:, ('mu','end','x')] = mcdf.mu.end.x
+    mcdf.loc[:, ('mu','end','y')] = mcdf.mu.end.y
+    mcdf.loc[:, ('mu','end','z')] = mcdf.mu.end.z
+    mcdf.loc[:, ('p','end','x')] = mcdf.p.end.x
+    mcdf.loc[:, ('p','end','y')] = mcdf.p.end.y
+    mcdf.loc[:, ('p','end','z')] = mcdf.p.end.z
 
     return mcdf
 
