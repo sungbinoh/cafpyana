@@ -147,4 +147,9 @@ export PYTHONPATH=$PYTHONPATH:${CAFPYANA_DIR}
 export LD_LIBRARY_PATH=${VENV_DIR}/lib/python3.9/site-packages/xrootd-5.6.9-py3.9-linux-x86_64.egg/pyxrootd:$LD_LIBRARY_PATH
 export CAFPYANA_WD=${CAFPYANA_DIR}
 
-htgettoken -a htvaultprod.fnal.gov -i sbnd
+if [[ $machine == *sbnd* || $machine == *jupyter* ]]; then
+  htgettoken -a htvaultprod.fnal.gov -i sbnd
+fi
+if [[ $machine == *icarus* ]]; then
+  htgettoken -a htvaultprod.fnal.gov -i icarus
+fi
