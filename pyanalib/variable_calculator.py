@@ -41,11 +41,11 @@ def get_cc1p0pi_tki(mudf, pdf, P_mu_col, P_p_col):
     p_phi_y = p_p_y/mag2d(p_p_x, p_p_y)
 
     mu_Tp_x = mu_phi_y*mu_p_x - mu_phi_x*mu_p_y
-    mu_Tp_y = mu_phi_x*mu_p_x - mu_phi_y*mu_p_y
+    mu_Tp_y = mu_phi_x*mu_p_x + mu_phi_y*mu_p_y
     mu_Tp = mag2d(mu_Tp_x, mu_Tp_y)
 
     p_Tp_x = mu_phi_y*p_p_x - mu_phi_x*p_p_y
-    p_Tp_y = mu_phi_x*p_p_x - mu_phi_y*p_p_y
+    p_Tp_y = mu_phi_x*p_p_x + mu_phi_y*p_p_y
     p_Tp = mag2d(p_Tp_x, p_Tp_y)
 
     del_Tp_x = mu_Tp_x + p_Tp_x

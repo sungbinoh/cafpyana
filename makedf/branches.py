@@ -41,6 +41,7 @@ trigger_info_branches = [
 
 opflashbranches = [
     "rec.opflashes.firsttime",
+    "rec.opflashes.cryo",
     "rec.opflashes.time",
     "rec.opflashes.totalpe",
 ]
@@ -99,6 +100,7 @@ trueparticlenames = [
 
 trueparticlebranches = [
     *["rec.true_particles.%s" % s for s in trueparticlenames],
+    "rec.true_particles.cryostat",
     "rec.true_particles.plane.0.2.visE",
     "rec.true_particles.plane.1.2.visE",
 ]
@@ -123,12 +125,22 @@ crtspbranches = [
     "rec.crt_spacepoints.time_err"
 ]
 
+crtpmtbranches = [
+    "rec.crtpmt_matches.flashGateTime",
+    "rec.crtpmt_matches.flashPE",
+    "rec.crtpmt_matches.flashPosition.x",
+    "rec.crtpmt_matches.flashPosition.y",
+    "rec.crtpmt_matches.flashPosition.z",
+    "rec.crtpmt_matches.flashClassification",
+]
+
 crthitbranches = [
   "rec.crt_hits.time",
   "rec.crt_hits.t1",
   "rec.crt_hits.t0",
   "rec.crt_hits.pe",
   "rec.crt_hits.plane",
+  "rec.crt_hits.truth.bestmatch_id",
 ]
 
 
@@ -195,7 +207,7 @@ shwbranches = [
     shwbranch + 'conversion_gap', 
     shwbranch + "density",
     shwbranch + "open_angle",
-    shwbranch + 'bestplane',
+    shwbranch + 'bestplane_for_energy', shwbranch + 'bestplane_for_dedx',
     shwbranch + 'bestplane_dEdx', shwbranch + 'bestplane_energy',
     shwbranch + 'plane.0.dEdx',   shwbranch + 'plane.1.dEdx', shwbranch + 'plane.2.dEdx',
     shwbranch + 'plane.0.energy', shwbranch + 'plane.1.energy', shwbranch + 'plane.2.energy',
@@ -268,6 +280,9 @@ for n in trueparticlenames: shwbranches.append(shwbranch + "truth.p." + n)
 
 slcbranches = [
     "rec.slc.is_clear_cosmic",
+    "rec.slc.charge_center.x",
+    "rec.slc.charge_center.y",
+    "rec.slc.charge_center.z",
     "rec.slc.vertex.x", "rec.slc.vertex.y", "rec.slc.vertex.z",
     "rec.slc.self",
     "rec.slc.tmatch.eff",
@@ -308,9 +323,14 @@ mcbranches = [
     "rec.mc.nu.position.z",
     "rec.mc.nu.pdg",
     "rec.mc.nu.iscc",
+    "rec.mc.nu.isnc",
     "rec.mc.nu.genie_mode",
     "rec.mc.nu.parent_pdg",
     "rec.mc.nu.parent_dcy_E",
+    "rec.mc.nu.parent_dcy_mode",
+    "rec.mc.nu.parent_dcy_mom.x",
+    "rec.mc.nu.parent_dcy_mom.y",
+    "rec.mc.nu.parent_dcy_mom.z",
     "rec.mc.nu.genie_evtrec_idx",
 ]
 
@@ -318,6 +338,8 @@ mcprimbranches = [
     "rec.mc.nu.prim.genE",
     "rec.mc.nu.prim.length",
     "rec.mc.nu.prim.pdg",
+    "rec.mc.nu.prim.G4ID",
+    "rec.mc.nu.prim.cryostat",
     "rec.mc.nu.prim.genp.x",
     "rec.mc.nu.prim.genp.y",
     "rec.mc.nu.prim.genp.z",
