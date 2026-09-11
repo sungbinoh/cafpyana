@@ -155,7 +155,7 @@ def remake_detvar_maps(detector, DF_DIR, selection=gmpl.all_gump_cuts, binning="
   
 
     if binning == "1D":
-        b = [np.array([0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.25, 1.5]), [-1000.0, 0.0, 1000.0]]
+        b = [np.array([0.3, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.10, 1.25, 1.5]), [-1000.0, 0.0, 1000.0]]
     else:
         b = [np.array([0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.25, 1.5]), [0.0, 0.2, 0.4, 0.6]]
 
@@ -174,6 +174,43 @@ def remake_detvar_maps(detector, DF_DIR, selection=gmpl.all_gump_cuts, binning="
 
     cv_df['selected'] = selection(cv_df)
     bind_df['selected'] = selection(bind_df)
+
+    # Create the figure
+    plt.figure(figsize=(8, 6))
+    cv_selected = cv_df.loc[selection(cv_df)]
+    bind_selected = bind_df.loc[selection(bind_df)]
+    # Plot overlaying 1D histograms
+    plt.hist(
+        cv_selected['nu_E_calo'],
+        bins=b[0],
+        weights=cv_selected['glob_scale'],
+        histtype='step',
+        linewidth=2,
+        label='CV'
+    )
+    
+    plt.hist(
+        bind_selected['nu_E_calo'],
+        bins=b[0],  # Ensure same bins are used
+        weights=bind_selected['glob_scale'],
+        histtype='step',
+        linewidth=2,
+        linestyle='--',
+        label='BIND'
+    )
+    
+    # Labeling and polish
+    plt.xlabel('nu_E_calo')
+    plt.ylabel('Weighted Counts')
+    plt.title(f"{detector} - nu_E_calo Comparison")
+    plt.legend()
+    plt.grid(True, linestyle=':', alpha=0.6)
+    
+    # Save to file instead of plt.show()
+    plt.tight_layout()
+    plt.savefig(f"{outdir}/{detector.replace(' ', '')}_nu_E_calo_1D.png", dpi=300)
+    plt.close()
+
     cv_hist = np.histogram2d(*cv_df.loc[cv_df['selected'], ['nu_E_calo', 'del_p']].to_numpy().T, bins=b, weights=cv_df.loc[cv_df['selected'], 'glob_scale'].to_numpy())[0]
     bind_hist = np.histogram2d(*bind_df.loc[bind_df['selected'], ['nu_E_calo', 'del_p']].to_numpy().T, bins=b, weights=bind_df.loc[bind_df['selected'], 'glob_scale'].to_numpy())[0]
     save_histogram(f"{outdir}/{detector.replace(' ','')}_BIND.txt", bind_hist/cv_hist, b[0], b[1])

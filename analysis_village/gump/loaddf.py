@@ -3,6 +3,7 @@ import hashlib
 import json
 import time
 import sys
+import warnings
 
 import pandas as pd
 import numpy as np
@@ -968,7 +969,11 @@ def load_one(fname, idf,
     if not include_syst:
         if cache_dir is not None:
             _write_cache(cache_file, df, match, pot)
-        df["total_pot"] = pot
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
+            df["total_pot"] = pot
+
         return _apply_variations(df, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
     # LOAD WEIGHTS

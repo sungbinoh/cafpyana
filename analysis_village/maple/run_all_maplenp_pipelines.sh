@@ -3,7 +3,7 @@
 # Define the absolute input storage directories
 gray_prefix='/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-22/'
 gumple_prefix='../gumple/'
-output='/exp/sbnd/data/users/nrowe/sbn-rewgted-22-new/GUMP/'
+output='/exp/sbnd/data/users/nrowe/sbn-rewgted-22-new/MAPLENP/'
 MAX_JOBS=16
 
 # Navigate to the working directory context
@@ -12,7 +12,7 @@ echo " Starting GUMP TTree Processing Batch Run...            "
 echo "========================================================"
 
 echo "Remaking det var maps..."
-selection="gmpl.all_gump_cuts"
+selection="gmpl.all_maplenp_cuts"
 splinedir="${selection#*.}"
 
 python3 ${gumple_prefix}rwt_map.py -s ${selection} -o ${splinedir} -d ${gray_prefix} -b "2D"

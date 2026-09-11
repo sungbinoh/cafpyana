@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Define the absolute input storage directories
-gray_prefix='/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-21/'
+gray_prefix='/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-22/'
 gumple_prefix='../gumple/'
-output='/exp/sbnd/data/users/nrowe/MAPLE/sbn-rewgted-21/'
-MAX_JOBS=8
+output='/exp/sbnd/data/users/nrowe/sbn-rewgted-22-new/MAPLEMP/'
+MAX_JOBS=10
 
 # Navigate to the working directory context
 echo "========================================================"
@@ -155,6 +155,9 @@ python3 ${gumple_prefix}/run_gumple_pipeline.py \
     -i ${gray_prefix}ICARUSRun2_Spring_Overlay_Dirt.df \
     -o ${output}ICARUSRun2_Spring_Overlay_Dirt_sbruce.root &
 
-while [ $(jobs -rp | wc -l) -ge $MAX_JOBS ]; do
+while [ $(jobs -rp | wc -l) -ge 1 ]; do
     sleep 10 # Check every 2 seconds
 done
+
+## This makes some copies of the sbruce files which have fake data weights attached
+$gumple_prefix/run_all.sh $output $output/FD/
