@@ -18,7 +18,7 @@ def format_sci(value, precision=3):
     """Formats floats in scientific notation without the '+' in the exponent (e.g. 5.272e20)."""
     return f"{value:.{precision}e}".replace("e+", "e")
 
-def get_sample_pot(file_pattern, is_mc=True):
+def get_sample_pot(file_pattern, use_pot=True):
     """
     Finds all files matching pattern and passes them to grab_pot
     to return total aggregated POT.
@@ -28,8 +28,8 @@ def get_sample_pot(file_pattern, is_mc=True):
         print(f"Warning: No files found matching pattern: {file_pattern}")
         return 0.0
     
-    mc_bools = [is_mc] * len(files)
-    total_pot = grab_pot(files, mc_bools=mc_bools, sep_bool=False)
+    pot_bools = [use_pot] * len(files)
+    total_pot = grab_pot(files, onbeam_bools=pot_bools, sep_bool=False)
     return total_pot
 
 def get_scale(sample_pot, target_pot):
@@ -43,44 +43,44 @@ def render_template(template_path, output_path, base_dir, hdf_dir, target_sbnd_p
 
     # 1. SBND MC (Wildcard)
     sbnd_mc_pattern = os.path.join(hdf_dir, "SBNDMCCV_*.df")
-    sbnd_mc_pot = get_sample_pot(sbnd_mc_pattern, is_mc=True)
+    sbnd_mc_pot = get_sample_pot(sbnd_mc_pattern, use_pot=True)
 
     # 6. SBND OffBeam (Data)
     sbnd_offbeam_pattern = os.path.join(hdf_dir, "SBND_SpringBNBOffData.df")
-    sbnd_offbeam_pot = get_sample_pot(sbnd_offbeam_pattern, is_mc=False)
+    sbnd_offbeam_pot = get_sample_pot(sbnd_offbeam_pattern, use_pot=False)
 
     # 9. SBND Dirt (MC)
     sbnd_dirt_pattern = os.path.join(hdf_dir, "SBND_SpringLowEMC.df")
-    sbnd_dirt_pot = get_sample_pot(sbnd_dirt_pattern, is_mc=True)
+    sbnd_dirt_pot = get_sample_pot(sbnd_dirt_pattern, use_pot=True)
 
     # 3. ICARUS Run 2 MC (Wildcard)
     icarus_r2_mc_pattern = os.path.join(hdf_dir, "ICARUSRun2_SpringMCOverlay_rewgt_*.df")
-    icarus_r2_mc_pot = get_sample_pot(icarus_r2_mc_pattern, is_mc=True)
+    icarus_r2_mc_pot = get_sample_pot(icarus_r2_mc_pattern, use_pot=True)
     icarus_r2_mc_scale = get_scale(icarus_r2_mc_pot, target_icarus_r2_pot)
 
     # 4. ICARUS Run 2 OffBeam (Data)
     icarus_r2_offbeam_pattern = os.path.join(hdf_dir, "ICARUS_SpringRun2BNBOff_unblind.df")
-    icarus_r2_offbeam_pot = get_sample_pot(icarus_r2_offbeam_pattern, is_mc=False)
+    icarus_r2_offbeam_pot = get_sample_pot(icarus_r2_offbeam_pattern, use_pot=False)
     icarus_r2_offbeam_scale = get_scale(icarus_r2_offbeam_pot, target_icarus_r2_pot)
 
     # 7. ICARUS Run 2 Dirt (MC)
     icarus_r2_dirt_pattern = os.path.join(hdf_dir, "ICARUSRun2_Spring_Overlay_Dirt.df")
-    icarus_r2_dirt_pot = get_sample_pot(icarus_r2_dirt_pattern, is_mc=True)
+    icarus_r2_dirt_pot = get_sample_pot(icarus_r2_dirt_pattern, use_pot=True)
     icarus_r2_dirt_scale = get_scale(icarus_r2_dirt_pot, target_icarus_r2_pot)
 
     # 2. ICARUS Run 4 MC (Wildcard)
     icarus_r4_mc_pattern = os.path.join(hdf_dir, "ICARUSRun4_SpringMCOverlay_rewgt_*.df")
-    icarus_r4_mc_pot = get_sample_pot(icarus_r4_mc_pattern, is_mc=True)
+    icarus_r4_mc_pot = get_sample_pot(icarus_r4_mc_pattern, use_pot=True)
     icarus_r4_mc_scale = get_scale(icarus_r4_mc_pot, target_icarus_r4_pot)
 
     # 5. ICARUS Run 4 OffBeam (Data)
     icarus_r4_offbeam_pattern = os.path.join(hdf_dir, "ICARUS_SpringRun4BNBOff_unblind.df")
-    icarus_r4_offbeam_pot = get_sample_pot(icarus_r4_offbeam_pattern, is_mc=False)
+    icarus_r4_offbeam_pot = get_sample_pot(icarus_r4_offbeam_pattern, use_pot=False)
     icarus_r4_offbeam_scale = get_scale(icarus_r4_offbeam_pot, target_icarus_r4_pot)
 
     # 8. ICARUS Run 4 Dirt (MC)
     icarus_r4_dirt_pattern = os.path.join(hdf_dir, "ICARUSRun4_Spring_Overlay_Dirt.df")
-    icarus_r4_dirt_pot = get_sample_pot(icarus_r4_dirt_pattern, is_mc=True)
+    icarus_r4_dirt_pot = get_sample_pot(icarus_r4_dirt_pattern, use_pot=True)
     icarus_r4_dirt_scale = get_scale(icarus_r4_dirt_pot, target_icarus_r4_pot)
 
     print("\n--- Rendering Jinja2 Configuration ---")
