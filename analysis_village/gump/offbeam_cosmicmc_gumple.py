@@ -128,13 +128,15 @@ def pid_cut(d):
 def pid_cut_1p(d):
     return pid_cut(d) & (d.n_pfp == 2)
 
-
 def pid_cut_np(d):
+    return pid_cut(d) & (d.n_pfp >= 2)
+
+def pid_cut_mp(d):
     return pid_cut(d) & (d.n_pfp > 2)
 
 
-CUTS = [contained, cosmic_rej, twoprong_cut, pid_cut_1p, pid_cut_np]
-CUTNAMES = ["Contained", "Cosmic Rej.", "Two Prong Cut", "PID 1p", "PID Np"]
+CUTS = [contained, cosmic_rej, twoprong_cut, pid_cut_1p, pid_cut_np, pid_cut_mp]
+CUTNAMES = ["Contained", "Cosmic Rej.", "Two Prong Cut", "PID 1p", "PID Np", "PID Mp"]
 NORM_CUT = "PID 1p"   # stage that defines the normalization uncertainty
 
 

@@ -255,7 +255,7 @@ def load_detector(det, df_dir, log, include_dirt=True, include_offbeam=True, wit
         if include_offbeam and files["OFFBEAM_FILES"]:
             log("loading %s beam-off data" % run_det)
             off, _ = _load_group(files["OFFBEAM_FILES"], run_det, pot, log,
-                                 offbeampot=True, load_truth=False)
+                                 offbeampot=True, load_truth=False, match_Enu=False)
             off["sample"] = "offbeam"
             for c in TRUTH_COLS:
                 if c not in off.columns:
@@ -368,14 +368,25 @@ def det_th(d, key):
     return pd.Series(gc._det_cut_th(d.detector, key), index=d.index)
 
 
-def stage_masks(d, log=None):
+def stage_masks(d, log=None, sel="1p"):
     """Cumulative masks of the production selection, in the order the cut
     breakdown pages show them. Every mask is a boolean numpy array."""
     presel = gc.presel_cut(d) & gc.flash_cut(d)
-    cosmic = gc.cosmic_cut(d)
+    if sel != "mp":
+        cosmic = gc.cosmic_cut(d)
+    else:
+        cosmic = pd.Series(True, index=d.index)
     ts = d.mu_trackScore >= det_th(d, "musel_track_score_min")
     lenc = d.mu_len.between(det_th(d, "musel_len_th_min"), det_th(d, "musel_len_th_max"))
-    twoprong = d.n_pfp == 2
+    if sel == "1p":
+        selprong = d.n_pfp == 2
+    elif sel == "np":
+        selprong = d.n_pfp >= 2
+    elif sel == "mp":
+        selprong = d.n_pfp > 2
+    else:
+        sys.exit(f"Not proper selection: {sel}")
+
     mupid = (d.mu_chi2_of_mu_cand < det_th(d, "musel_muscore_th")) & \
             (d.prot_chi2_of_mu_cand > det_th(d, "musel_pscore_th"))
     ppid = (d.mu_chi2_of_prot_cand > det_th(d, "psel_muscore_th")) & \
@@ -385,9 +396,9 @@ def stage_masks(d, log=None):
     m["cosmic"] = (presel & cosmic).to_numpy()
     m["track_score"] = (presel & cosmic & ts).to_numpy()
     m["mu_len"] = (presel & cosmic & ts & lenc).to_numpy()
-    m["twoprong"] = (presel & cosmic & ts & lenc & twoprong).to_numpy()
-    m["mu_cand"] = (presel & cosmic & ts & lenc & twoprong & mupid).to_numpy()
-    m["final"] = (presel & cosmic & ts & lenc & twoprong & mupid & ppid).to_numpy()
+    m["selprong"] = (presel & cosmic & ts & lenc & selprong).to_numpy()
+    m["mu_cand"] = (presel & cosmic & ts & lenc & selprong & mupid).to_numpy()
+    m["final"] = (presel & cosmic & ts & lenc & selprong & mupid & ppid).to_numpy()
     if log is not None and "gump_sel" in d.columns:
         # the production's own flag (presel & cosmic & flash & trk & pid & n_pfp==2)
         prod = d.gump_sel.fillna(False).astype(bool).to_numpy()
@@ -510,9 +521,9 @@ def cut_pages():
         ],
         "mu_cand": [
             ("mu_chi2_of_mu_cand", "Muon-candidate $\\chi^2_\\mu$", np.linspace(0, 115, 24),
-             "twoprong", lt("musel_muscore_th", "Cut: $\\chi^2_\\mu < %g$"), "no cut in ICARUS"),
+             "selprong", lt("musel_muscore_th", "Cut: $\\chi^2_\\mu < %g$"), "no cut in ICARUS"),
             ("prot_chi2_of_mu_cand", "Muon-candidate $\\chi^2_p$", np.linspace(0, 300, 31),
-             "twoprong", gt("musel_pscore_th", "Cut: $\\chi^2_p > %g$"), None),
+             "selprong", gt("musel_pscore_th", "Cut: $\\chi^2_p > %g$"), None),
         ],
         "p_cand": [
             ("mu_chi2_of_prot_cand", "Proton-candidate $\\chi^2_\\mu$", np.linspace(0, 100, 26),
@@ -750,7 +761,8 @@ def main(argv=None):
     plotdir = args.plotdir
     if save:
         for sub in ("", "png", "pdf"):
-            os.makedirs(os.path.join(plotdir, sub), exist_ok=True)
+            for sel in ["1p", "np", "mp"]:
+                os.makedirs(os.path.join(plotdir, sel, sub), exist_ok=True)
     lines = []
 
     def log(msg):
@@ -762,38 +774,40 @@ def main(argv=None):
         df_dir, ",".join(sorted(groups)), not args.no_dirt, not args.no_offbeam))
     log("=" * 70)
 
-    dfs, truths, masks, fcats, mcats = {}, {}, {}, {}, {}
-    for det in ["SBND", "ICARUS"]:
-        dfs[det], truths[det] = load_detector(det, df_dir, log, include_dirt=not args.no_dirt,
-                                             include_offbeam=not args.no_offbeam,
-                                             with_truth="eff" in groups)
-        masks[det] = stage_masks(dfs[det], log)
-        fcats[det] = final_state(dfs[det])
-        mcats[det] = mode_category(dfs[det])
-        d = dfs[det]
-        w = d.glob_scale.to_numpy(dtype=float)
-        log("  %s stage yields (weighted): %s" % (
-            det, ", ".join("%s %.1f" % (k, w[v].sum()) for k, v in masks[det].items())))
-        log("  %s final-state fractions after selection: %s" % (det, ", ".join(
-            "%s %.3f" % (FS_CATS[i][0].replace("$", "").replace("\\", ""),
-                         w[masks[det]["final"] & (fcats[det] == i)].sum() /
-                         max(w[masks[det]["final"]].sum(), 1e-9))
-            for i in range(len(FS_CATS)))))
+    for sel in ["1p", "np", "mp"]:
+        dfs, truths, masks, fcats, mcats = {}, {}, {}, {}, {}
+        for det in ["SBND", "ICARUS"]:
+            log(f"Running {sel} selection for {det}")
+            dfs[det], truths[det] = load_detector(det, df_dir, log, include_dirt=not args.no_dirt,
+                                                 include_offbeam=not args.no_offbeam,
+                                                 with_truth="eff" in groups)
+            masks[det] = stage_masks(dfs[det], log, sel=sel)
+            fcats[det] = final_state(dfs[det])
+            mcats[det] = mode_category(dfs[det])
+            d = dfs[det]
+            w = d.glob_scale.to_numpy(dtype=float)
+            log("  %s stage yields (weighted): %s" % (
+                det, ", ".join("%s %.1f" % (k, w[v].sum()) for k, v in masks[det].items())))
+            log("  %s final-state fractions after selection: %s" % (det, ", ".join(
+                "%s %.3f" % (FS_CATS[i][0].replace("$", "").replace("\\", ""),
+                             w[masks[det]["final"] & (fcats[det] == i)].sum() /
+                             max(w[masks[det]["final"]].sum(), 1e-9))
+                for i in range(len(FS_CATS)))))
 
-    if "cuts" in groups:
-        log("\ncut breakdown pages")
-        plot_cut_pages(dfs, masks, fcats, plotdir, save, log)
-    if "eff" in groups:
-        log("\nefficiencies")
-        plot_efficiency(dfs, truths, masks, plotdir, save, log)
-    if "signalbox" in groups:
-        log("\nnear/far signal-box distributions")
-        plot_signalbox(dfs, masks, mcats, plotdir, save, log)
+        if "cuts" in groups:
+            log("\ncut breakdown pages")
+            plot_cut_pages(dfs, masks, fcats, plotdir+"/"+sel, save, log)
+        if "eff" in groups:
+            log("\nefficiencies")
+            plot_efficiency(dfs, truths, masks, plotdir+"/"+sel, save, log)
+        if "signalbox" in groups:
+            log("\nnear/far signal-box distributions")
+            plot_signalbox(dfs, masks, mcats, plotdir+"/"+sel, save, log)
 
-    if save:
-        with open(os.path.join(plotdir, "selection_summary.txt"), "w") as f:
-            f.write("\n".join(lines) + "\n")
-    log("\ndone -> %s" % plotdir)
+        if save:
+            with open(os.path.join(plotdir+"/"+sel, "selection_summary.txt"), "w") as f:
+                f.write("\n".join(lines) + "\n")
+        log("\ndone -> %s" % plotdir)
     return 0
 
 
