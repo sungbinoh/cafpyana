@@ -175,42 +175,6 @@ def remake_detvar_maps(detector, DF_DIR, selection=gmpl.all_gump_cuts, binning="
     cv_df['selected'] = selection(cv_df)
     bind_df['selected'] = selection(bind_df)
 
-    # Create the figure
-    plt.figure(figsize=(8, 6))
-    cv_selected = cv_df.loc[selection(cv_df)]
-    bind_selected = bind_df.loc[selection(bind_df)]
-    # Plot overlaying 1D histograms
-    plt.hist(
-        cv_selected['nu_E_calo'],
-        bins=b[0],
-        weights=cv_selected['glob_scale'],
-        histtype='step',
-        linewidth=2,
-        label='CV'
-    )
-    
-    plt.hist(
-        bind_selected['nu_E_calo'],
-        bins=b[0],  # Ensure same bins are used
-        weights=bind_selected['glob_scale'],
-        histtype='step',
-        linewidth=2,
-        linestyle='--',
-        label='BIND'
-    )
-    
-    # Labeling and polish
-    plt.xlabel('nu_E_calo')
-    plt.ylabel('Weighted Counts')
-    plt.title(f"{detector} - nu_E_calo Comparison")
-    plt.legend()
-    plt.grid(True, linestyle=':', alpha=0.6)
-    
-    # Save to file instead of plt.show()
-    plt.tight_layout()
-    plt.savefig(f"{outdir}/{detector.replace(' ', '')}_nu_E_calo_1D.png", dpi=300)
-    plt.close()
-
     cv_hist = np.histogram2d(*cv_df.loc[cv_df['selected'], ['nu_E_calo', 'del_p']].to_numpy().T, bins=b, weights=cv_df.loc[cv_df['selected'], 'glob_scale'].to_numpy())[0]
     bind_hist = np.histogram2d(*bind_df.loc[bind_df['selected'], ['nu_E_calo', 'del_p']].to_numpy().T, bins=b, weights=bind_df.loc[bind_df['selected'], 'glob_scale'].to_numpy())[0]
     save_histogram(f"{outdir}/{detector.replace(' ','')}_BIND.txt", bind_hist/cv_hist, b[0], b[1])
@@ -226,15 +190,28 @@ def remake_detvar_maps(detector, DF_DIR, selection=gmpl.all_gump_cuts, binning="
             save_histogram(f"{outdir}/{detector.replace(' ','')}_{split_region.replace(' ','')}_TRKSPLT.txt", trksplt_hist/cv_hist, b[0], b[1])
             del trksplt_df
 
+    ### detvars which don't require matching can use full df
+    large_detvars = [cv_df, syst.v_chi2smear(cv_df), syst.v_chi2dedxbias(cv_df), syst.v_chi2hi(cv_df), syst.v_chi2alphap(cv_df), syst.v_chi2betap(cv_df), syst.v_chi2Rp(cv_df), syst.v_chi2alpham(cv_df), syst.v_chi2betam(cv_df), syst.v_chi2Rm(cv_df), syst.v_flashscale(cv_df, 1), syst.v_flashscale(cv_df, -1)]
+    LARGE_DETVAR_NAMES = ["Nominal", "Smeared dE/dx", "Biased dE/dx", "Gain Hi", "EMB Alpha", "EMB Beta p", "EMB R p", "EMB Alpha m", "EMB Beta m", "EMB R m", "TrigEffPls", "TrigEffMin"] 
+    large_hists = []
+    
+    for d in large_detvars:
+        d['selected'] = selection(d)
+        large_hists.append(np.histogram2d(*d.loc[d['selected'], ['nu_E_calo', 'del_p']].to_numpy().T, bins=b, weights=d.loc[d['selected'], 'glob_scale'].to_numpy())[0])
+
+    for name, h in zip(LARGE_DETVAR_NAMES[1:], large_hists[1:]):
+        cv = large_hists[0]
+        if name == "Smeared dE/dx" and detector == "SBND":
+            save_histogram(f"{outdir}/{detector.replace(' ','')}_{name.replace('/', '').replace(' ','')}.txt", (2*(h-cv)+cv)/cv, b[0], b[1])
+        else:
+            save_histogram(f"{outdir}/{detector.replace(' ','')}_{name.replace('/', '').replace(' ','')}.txt", h/cv, b[0], b[1])
+
     ### Other big stuff
     detvars, detvar_pots = loaddf.match_common_evts(detvarsmatch, detvars, detvar_pots)
 
     for i in range(len(detvars)):
         loaddf.scale_pot(detvars[i], detvar_pots[i], GOAL_POT)
     
-    df = detvars[0]
-    detvars.extend([syst.v_chi2smear(df), syst.v_chi2dedxbias(df), syst.v_chi2hi(df), syst.v_chi2alpha(df), syst.v_chi2beta(df), syst.v_chi2R(df), syst.v_flashscale(df, 1), syst.v_flashscale(df, -1)])
-    DETVAR_NAMES.extend(["Smeared dE/dx", "Biased dE/dx", "Gain Hi", "EMB Alpha", "EMB Beta", "EMB R", "TrigEffPls", "TrigEffMin"]) 
     hists = []
     
     for d in detvars:
