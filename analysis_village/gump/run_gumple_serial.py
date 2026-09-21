@@ -66,13 +66,13 @@ import sys
 import time
 
 GUMP_DIR = os.path.dirname(os.path.abspath(__file__))
-PY = "/Users/gputnam-local/Work/fitter/env/bin/python"
-JUPYTER = "/Users/gputnam-local/Work/fitter/env/bin/jupyter"
+PY = "python3"
+JUPYTER = "/exp/sbnd/app/users/nrowe/cafpyana/envs/venv_py310_cafpyana/bin/jupyter"
 
-DF_DIR = "/Users/gputnam/Work/osc/sbn-rewgted-20-calovarB/"
-REMOTE = "gputnam@sbndgpvm04.fnal.gov"
+DF_DIR = "/exp/sbnd/data/users/nrowe/GUMPLE/sbn-rewgted-20-calovarB"
+REMOTE = "nrowe@sbndgpvm04.fnal.gov"
 REMOTE_DIR = "/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-20-calovarB"
-DEFAULT_PLOTBASE = "/Users/gputnam/Work/osc/cafpyana/plots-gumple-2026-08-31-calovarB"
+DEFAULT_PLOTBASE = "/exp/sbnd/app/users/nrowe/cafpyana/plots-gumple-2026-08-31-calovarB"
 
 # chi2 PID flavors the PID notebook can plot, in the order they are run. Must
 # match CHI2_FLAVORS in nb/MCDataComparisonPID-GUMPLE.ipynb.
@@ -228,6 +228,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--plotbase", default=DEFAULT_PLOTBASE)
+    ap.add_argument("--proton_sel", default="all")
     ap.add_argument("--skip-wait", action="store_true",
                     help="Do not wait for the rsync (files already complete)")
     ap.add_argument("--poll", type=int, default=60, help="Download poll interval [s]")
@@ -286,11 +287,13 @@ def main(argv=None):
                      % (d, detectors))
 
     plotbase = args.plotbase
+    proton_sel = args.proton_sel
     logdir = os.path.join(plotbase, "logs")
     os.makedirs(logdir, exist_ok=True)
 
     print("[cfg] df-dir      %s" % df_dir)
     print("[cfg] plotbase    %s" % plotbase)
+    print("[cfg] proton_sel    %s" % proton_sel)
     print("[cfg] calo-model  %s" % args.calo_model)
     print("[cfg] flavors     %s" % ", ".join(args.chi2_flavor))
     print("[cfg] no-angles   %s" % (", ".join(no_angles) or "none"))
@@ -328,22 +331,43 @@ def main(argv=None):
     for det in detectors:
         tag = det.replace(" ", "-")
         for flavor in args.chi2_flavor:
-            steps.append(("pid-%s-%s" % (tag, flavor), [
-                JUPYTER, "nbconvert", "--to", "notebook", "--execute",
-                "--ExecutePreprocessor.timeout=-1",
-                "--output", "MCDataComparisonPID-GUMPLE-%s-%s.ipynb" % (tag, flavor),
-                "nb/MCDataComparisonPID-GUMPLE.ipynb"],
-                {"GUMPLE_DETECTOR": det, "GUMPLE_CHI2_FLAVOR": flavor,
-                 "GUMPLE_DF_DIR": df_dir, "GUMPLE_PLOTBASE": plotbase,
-                 "GUMPLE_CALO_MODEL": args.calo_model,
-                 "GUMPLE_CUT_STAGES": args.cut_stages,
-                 "GUMPLE_ANGLE_BINS": "0" if det in no_angles else "1"}))
+            if proton_sel == "all":
+                for ps in ["1p", "np", "mp"]:
+                    steps.append(("pid-%s-%s-%s" % (tag, flavor, ps), [
+                        JUPYTER, "nbconvert", "--to", "notebook", "--execute",
+                        "--ExecutePreprocessor.timeout=-1",
+                        "--output", "MCDataComparisonPID-GUMPLE-%s-%s.ipynb" % (tag, flavor),
+                        "nb/MCDataComparisonPID-GUMPLE.ipynb"],
+                        {"GUMPLE_DETECTOR": det, "GUMPLE_CHI2_FLAVOR": flavor,
+                         "GUMPLE_DF_DIR": df_dir, "GUMPLE_PLOTBASE": plotbase, "PROTON_SEL": ps,
+                         "GUMPLE_CALO_MODEL": args.calo_model,
+                         "GUMPLE_CUT_STAGES": args.cut_stages,
+                         "GUMPLE_ANGLE_BINS": "0" if det in no_angles else "1"}))
+            else:
+                steps.append(("pid-%s-%s" % (tag, flavor), [
+                    JUPYTER, "nbconvert", "--to", "notebook", "--execute",
+                    "--ExecutePreprocessor.timeout=-1",
+                    "--output", "MCDataComparisonPID-GUMPLE-%s-%s.ipynb" % (tag, flavor),
+                    "nb/MCDataComparisonPID-GUMPLE.ipynb"],
+                    {"GUMPLE_DETECTOR": det, "GUMPLE_CHI2_FLAVOR": flavor,
+                     "GUMPLE_DF_DIR": df_dir, "GUMPLE_PLOTBASE": plotbase, "PROTON_SEL": proton_sel,
+                     "GUMPLE_CALO_MODEL": args.calo_model,
+                     "GUMPLE_CUT_STAGES": args.cut_stages,
+                     "GUMPLE_ANGLE_BINS": "0" if det in no_angles else "1"}))
 
-    steps.append(("signalbox", [
-        JUPYTER, "nbconvert", "--to", "notebook", "--execute", "--inplace",
-        "--ExecutePreprocessor.timeout=-1",
-        "nb/SignalBoxSystematics-GUMPLE.ipynb"],
-        {"GUMPLE_DF_DIR": df_dir, "GUMPLE_PLOTBASE": plotbase}))
+    if proton_sel == "all":
+        for ps in ["1p", "np", "mp"]:
+            steps.append(("signalbox-%s" % (ps), [
+                JUPYTER, "nbconvert", "--to", "notebook", "--execute", "--inplace",
+                "--ExecutePreprocessor.timeout=-1",
+                "nb/SignalBoxSystematics-GUMPLE.ipynb"],
+                {"GUMPLE_DF_DIR": df_dir, "GUMPLE_PLOTBASE": plotbase, "PROTON_SEL":ps}))
+    else:
+        steps.append(("signalbox", [
+            JUPYTER, "nbconvert", "--to", "notebook", "--execute", "--inplace",
+            "--ExecutePreprocessor.timeout=-1",
+            "nb/SignalBoxSystematics-GUMPLE.ipynb"],
+            {"GUMPLE_DF_DIR": df_dir, "GUMPLE_PLOTBASE": plotbase, "PROTON_SEL":proton_sel}))
 
     # Technote-only steps (2026-09-02): the CORSIKA / off-beam cosmic MC
     # comparison and the CV-only selection plots (cut breakdowns, efficiencies,

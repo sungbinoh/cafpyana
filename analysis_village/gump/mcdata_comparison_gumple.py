@@ -90,8 +90,8 @@ warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 for _p in (_HERE, os.path.abspath(os.path.join(_HERE, "..", ".."))):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+    #if _p not in sys.path: # want to add to the front no matter what, otherwise crashes
+    sys.path.insert(0, _p)
 
 import pyanalib.pandas_helpers as ph
 from makedf.util import *
@@ -611,17 +611,20 @@ SBND_COSMIC_NORM = 0.107
 # The GUMPLE cosmic rejection: mu-p opening angle at the tuned per-detector
 # thresholds (gc.SBND_CUTS / gc.ICARUS_CUTS) with the CRT veto folded in.
 # NB: unlike the reCAF chain there is no nu_score cut.
-def cosmic_rej(d):
-    return FV(d) & gc.cosmic_cut(d)
+def cosmic_rej(d, cosmic_cut=True):
+    if cosmic_cut:
+        return FV(d) & gc.cosmic_cut(d)
+    else:
+        return FV(d)
 
 
-def twoprong_cut(d):
+def twoprong_cut(d, cosmic_cut=True):
     # gumple trk_cut = cut_np & has_muon & cut_0shwother
-    return cosmic_rej(d) & gc.trk_cut(d)
+    return cosmic_rej(d, cosmic_cut=cosmic_cut) & gc.trk_cut(d)
 
 
-def pid_cut(d):
-    return twoprong_cut(d) & gc.pid_cut(d)
+def pid_cut(d, cosmic_cut=True):
+    return twoprong_cut(d, cosmic_cut=cosmic_cut) & gc.pid_cut(d)
 
 
 # The PID stage split on proton-candidate multiplicity: exactly one proton
@@ -631,9 +634,12 @@ def pid_cut_1p(d):
     return pid_cut(d) & (d.n_pfp == 2)
 
 
-def pid_cut_np(d):
-    return pid_cut(d) & (d.n_pfp > 2)
+def pid_cut_mp(d):
+    return pid_cut(d, cosmic_cut=False) & (d.n_pfp > 2)
 
+
+def pid_cut_np(d):
+    return pid_cut(d) & (d.n_pfp >= 2)
 
 # ============================================================
 # Plotting
@@ -1048,6 +1054,7 @@ CUTS = [
     twoprong_cut,
     pid_cut_1p,
     pid_cut_np,
+    pid_cut_mp,
 ]
 
 CUTNAMES = [
@@ -1056,6 +1063,7 @@ CUTNAMES = [
     "Two Prong Cut",
     "PID 1p",
     "PID Np",
+    "PID Mp",
 ]
 
 # NB: other_trk_length / other_shw_length are not stored in the GUMPLE dfs.
@@ -1432,11 +1440,11 @@ def prepare_detector(detector, args):
     # ---- data ----
     log("Loading on-beam data...")
     ONdf, _, _ = loaddf.load(files["ONBEAM"], load_truth=False, include_syst=False,
-                             detector=detector, preselection=FV)
+                             detector=detector, preselection=FV, match_Enu=False)
 
     log("Loading off-beam data...")
     _offs = [loaddf.load(f, load_truth=False, include_syst=False, detector=detector,
-                         preselection=FV, offbeampot=True)
+                         preselection=FV, offbeampot=True, match_Enu=False)
              for f in files["OFFBEAM_FILES"]]
     OFFdf = pd.concat([o[0] for o in _offs])
     OFFPOT = sum(o[2] for o in _offs)  # cross-check only; OFF_w computed above is used for scaling

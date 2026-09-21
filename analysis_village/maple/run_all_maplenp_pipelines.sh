@@ -3,8 +3,8 @@
 # Define the absolute input storage directories
 gray_prefix='/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-22/'
 gumple_prefix='../gumple/'
-output='/exp/sbnd/data/users/nrowe/sbn-rewgted-22-new-new/MAPLEMP/'
-MAX_JOBS=10
+output='/exp/sbnd/data/users/nrowe/sbn-rewgted-22-new-new/MAPLENP/'
+MAX_JOBS=16
 
 # Navigate to the working directory context
 echo "========================================================"
@@ -12,10 +12,10 @@ echo " Starting GUMP TTree Processing Batch Run...            "
 echo "========================================================"
 
 echo "Remaking det var maps..."
-selection="gmpl.all_maplemp_cuts"
+selection="gmpl.all_maplenp_cuts"
 splinedir="${selection#*.}"
 
-python3 ${gumple_prefix}rwt_map.py -s ${selection} -o ${splinedir} -d ${gray_prefix} -b "1D"
+python3 ${gumple_prefix}rwt_map.py -s ${selection} -o ${splinedir} -d ${gray_prefix} -b "2D"
 
 ### 1. SBND MC (20 files, 0 to 9)
 echo "--> Staging SBND Spring MC Files..."
@@ -192,6 +192,5 @@ while [ $(jobs -rp | wc -l) -ge $MAX_JOBS ]; do
     sleep 10 # Check every 2 seconds
 done
 
-
-## This makes some copies of the sbruce files which have fake data weights attached
+### This makes some copies of the sbruce files which have fake data weights attached
 $gumple_prefix/run_all.sh $output $output/FD/

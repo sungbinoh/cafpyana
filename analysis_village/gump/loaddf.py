@@ -3,6 +3,7 @@ import hashlib
 import json
 import time
 import sys
+import warnings
 
 import pandas as pd
 import numpy as np
@@ -485,15 +486,15 @@ detvar_rwt_files = [
   'SBND_GainHi.txt',
   'ICARUSRun2_GainHi.txt',
   'ICARUSRun4_GainHi.txt',
-  'SBND_EMBAlpha.txt',
-  'ICARUSRun2_EMBAlpha.txt',
-  'ICARUSRun4_EMBAlpha.txt',
-  'SBND_EMBBeta.txt',
-  'ICARUSRun2_EMBBeta.txt',
-  'ICARUSRun4_EMBBeta.txt',
-  'SBND_EMBR.txt',
-  'ICARUSRun2_EMBR.txt',
-  'ICARUSRun4_EMBR.txt',
+  ['SBND_EMBAlpham.txt','SBND_EMBAlphap.txt'],
+  ['ICARUSRun2_EMBAlpham.txt','ICARUSRun2_EMBAlphap.txt'],
+  ['ICARUSRun4_EMBAlpham.txt','ICARUSRun4_EMBAlphap.txt'],
+  ['SBND_EMBBetam.txt','SBND_EMBBetap.txt'],
+  ['ICARUSRun2_EMBBetam.txt','ICARUSRun2_EMBBetap.txt'],
+  ['ICARUSRun4_EMBBetam.txt','ICARUSRun4_EMBBetap.txt'],
+  ['SBND_EMBRm.txt','SBND_EMBRp.txt'],
+  ['ICARUSRun2_EMBRm.txt','ICARUSRun2_EMBRp.txt'],
+  ['ICARUSRun4_EMBRm.txt','ICARUSRun4_EMBRp.txt'],
   ['SBND_TrigEffMin.txt', 'SBND_TrigEffPls.txt'],
   ['ICARUSRun2_TrigEffMin.txt', 'ICARUSRun2_TrigEffPls.txt'],
   ['ICARUSRun4_TrigEffMin.txt', 'ICARUSRun4_TrigEffPls.txt'],
@@ -968,7 +969,11 @@ def load_one(fname, idf,
     if not include_syst:
         if cache_dir is not None:
             _write_cache(cache_file, df, match, pot)
-        df["total_pot"] = pot
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
+            df["total_pot"] = pot
+
         return _apply_variations(df, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
     # LOAD WEIGHTS

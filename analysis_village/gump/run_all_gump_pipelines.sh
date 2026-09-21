@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Define the absolute input storage directories
-gray_prefix='/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-21/'
+gray_prefix='/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-22/'
 gumple_prefix='../gumple/'
-output='/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-21/'
-MAX_JOBS=8
+output='/exp/sbnd/data/users/nrowe/sbn-rewgted-22-new-new/GUMP/'
+MAX_JOBS=16
 
 # Navigate to the working directory context
 echo "========================================================"
@@ -92,7 +92,7 @@ done
 ### 8. ICARUS Run 4 Dirt
 echo "--> Launching ICARUS Run 4 Dirt..."
 python3 ${gumple_prefix}/run_gumple_pipeline.py \
-    -c mc \
+    -c data \
     -s ${selection} \
     -i ${gray_prefix}ICARUSRun4_Spring_Overlay_Dirt.df \
     -o ${output}ICARUSRun4_Spring_Overlay_Dirt_sbruce.root &
@@ -155,6 +155,43 @@ python3 ${gumple_prefix}/run_gumple_pipeline.py \
     -i ${gray_prefix}ICARUSRun2_Spring_Overlay_Dirt.df \
     -o ${output}ICARUSRun2_Spring_Overlay_Dirt_sbruce.root &
 
+while [ $(jobs -rp | wc -l) -ge 1 ]; do
+    sleep 10 # Check every 2 seconds
+done
+
+
+echo "--> Launching SBND OnBeam DevData..."
+python3 ${gumple_prefix}/run_gumple_pipeline.py \
+    -c data \
+    -s ${selection} \
+    -i ${gray_prefix}SBND_SpringBNBData_FixedDev.df \
+    -o ${output}SBND_SpringBNBData_Fixed_Dev_sbruce.root &
+
 while [ $(jobs -rp | wc -l) -ge $MAX_JOBS ]; do
     sleep 10 # Check every 2 seconds
 done
+
+echo "--> Launching ICARUS Run 2 OnBeam DevData..."
+python3 ${gumple_prefix}/run_gumple_pipeline.py \
+    -c data \
+    -s ${selection} \
+    -i ${gray_prefix}ICARUS_SpringRun2BNB_unblind.df \
+    -o ${output}ICARUS_SpringRun2BNB_unblind_sbruce.root &
+
+while [ $(jobs -rp | wc -l) -ge $MAX_JOBS ]; do
+    sleep 10 # Check every 2 seconds
+done
+
+echo "--> Launching ICARUS Run 4 OnBeam DevData..."
+python3 ${gumple_prefix}/run_gumple_pipeline.py \
+    -c data \
+    -s ${selection} \
+    -i ${gray_prefix}ICARUS_SpringRun4BNB_unblind.df \
+    -o ${output}ICARUS_SpringRun4BNB_unblind_sbruce.root &
+
+while [ $(jobs -rp | wc -l) -ge $MAX_JOBS ]; do
+    sleep 10 # Check every 2 seconds
+done
+
+### This makes some copies of the sbruce files which have fake data weights attached
+$gumple_prefix/run_all.sh $output $output/FD/
