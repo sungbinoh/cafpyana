@@ -39,7 +39,7 @@ def count_trig_keys(file):
         print(f"Found {num_keys} '/trig_*' keys in {file}.")
         return num_keys
 
-def grab_pot(files, mc_bools, sep_bool=True):
+def grab_pot(files, onbeam_bools, sep_bool=True):
     print(f"running: {files}")
     pot = []
 
@@ -49,17 +49,17 @@ def grab_pot(files, mc_bools, sep_bool=True):
         print("Check input file data type!")
         sys.exit()
 
-    if isinstance(mc_bools, (bool)):
-        mc_bools = [mc_bools]*len(files)
+    if isinstance(onbeam_bools, (bool)):
+        onbeam_bools = [onbeam_bools]*len(files)
 
-    for file, mc_bool in zip(files, mc_bools):
+    for file, onbeam_bool in zip(files, onbeam_bools):
         if 'split' in get_keys(file):
             n_splits = get_n_split(file)
         else:
             n_splits = count_trig_keys(file) 
 
         detector = pd.read_hdf(file, "evt_0").detector.iloc[0]
-        if mc_bool:
+        if onbeam_bool:
             tot_pot = 0
             for n in range(n_splits):
                 tot_pot += read_pot(pd.read_hdf(file,"hdr_"+str(n)))
