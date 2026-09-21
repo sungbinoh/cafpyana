@@ -196,7 +196,7 @@ def v_variation(df, setvars):
             
     return df
 
-def v_chi2alpha(df):
+def v_chi2alphap(df):
     setvars = [
         ("mu_chi2_of_mu_cand", "mu_chi2alpha_p_of_mu_cand"),
         ("mu_chi2_of_prot_cand",  "mu_chi2alpha_p_of_prot_cand"),
@@ -205,7 +205,7 @@ def v_chi2alpha(df):
     ]
     return v_variation(df, setvars)
 
-def v_chi2beta(df):
+def v_chi2betap(df):
     setvars = [
         ("mu_chi2_of_mu_cand", "mu_chi2beta_p_of_mu_cand"),
         ("mu_chi2_of_prot_cand",  "mu_chi2beta_p_of_prot_cand"),
@@ -214,12 +214,39 @@ def v_chi2beta(df):
     ]
     return v_variation(df, setvars)
 
-def v_chi2R(df):
+def v_chi2Rp(df):
     setvars = [
         ("mu_chi2_of_mu_cand", "mu_chi2R_p_of_mu_cand"),
         ("mu_chi2_of_prot_cand",  "mu_chi2R_p_of_prot_cand"),
         ("prot_chi2_of_mu_cand", "prot_chi2R_p_of_mu_cand"),
         ("prot_chi2_of_prot_cand",  "prot_chi2R_p_of_prot_cand"),
+    ]
+    return v_variation(df, setvars)
+
+def v_chi2alpham(df):
+    setvars = [
+        ("mu_chi2_of_mu_cand", "mu_chi2alpha_m_of_mu_cand"),
+        ("mu_chi2_of_prot_cand",  "mu_chi2alpha_m_of_prot_cand"),
+        ("prot_chi2_of_mu_cand", "prot_chi2alpha_m_of_mu_cand"),
+        ("prot_chi2_of_prot_cand",  "prot_chi2alpha_m_of_prot_cand"),
+    ]
+    return v_variation(df, setvars)
+
+def v_chi2betam(df):
+    setvars = [
+        ("mu_chi2_of_mu_cand", "mu_chi2beta_m_of_mu_cand"),
+        ("mu_chi2_of_prot_cand",  "mu_chi2beta_m_of_prot_cand"),
+        ("prot_chi2_of_mu_cand", "prot_chi2beta_m_of_mu_cand"),
+        ("prot_chi2_of_prot_cand",  "prot_chi2beta_m_of_prot_cand"),
+    ]
+    return v_variation(df, setvars)
+
+def v_chi2Rm(df):
+    setvars = [
+        ("mu_chi2_of_mu_cand", "mu_chi2R_m_of_mu_cand"),
+        ("mu_chi2_of_prot_cand",  "mu_chi2R_m_of_prot_cand"),
+        ("prot_chi2_of_mu_cand", "prot_chi2R_m_of_mu_cand"),
+        ("prot_chi2_of_prot_cand",  "prot_chi2R_m_of_prot_cand"),
     ]
     return v_variation(df, setvars)
 
