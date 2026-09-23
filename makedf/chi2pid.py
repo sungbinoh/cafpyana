@@ -68,13 +68,18 @@ def chi2u(hitdf, dedxname="dedx"):
 def chi2p(hitdf, dedxname="dedx"):
     return chi2(hitdf, proton_rr, proton_dedx, proton_yerr, dedxname)
 
+def chi2pi(hitdf, dedxname="dedx"):
+    return chi2(hitdf, pion_rr, pion_dedx, pion_yerr, dedxname)
+
 def chi2par(hitdf, dedxname="dedx", par=""):
     if par == "muon":
         return chi2u(hitdf, dedxname)
     elif par == "proton":
         return chi2p(hitdf, dedxname)
+    elif par == "pion":
+        return chi2pi(hitdf, dedxname)
     else:
-        raise ValueError(f"Invalid par={par!r}. Expected 'muon' or 'proton'.")
+        raise ValueError(f"Invalid par={par!r}. Expected 'muon', 'proton', or 'pion'.")
 
 def chi2_ndof(hitdf):
     when_chi2 = (hitdf.rr < rr_max_cut_chi2) & ~hitdf.firsthit & ~hitdf.lasthit & (hitdf.dedx < 1000.)
@@ -260,6 +265,7 @@ fhist = datadir + "dEdxrestemplates.root"
 
 profp = uproot.open(fhist)["dedx_range_pro"]
 profmu = uproot.open(fhist)["dedx_range_mu"]
+profpi = uproot.open(fhist)["dedx_range_pi"]
 
 proton_dedx = profp.values()
 proton_rr = profp.axis().edges()
@@ -274,6 +280,11 @@ muon_dedx = profmu.values()
 muon_rr = profmu.axis().edges()
 muon_rr_center = profmu.axis().centers()
 muon_yerr = profmu.errors(error_mode="s")
+
+pion_dedx = profpi.values()
+pion_rr = profpi.axis().edges()
+pion_rr_center = profpi.axis().centers()
+pion_yerr = profpi.errors(error_mode="s")
 
 ##############################
 # ICARUS TPC calo files

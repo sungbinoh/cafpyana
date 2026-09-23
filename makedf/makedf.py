@@ -218,6 +218,10 @@ def make_opflashdf(f):
     opflashdf = loadbranches(f["recTree"], opflashbranches).rec.opflashes
     return opflashdf
 
+def make_mcsdf(f):
+    mcsdf = loadbranches(f["recTree"], [trkmcsbranches[0]]).rec.slc.reco.pfp.trk.mcsP
+    return mcsdf
+
 def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False, det="SBND", updatecalo=None):
     trkdf = loadbranches(f["recTree"], trkbranches)
     if scoreCut:
@@ -239,8 +243,31 @@ def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=Fals
         mcsdf = mcsdf.merge(mcsdf_angle, how="left", left_index=True, right_index=True)
         mcsgroup = list(range(mcsdf.index.nlevels-1))
         cumlen = mcsdf.seg_length.groupby(level=mcsgroup).cumsum()*14 # convert rad length to cm
+
         maxlen = (cumlen*(mcsdf.seg_scatter_angles >= 0)).groupby(level=mcsgroup).max()
-        trkdf[("pfp", "trk", "mcsP", "len", "", "")] = maxlen
+        trkdf[("pfp", "trk", "mcsP", "maxlen", "", "")] = maxlen
+
+        maxangle = (mcsdf.seg_scatter_angles).groupby(level=mcsgroup).max()
+        trkdf[("pfp", "trk", "mcsP", "maxang", "", "")] = maxangle
+
+        minlen = (cumlen*(mcsdf.seg_scatter_angles >= 0)).groupby(level=mcsgroup).min()
+        trkdf[("pfp", "trk", "mcsP", "minlen", "", "")] = minlen
+
+        minangle = (mcsdf.seg_scatter_angles).groupby(level=mcsgroup).min()
+        trkdf[("pfp", "trk", "mcsP", "minang", "", "")] = minangle
+
+        avglen = (cumlen*(mcsdf.seg_scatter_angles >= 0)).groupby(level=mcsgroup).mean()
+        trkdf[("pfp", "trk", "mcsP", "avglen", "", "")] = avglen
+
+        avgangle = (mcsdf.seg_scatter_angles).groupby(level=mcsgroup).mean()
+        trkdf[("pfp", "trk", "mcsP", "avgang", "", "")] = avgangle
+
+        stdlen = (cumlen*(mcsdf.seg_scatter_angles >= 0)).groupby(level=mcsgroup).std()
+        trkdf[("pfp", "trk", "mcsP", "stdlen", "", "")] = stdlen
+
+        stdangle = (mcsdf.seg_scatter_angles).groupby(level=mcsgroup).std()
+        trkdf[("pfp", "trk", "mcsP", "stdang", "", "")] = stdangle
+
     trkdf[("pfp", "tindex", "", "", "", "")] = trkdf.index.get_level_values(2)
 
 

@@ -317,6 +317,7 @@ mcbranches = [
     "rec.mc.nu.position.z",
     "rec.mc.nu.pdg",
     "rec.mc.nu.iscc",
+    "rec.mc.nu.isnc",
     "rec.mc.nu.genie_mode",
     "rec.mc.nu.parent_pdg",
     "rec.mc.nu.parent_dcy_E",
