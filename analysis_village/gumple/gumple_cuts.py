@@ -417,7 +417,7 @@ def all_gump_cuts(recodf, DETECTOR=None, det_run=None, variation=None):
     return gumple_base_cuts(recodf, DETECTOR=DETECTOR, det_run=det_run, variation=variation, do_cosmic_cut=True) & \
         (recodf.n_pfp == 2)
 
-def all_maple_cuts(recodf, DETECTOR=None, det_run=None, variation=None):
+def all_maplenp_cuts(recodf, DETECTOR=None, det_run=None, variation=None):
     """MAPLE (1uNp): base chain + more than two candidate pfps.
 
     NB semantic change: this is the multiplicity-INCLUSIVE chain.
@@ -434,7 +434,7 @@ def all_maplemp_cuts(recodf, DETECTOR=None, det_run=None, variation=None):
     selection."""
 
     cut_far_shw = np.isnan(recodf.max_far_shw_len)
-    return maple_base_cuts(recodf, DETECTOR=DETECTOR, det_run=det_run, variation=variation, do_cosmic_cut=False) & \
+    return gumple_base_cuts(recodf, DETECTOR=DETECTOR, det_run=det_run, variation=variation, do_cosmic_cut=False) & \
         cut_far_shw & (recodf.n_pfp > 2)
 
 def maple_cut_chain(recodf, DETECTOR=None, det_run=None, variation=None):

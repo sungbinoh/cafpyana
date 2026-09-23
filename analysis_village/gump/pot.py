@@ -39,7 +39,7 @@ def count_trig_keys(file):
         print(f"Found {num_keys} '/trig_*' keys in {file}.")
         return num_keys
 
-def grab_pot(files, mc_bools, sep_bool=True):
+def grab_pot(files, onbeam_bools, sep_bool=True):
     print(f"running: {files}")
     pot = []
 
@@ -49,17 +49,17 @@ def grab_pot(files, mc_bools, sep_bool=True):
         print("Check input file data type!")
         sys.exit()
 
-    if isinstance(mc_bools, (bool)):
-        mc_bools = [mc_bools]*len(files)
+    if isinstance(onbeam_bools, (bool)):
+        onbeam_bools = [onbeam_bools]*len(files)
 
-    for file, mc_bool in zip(files, mc_bools):
+    for file, onbeam_bool in zip(files, onbeam_bools):
         if 'split' in get_keys(file):
             n_splits = get_n_split(file)
         else:
             n_splits = count_trig_keys(file) 
 
         detector = pd.read_hdf(file, "evt_0").detector.iloc[0]
-        if mc_bool:
+        if onbeam_bool:
             tot_pot = 0
             for n in range(n_splits):
                 tot_pot += read_pot(pd.read_hdf(file,"hdr_"+str(n)))
@@ -78,7 +78,7 @@ def grab_pot(files, mc_bools, sep_bool=True):
                 print(f"{single_ngates_OFF} gates for {i}'th key")
                 ngates_OFF += single_ngates_OFF
             pot.append(5e12*ngates_OFF/N_GATES_ON_PER_5e12POT)
-            print(f"{file} sample \"pot\": {pot[-1]}")
+            #print(f"{file} sample \"pot\": {pot[-1]}")
 
     if any(p < 0 for p in pot):
         print("Cannot have negative POT!!!")
@@ -94,35 +94,9 @@ def grab_pot(files, mc_bools, sep_bool=True):
         return sum(pot)
 
 def test():
-    # pac_prefix = "/exp/sbnd/data/users/nrowe/"
-
-    # pac_files = []
-    # for i in range(7):
-    #     pac_files.append(pac_prefix+f"SBND_Run1_MC_{i:02d}.df")
-    # grab_pot(pac_files, True, False)
-
-    # pac_prefix = "/exp/sbnd/data/users/nrowe/PAC/df/"
-    # pac_files = []
-    # for i in range(35):
-    #     pac_files.append(pac_prefix+f"ICARUS_Run4_MC_{i:02d}.df")
-    # grab_pot(pac_files, True, False)
-
-    # prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-5/"
-
-    # cv_files = []
-    # for i in range(19):
-    #     cv_files.append(prefix+f"SBND_SpringMC_rewgt_{i}.df")
-
-    # grab_pot(cv_files, True)
-    # grab_pot(prefix+"ICARUS_SpringMCOverlay_rewgt.df", True)
-    # grab_pot(prefix+"SBND_SpringLowEMC.df", True)
-    # grab_pot(prefix+"SBND_SpringBNBOffData_5000.df", False)
-    # grab_pot(prefix+"ICARUS_SpringRun2BNBOff_unblind_prescaled.df", False)
     gray_prefix = "/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-6/"
     nate_prefix = "/exp/sbnd/data/users/nrowe/GUMP/sbn-rewgted-6/"
-    #grab_pot(gray_prefix+"SBND_SpringBNBOffData_5000.df", False)
-    #grab_pot(nate_prefix+"ICARUSRun4_SpringRun2BNBOff_unblind_prescaled.df", False)
-    #grab_pot(nate_prefix+"ICARUSRun2_SpringRun2BNBOff_unblind_prescaled.df", False)
+
     grab_pot(nate_prefix+"ICARUSRun2_Spring_Overlay_Dirt.df", False)
     grab_pot(nate_prefix+"ICARUSRun4_Spring_Overlay_Dirt.df", False)
 
