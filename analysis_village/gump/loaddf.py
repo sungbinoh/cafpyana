@@ -208,6 +208,14 @@ truthvars = {
   "true_nn": ("nn", ""),
   "true_npi": ("npi", ""),
   "true_npi0": ("npi0", ""),
+  # truth calorimetric energy + TKI variables, summed over all true protons with
+  # KE > 50 MeV (mcnu-only: the multi-proton sum needs every primary, not the
+  # leading two the evt df carries). See make_maple_nudf.
+  "true_Ecalo_psum50": ("Ecalo_psum50", ""),
+  "true_delp_psum50": ("del_p_psum50", ""),
+  "true_delTp_psum50": ("del_Tp_psum50", ""),
+  "true_delphi_psum50": ("del_phi_psum50", ""),
+  "true_delalpha_psum50": ("del_alpha_psum50", ""),
 }
 
 

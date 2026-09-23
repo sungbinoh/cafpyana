@@ -54,7 +54,7 @@ from pyanalib.pandas_helpers import *
 from makedf.util import *
 from makedf.makedf import (
     loadbranches, make_slcdf, make_trkdf, make_trkhitdf, make_crthitdf, make_opflashdf,
-    make_hdrdf, make_triggerdf, make_potdf_bnb, make_mcnudf,
+    make_hdrdf, make_triggerdf, make_potdf_bnb, make_mcnudf, make_mcdf,
     make_genie_evtrec_df, _build_genie_evtrec_df,
 )
 from makedf import chi2pid
@@ -483,6 +483,14 @@ def fetch_info(f):
         "true_pi0_end_x": slcdf.slc.truth.pi0.end.x,
         "true_pi0_end_y": slcdf.slc.truth.pi0.end.y,
         "true_pi0_end_z": slcdf.slc.truth.pi0.end.z,
+        # neutrino flux ancestry (parent that decayed to the nu) -- needed by the
+        # reBruce flux calculators (flux_horn_current, flux_hadron_production)
+        "true_parent_pdg": slcdf.slc.truth.parent_pdg,
+        "true_parent_dcy_mom_x": slcdf.slc.truth.parent_dcy_mom.x,
+        "true_parent_dcy_mom_y": slcdf.slc.truth.parent_dcy_mom.y,
+        "true_parent_dcy_mom_z": slcdf.slc.truth.parent_dcy_mom.z,
+        # charged-pion charge (reBruce true_cpi_pdg; true_cpi_p counts |pdg|==211)
+        "true_cpi_pdg": slcdf.slc.truth.cpi.pdg,
         "ismc" : ismc,
     })
     S["slice_index"] = S.index.get_level_values(1)
@@ -1196,6 +1204,12 @@ def make_maple_nudf(f):
         "veto_particles": cls.veto,
         "uncontained_truth": cls.uncontained,
         "true_visible_Enu": cls.true_visible_Enu,
+        # neutrino flux ancestry (parent that decayed to the nu) -- needed by the
+        # reBruce flux calculators (flux_horn_current, flux_hadron_production)
+        "parent_pdg": mc.parent_pdg,
+        "parent_dcy_mom_x": mc.parent_dcy_mom_x,
+        "parent_dcy_mom_y": mc.parent_dcy_mom_y,
+        "parent_dcy_mom_z": mc.parent_dcy_mom_z,
     })
     nudf["is_sig"] = (cls.maple_class == CLS_1MU1P) | (cls.maple_class == CLS_1MUNP)
     nudf["is_other_numucc"] = cls.maple_class == CLS_1MUNP
@@ -1203,6 +1217,66 @@ def make_maple_nudf(f):
     nudf["ind"] = nudf.index.get_level_values(1)
     nudf["detector"] = DETECTOR
     nudf["Run"] = RUN
+
+    # -------------------------------------------------------------------------
+    # Standard per-particle truth kinematics for the leading muon and proton.
+    # Reuse make_mcdf, which already reduces rec.mc.nu.prim to the leading
+    # particle of each species with the momentum (totp), unit direction (dir),
+    # generated energy (genE) and endpoint (end); it shares the (entry, inu)
+    # index with nudf. All new columns are gathered in `extra` and appended in
+    # a single pd.concat below to avoid DataFrame fragmentation.
+    # -------------------------------------------------------------------------
+    idx = nudf.index
+    mcdf = make_mcdf(f)
+    extra = {}
+    for sp in ["mu", "p"]:
+        extra[sp + "_p"] = mcdf[(sp, "totp", "")].reindex(idx)
+        extra[sp + "_dir_x"] = mcdf[(sp, "dir", "x")].reindex(idx)
+        extra[sp + "_dir_y"] = mcdf[(sp, "dir", "y")].reindex(idx)
+        extra[sp + "_dir_z"] = mcdf[(sp, "dir", "z")].reindex(idx)
+        extra[sp + "_genE"] = mcdf[(sp, "genE", "")].reindex(idx)
+        extra[sp + "_end_x"] = mcdf[(sp, "end", "x")].reindex(idx)
+        extra[sp + "_end_y"] = mcdf[(sp, "end", "y")].reindex(idx)
+        extra[sp + "_end_z"] = mcdf[(sp, "end", "z")].reindex(idx)
+
+    # -------------------------------------------------------------------------
+    # Truth calorimetric energy (Ecalo) and TKI variables, summed over ALL
+    # true final-state protons with KE > 50 MeV (suffix _psum50). Computed here
+    # rather than from make_mcdf's leading two protons so multi-proton final
+    # states are summed correctly. NaN where there is no true muon or no
+    # qualifying proton.
+    # -------------------------------------------------------------------------
+    prim = _flatcols(loadbranches(f["recTree"], mcprimbranches).rec.mc.nu.prim)
+    psel = prim[(prim.pdg == 2212) & ((prim.genE - PROTON_MASS) > 0.05)]
+    pg = pd.DataFrame({
+        "px": psel.genp_x,
+        "py": psel.genp_y,
+        "pz": psel.genp_z,
+        "E": psel.genE,
+    }).groupby(level=[0, 1])
+    psum = pg.sum()
+    pmag = np.sqrt(psum.px**2 + psum.py**2 + psum.pz**2)
+    n_p = pg.size().reindex(idx)
+    psum_p = pmag.reindex(idx)
+    psum_E = psum.E.reindex(idx)
+    dir_psum = pd.DataFrame({
+        "x": (psum.px / pmag).reindex(idx),
+        "y": (psum.py / pmag).reindex(idx),
+        "z": (psum.pz / pmag).reindex(idx),
+    })
+
+    mu_p = extra["mu_p"]
+    dir_mu = pd.DataFrame({"x": extra["mu_dir_x"], "y": extra["mu_dir_y"], "z": extra["mu_dir_z"]})
+
+    tki = transverse_kinematics(mu_p, dir_mu, psum_p, dir_psum, p_E=psum_E, n_proton=n_p)
+    extra["del_p_psum50"] = tki["del_p"]
+    extra["del_Tp_psum50"] = tki["del_Tp"]
+    extra["del_phi_psum50"] = tki["del_phi"]
+    extra["del_alpha_psum50"] = tki["del_alpha"]
+    extra["Ecalo_psum50"] = neutrino_energy(mu_p, dir_mu, psum_p, dir_psum, psum_E, n_proton=n_p)
+
+    # append all new columns at once (defragments the frame)
+    nudf = pd.concat([nudf, pd.DataFrame(extra, index=idx)], axis=1)
 
     nudf.columns = pd.MultiIndex.from_tuples([(col, '') for col in nudf.columns])
 
