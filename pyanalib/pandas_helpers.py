@@ -2,6 +2,25 @@ import pandas as pd
 import numpy as np
 import awkward as ak
 
+# Tables whose float64 columns must NOT be downcast to float32 on save.
+# TotalPOT values are ~1e15 and used for POT normalization, where float32's
+# ~7 significant digits is not enough headroom. These tables are tiny
+# (~0.1 MB), so keeping them float64 costs nothing.
+POT_TABLES = ("histpotdf", "histgenevtdf")
+
+def downcast_float32(df):
+    """Cast all float64 columns of df to float32, in place, and return df.
+
+    The analysis loaders already downcast every float64 column to float32 at
+    read time (see analysis_village/gump/loaddf.py), so storing float64 on disk
+    wastes ~2x the space for those columns with no analytical benefit. Callers
+    should skip POT_TABLES (see above).
+    """
+    f64 = df.select_dtypes(include=["float64"]).columns
+    if len(f64):
+        df[f64] = df[f64].astype("float32")
+    return df
+
 def broadcast(v, df):
     for vi, ii in zip(v.index.names, df.index.names):
         if vi != ii:
