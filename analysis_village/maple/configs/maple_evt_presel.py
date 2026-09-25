@@ -6,5 +6,5 @@
 # down processing, so the non-CV / detector-variation MC samples skip them.
 from analysis_village.maple.makedf import *
 
-DFS = [make_maple_evt_presel_nocalo_df, make_maple_nudf, make_hdrdf, make_triggerdf, make_potdf_bnb]
+DFS = [make_maple_evt_presel_nocalo_df, make_maple_nudf, make_hdrdf, make_triggerdf, make_maple_bnbdf]
 NAMES = ["evt", "mcnu", "hdr", "trig", "bnb"]

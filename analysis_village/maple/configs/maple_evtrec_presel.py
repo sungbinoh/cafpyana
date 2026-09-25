@@ -8,5 +8,5 @@
 from analysis_village.maple.makedf import *
 
 DFS = [make_maple_evt_presel_df, make_maple_nudf, make_maple_rewgtdf,
-       make_maple_evtrec_df, make_hdrdf, make_triggerdf, make_potdf_bnb]
+       make_maple_evtrec_df, make_hdrdf, make_triggerdf, make_maple_bnbdf]
 NAMES = ["evt", "mcnu", "wgt", "evtrec", "hdr", "trig", "bnb"]

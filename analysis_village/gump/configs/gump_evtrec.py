@@ -4,5 +4,5 @@
 from analysis_village.gump.makedf import *
 
 DFS = [make_gump_evt_nosel_df, make_gump_nudf, make_gump_rewgtdf,
-       make_gump_evtrec_df, make_hdrdf, make_triggerdf, make_potdf_bnb]
+       make_gump_evtrec_df, make_hdrdf, make_triggerdf, make_maple_bnbdf]
 NAMES = ["evt", "mcnu", "wgt", "evtrec", "hdr", "trig", "bnb"]

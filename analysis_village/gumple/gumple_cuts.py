@@ -233,6 +233,26 @@ def flash_cut(df):
 def cosmic_cut(df):
     return (df["mu_p_opening_angle_deg"] < _det_cut_th(df.detector, "max_opening_angle")) & (df["crthit"] == 0)
 
+# BNB spill beam quality (SBN SPINE numu-dis technote, DocDB 49387 Sec. 6.1.2).
+# Applies to the spill_<var> columns of the evt df (prefix="spill_") or to the
+# per-spill "bnb" df (prefix=""). The FOM upper bound is what rejects the
+# failure flags stored in FOM (-999, -1, 0, 2, 3, 4, and the +100 assumed-width
+# tier of ICARUS Run 4). NaN (MC, or data events with no matched spill) fails,
+# so only apply this to data. Not part of any selection chain.
+def beam_quality_cut(df, prefix="spill_"):
+    v = lambda name: df[prefix + name]
+    intensity = (v("TOR860") > 1e11) & (v("TOR875") > 1e11) & \
+        (v("LM875A") > 1e-2) & (v("LM875B") > 1e-2) & (v("LM875C") > 1e-2)
+    horn = (v("THCURR") >= 173) & (v("THCURR") <= 175)
+    fom = (v("FOM") > 0.98) & (v("FOM") <= 1)
+    return intensity & horn & fom
+
+# POT of the good spills in a per-spill "bnb" df. Non-finite/non-positive
+# TOR875 (the -999e12 IFBeam-failure sentinel) is excluded from the sum.
+def good_beam_pot(bnbdf):
+    tor = bnbdf.TOR875
+    return tor[beam_quality_cut(bnbdf, prefix="") & np.isfinite(tor) & (tor > 0)].sum()
+
 def slcfv_cut(df):
     return prefix_fv_cut(df, "slc_vtx")
 
