@@ -1,6 +1,6 @@
-python3 render_config.py -t GumpleTemplate.xml.j2 -d /exp/sbnd/data/users/nrowe/sbn-rewgted-22-new -o /exp/sbnd/data/users/nrowe/sbn-rewgted-22-new/MAPLEMP/GumpleSep14.xml
-python3 render_config.py -t GumpTemplate.xml.j2 -d /exp/sbnd/data/users/nrowe/sbn-rewgted-22-new -o /exp/sbnd/data/users/nrowe/sbn-rewgted-22-new/GUMP/GumpSep14.xml
-python3 render_config.py -t MapleNPTemplate.xml.j2 -d /exp/sbnd/data/users/nrowe/sbn-rewgted-22-new -o /exp/sbnd/data/users/nrowe/sbn-rewgted-22-new/MAPLENP/MapleNPSep14.xml
-python3 render_config.py -t GumpleTemplate.xml.j2 -d /flare/neutrinoGPU/SBN_PROfit/sBruce/Sep14/sbn-rewgted-22-new -o /exp/sbnd/data/users/nrowe/sbn-rewgted-22-new/MAPLEMP/GumpleANLSep14.xml
-python3 render_config.py -t GumpTemplate.xml.j2 -d /flare/neutrinoGPU/SBN_PROfit/sBruce/Sep14/sbn-rewgted-22-new -o /exp/sbnd/data/users/nrowe/sbn-rewgted-22-new/GUMP/GumpANLSep14.xml
-python3 render_config.py -t MapleNPTemplate.xml.j2 -d /flare/neutrinoGPU/SBN_PROfit/sBruce/Sep14/sbn-rewgted-22-new -o /exp/sbnd/data/users/nrowe/sbn-rewgted-22-new/MAPLENP/MapleNPANLSep14.xml
+python3 render_config.py --hdf-dir /exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-23-new/ -t GumpleTemplate.xml.j2 -d /exp/sbnd/data/users/nrowe/sbn-rewgted-23-new -o /exp/sbnd/data/users/nrowe/sbn-rewgted-23-new/MAPLEMP/GumpleSep25.xml
+python3 render_config.py --hdf-dir /exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-23-new/ -t GumpTemplate.xml.j2 -d /exp/sbnd/data/users/nrowe/sbn-rewgted-23-new -o /exp/sbnd/data/users/nrowe/sbn-rewgted-23-new/GUMP/GumpSep25.xml
+python3 render_config.py --hdf-dir /exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-23-new/ -t MapleNPTemplate.xml.j2 -d /exp/sbnd/data/users/nrowe/sbn-rewgted-23-new -o /exp/sbnd/data/users/nrowe/sbn-rewgted-23-new/MAPLENP/MapleNPSep25.xml
+python3 render_config.py --hdf-dir /exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-23-new/ -t GumpleTemplate.xml.j2 -d /flare/neutrinoGPU/SBN_PROfit/sBruce/Sep25/sbn-rewgted-23-new -o /exp/sbnd/data/users/nrowe/sbn-rewgted-23-new/MAPLEMP/GumpleANLSep25.xml
+python3 render_config.py --hdf-dir /exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-23-new/ -t GumpTemplate.xml.j2 -d /flare/neutrinoGPU/SBN_PROfit/sBruce/Sep25/sbn-rewgted-23-new -o /exp/sbnd/data/users/nrowe/sbn-rewgted-23-new/GUMP/GumpANLSep25.xml
+python3 render_config.py --hdf-dir /exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-23-new/ -t MapleNPTemplate.xml.j2 -d /flare/neutrinoGPU/SBN_PROfit/sBruce/Sep25/sbn-rewgted-23-new -o /exp/sbnd/data/users/nrowe/sbn-rewgted-23-new/MAPLENP/MapleNPANLSep25.xml

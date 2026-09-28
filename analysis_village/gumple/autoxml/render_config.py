@@ -74,7 +74,7 @@ def render_template(template_path, output_path, base_dir, hdf_dir, target_sbnd_p
     icarus_r4_mc_scale = get_scale(icarus_r4_mc_pot, target_icarus_r4_pot)
 
     # 5. ICARUS Run 4 OffBeam (Data)
-    icarus_r4_offbeam_pattern = os.path.join(hdf_dir, "ICARUS_SpringRun4BNBOff_unblind.df")
+    icarus_r4_offbeam_pattern = os.path.join(hdf_dir, "ICARUS_SpringRun4BNBOff_ReCAF2026.df")
     icarus_r4_offbeam_pot = get_sample_pot(icarus_r4_offbeam_pattern, use_pot=False)
     icarus_r4_offbeam_scale = get_scale(icarus_r4_offbeam_pot, target_icarus_r4_pot)
 

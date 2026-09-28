@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Define the absolute input storage directories
-gray_prefix='/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-22/'
+gray_prefix='/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-23-new/'
 gumple_prefix='../gumple/'
-output='/exp/sbnd/data/users/nrowe/sbn-rewgted-22-new-new/GUMP/'
-MAX_JOBS=16
+output='/exp/sbnd/data/users/nrowe/sbn-rewgted-23/GUMP/'
+MAX_JOBS=8
 
 # Navigate to the working directory context
 echo "========================================================"
@@ -15,7 +15,7 @@ echo "Remaking det var maps..."
 selection="gmpl.all_gump_cuts"
 splinedir="${selection#*.}"
 
-python3 ${gumple_prefix}rwt_map.py -s ${selection} -o ${splinedir} -d ${gray_prefix} -b "2D"
+python3 ${gumple_prefix}rwt_map.py -t -s ${selection} -o ${splinedir} --treeoutdir ${output} -d ${gray_prefix} -b "2D"
 
 ### 1. SBND MC (20 files, 0 to 9)
 echo "--> Staging SBND Spring MC Files..."
@@ -57,7 +57,7 @@ echo "--> Launching ICARUS Run 4 OffBeam Data..."
 python3 ${gumple_prefix}/run_gumple_pipeline.py \
     -c data \
     -s ${selection} \
-    -i ${gray_prefix}ICARUS_SpringRun4BNBOff_unblind.df \
+    -i ${gray_prefix}ICARUS_SpringRun4BNBOff_ReCAF2026.df \
     -o ${output}ICARUS_SpringRun4BNBOff_unblind_sbruce.root &
 
 while [ $(jobs -rp | wc -l) -ge $MAX_JOBS ]; do
@@ -189,7 +189,7 @@ python3 ${gumple_prefix}/run_gumple_pipeline.py \
     -i ${gray_prefix}ICARUS_SpringRun4BNB_unblind.df \
     -o ${output}ICARUS_SpringRun4BNB_unblind_sbruce.root &
 
-while [ $(jobs -rp | wc -l) -ge $MAX_JOBS ]; do
+while [ $(jobs -rp | wc -l) -ge 1 ]; do
     sleep 10 # Check every 2 seconds
 done
 

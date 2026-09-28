@@ -1,297 +1,567 @@
-import pandas as pd
-import os
-import glob
-import sys
-import matplotlib.pyplot as plt
-from cycler import cycler
+"""
+rwt_map.py -- detector-systematic outputs for GUMP / GUMPLE.
+
+For each detector variation this writes either or both of:
+  * a reweight map (default): the 2D (nu_E_calo, del_p) bin-by-bin ratio
+    (variation / CV) of selected, POT-scaled event counts, saved as a text grid
+    with the bin edges in the header;
+  * sbruce trees (--sbruce-trees): the selected events of the variation, and of
+    the CV it is compared to, converted with the sbruce tools.
+
+Variations that come from a dedicated sample (WireMod, SCE, DENT, ...) are
+matched to the CV event-by-event first. Matching is done per *group*: by default
+each variation is its own group, so it is matched against the CV on its own and
+gets its own matched CV. This mirrors load_detvar() in
+SignalBoxSystematics-GUMPLE.ipynb. Put several variations in one group only if
+they should share a single jointly-matched CV.
+
+Variations derived from the CV itself (binding energy, track splitting, chi2 /
+dE/dx, trigger) need no matching and are compared to the full, unmatched CV.
+"""
+
 import argparse
-from functools import reduce
+import glob
+import importlib
+import os
+import sys
+
+import matplotlib
+matplotlib.use("Agg")  # files only; avoids slow/hanging GUI backends over X forwarding
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from tqdm.auto import tqdm
 
-import importlib
-
-workspace_root = os.getcwd()
-sys.path.insert(0, workspace_root + "/../../")
-
-import pyanalib.pandas_helpers as ph
-import warnings
-from pyanalib.split_df_helpers import *
-from makedf.util import *
-
-workspace_root = os.getcwd()
-sys.path.insert(0, workspace_root + "/../gump/")
+# Paths are resolved relative to this file (analysis_village/gumple/), so the
+# script behaves the same regardless of the working directory.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+for _path in (os.path.join(_HERE, "..", ".."),      # repo root
+              os.path.join(_HERE, "..", "gump"),    # loaddf, syst
+              _HERE):                               # gumple_cuts
+    sys.path.insert(0, os.path.normpath(_path))
 
 import loaddf
-import syst 
-
-workspace_root = os.getcwd()
-sys.path.insert(0, workspace_root + "/../gumple/")
+import syst
 import gumple_cuts as gmpl
 
-class FileHistogramFunction:
-    def __init__(self, filename):
-        with open(filename, 'r') as f:
-            line1 = f.readline().strip('# ').split(',')[:-1]
-            line2 = f.readline().strip('# ').split(',')[:-1]
 
-            # Extract x metadata
-            self.x_edges = np.array([float(l) for l in line1])
-            self.y_edges = np.array([float(l) for l in line2]) 
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
 
-        # 2. Load the actual data grid (skipping the header lines)
-        self.grid = np.loadtxt(filename, delimiter=",")
+# Output locations are relative to the directory the script is run from, so
+# each selection's run directory gets its own outputs.
+DEFAULT_OUTDIR = "rwt_outputs"
+DEFAULT_TREEOUTDIR = "rwt_outputs"
+DEFAULT_PLOTDIR = "rwt_output_plots"
+DEFAULT_DFDIR = "/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-22/"
 
-    def __call__(self, x_arr, y_arr):
-        # x_arr and y_arr are now numpy arrays (e.g., df.nu_E_calo.values)
-        
-        # Use digitize to find bin indices for all points at once
-        ix = np.digitize(x_arr, self.x_edges) - 1
-        iy = np.digitize(y_arr, self.y_edges) - 1
-        
-        # Handle out-of-bounds (set to a default or clip)
-        mask = (ix >= 0) & (ix < self.grid.shape[0]) & \
-               (iy >= 0) & (iy < self.grid.shape[1])
-        
-        # Pre-fill result with 1.0 (your default)
-        result = np.ones_like(x_arr, dtype=float)
-        
-        # Apply grid values where mask is True
-        # We use indexing with arrays here
-        result[mask] = self.grid[ix[mask], iy[mask]]
-        
-        return np.nan_to_num(result, nan=1.0)
+# [nu_E_calo edges, del_p edges].
+#   "1D" : single effective del_p bin; reco-E bins chosen for the
+#          statistics of the 1p vs N>1p channels
+#   "2D" : production binning
+BINNINGS = {
+    "1D": [np.array([0.3, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.10, 1.25, 1.5]),
+           np.array([-1000.0, 0.0, 1000.0])],
+    "2D": [np.array([0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.25, 1.5]),
+           np.array([0.0, 0.2, 0.4, 0.6])],
+}
+
+# Variations built directly from the (unmatched) CV dataframe: (name, function).
+CV_DERIVED_VARIATIONS = [
+    ("Smeared dE/dx", syst.v_chi2smear),
+    ("Biased dE/dx",  syst.v_chi2dedxbias),
+    ("Gain Hi",       syst.v_chi2hi),
+    ("EMB Alpha p",   syst.v_chi2alphap),
+    ("EMB Beta p",    syst.v_chi2betap),
+    ("EMB R p",       syst.v_chi2Rp),
+    ("EMB Alpha m",   syst.v_chi2alpham),
+    ("EMB Beta m",    syst.v_chi2betam),
+    ("EMB R m",       syst.v_chi2Rm),
+    ("TrigEffPls",    lambda df: syst.v_flashscale(df, 1)),
+    ("TrigEffMin",    lambda df: syst.v_flashscale(df, -1)),
+]
+
+# --- sbruce tree settings ---
+SBRUCE_SUBDIR = "sbruce_trees"   # created inside the output directory
+DEFAULT_WEIGHT_COL = "cvwgt"
+# Tree name for the unmatched CV, i.e. the nominal for BIND, TRKSPLT and the
+# CV-derived variations. Each matched group's CV is written as <names>Nominal.
+UNMATCHED_CV_TREE_NAME = "BINDNominal"
+
+
+def _icarus_config(run, goal_pot):
+    prefix = f"ICARUSRun{run}_Spring_Overlay_"
+    return {
+        "goal_pot": goal_pot,
+        "cv": f"ICARUSRun{run}_SpringMCOverlay_rewgt_*.df",
+        "trksplt_regions": ["Z=0", "East Cathode", "West Cathode"],
+        "ratio_scales": {},
+        "match_sets": [
+            {
+                "cv": None,  # None -> use the main CV above
+                "groups": [
+                    {"WMXThetaXW": [prefix + "WMXThXW.df"]},
+                    {"WMYZ":       [prefix + "WMYZ.df"]},
+                    {"SCE":        [prefix + "SCE.df"]},
+                ],
+            },
+        ],
+    }
+
+
+# Per-detector settings. File entries are relative to --dfdir and may be globs.
+#   goal_pot        : POT every sample is scaled to
+#   cv              : main CV sample
+#   trksplt_regions : track-splitting regions (ICARUS only)
+#   ratio_scales    : per-variation multiplier on (var - cv) in the maps, e.g. 2x smearing
+#   match_sets      : groups of dedicated-sample variations, see module docstring.
+#                     Optional keys: "light" (lightmem load, default True) and
+#                     "binning" (override the --binning choice).
+DETECTOR_CONFIG = {
+    "SBND": {
+        "goal_pot": 1e20,
+        "cv": "SBNDMCCV_*.df",
+        "trksplt_regions": [],
+        # SBND dE/dx smearing systematic: 13% -> 2x13%. Applied to the map only;
+        # the sbruce tree holds the 1x-smeared events and the fitter applies the 2x.
+        "ratio_scales": {"Smeared dE/dx": 2.0},
+        "match_sets": [
+            {
+                "cv": None,
+                "groups": [
+                    {"WMXThetaXW": ["SBND_SpringMC_WMXThetaXW.df"]},
+                    {"WMYZ":       ["SBND_SpringMC_WMYZ.df"]},
+                ],
+            },
+            {
+                # The SBND SCE / DENT samples have their own nominal sample.
+                # 2xSCE / 0xSCE are the +/-1 sigma SCE variations; each is
+                # matched against Nom separately (one group each).
+                # Previously loaded with loaddf.load (no lightmem) and always
+                # binned in 2D regardless of --binning; both kept here.
+                "cv": ["SBND_SpringMC_Nom.df"],
+                "light": False,
+                "binning": "2D",
+                "groups": [
+                    {"2xSCE": ["SBND_SpringMC_2xSCE.df"]},
+                    {"0xSCE": ["SBND_SpringMC_0xSCE.df"]},
+                    {"DENT":  ["SBND_SpringMC_DENT.df"]},
+                ],
+            },
+        ],
+    },
+    "ICARUS Run2": _icarus_config(2, 2e20),
+    "ICARUS Run4": _icarus_config(4, 3e20),
+}
+
+
+# ---------------------------------------------------------------------------
+# Map file I/O
+# ---------------------------------------------------------------------------
+
+def _parse_edges(line):
+    return np.array([float(v) for v in line.strip().lstrip("#").split(",") if v.strip()])
+
+
+def read_map_file(filename):
+    """Return (x_edges, y_edges, grid) from a file written by save_histogram."""
+    with open(filename, "r") as f:
+        x_edges = _parse_edges(f.readline())
+        y_edges = _parse_edges(f.readline())
+    grid = np.loadtxt(filename, delimiter=",", ndmin=2)  # '#' header lines are skipped
+    return x_edges, y_edges, grid
+
 
 def save_histogram(filename, hist_values, x_edges, y_edges):
-    # Extract metadata to store in the header
-    nx, ny = hist_values.shape
-    
-    # Create a header string
-    header=""
-    for x in x_edges:
-        header += f"{x},"
-    header +="\n"
-    for y in y_edges:
-        header += f"{y},"
-
-    # Save the 2D grid
+    header = ",".join(str(x) for x in x_edges) + ",\n" + ",".join(str(y) for y in y_edges) + ","
     print(f"Saving: {filename}")
     np.savetxt(filename, hist_values, header=header, delimiter=",")
 
+
+class FileHistogramFunction:
+    """Look up per-event weights from a saved map. Out-of-range or NaN -> 1."""
+
+    def __init__(self, filename):
+        self.x_edges, self.y_edges, self.grid = read_map_file(filename)
+
+    def __call__(self, x_arr, y_arr):
+        ix = np.digitize(x_arr, self.x_edges) - 1
+        iy = np.digitize(y_arr, self.y_edges) - 1
+        mask = (ix >= 0) & (ix < self.grid.shape[0]) & (iy >= 0) & (iy < self.grid.shape[1])
+
+        result = np.ones(len(x_arr), dtype=float)
+        result[mask] = self.grid[ix[mask], iy[mask]]
+        return np.nan_to_num(result, nan=1.0)
+
+
 def apply_map(df, map_file, col_name):
-    if isinstance(map_file, (str, bytes)):
-        map_files = [map_file]
-    else:
-        map_files = map_file
-
-    weights = [[1]*len(df)] 
+    """Column of per-event weight lists: [1 (nominal), w_map1, w_map2, ...]."""
+    map_files = [map_file] if isinstance(map_file, (str, bytes)) else map_file
+    weights = [np.ones(len(df))]
     for mf in map_files:
-        func = FileHistogramFunction(mf)
-        weights.append(func(df.nu_E_calo.values, df.del_p.values))
-    return pd.DataFrame({col_name: [[row[i] for row in weights] for i in range(len(weights[0]))]}, index=df.index)
-
-def plot_2d_hist_from_file(filename, plot_title, output_tag):
-    x_edges = []
-    y_edges = []
-    data_rows = []
-
-    with open(filename, 'r') as f:
-        lines = f.readlines()
-        x_edges = [float(x) for x in lines[0].strip('# ').split(',') if x.strip()]
-        y_edges = [float(y) for y in lines[1].strip('# ').split(',') if y.strip()]
-        
-        for line in lines[2:]:
-            if line.strip():
-                row = [float(val) for val in line.strip().split(',') if val.strip()]
-                data_rows.append(row)
-
-    z_values = np.array(data_rows)
-
-    plt.figure(figsize=(10, 6))
-    X, Y = np.meshgrid(x_edges, y_edges)
-    #mesh = plt.pcolormesh(x_edges, y_edges, z_values.T, cmap='seismic', linewidth=0.1, vmin=0.5, vmax=1.5)
-    mesh = plt.pcolormesh(x_edges, y_edges, z_values.T, cmap='seismic', linewidth=0.1)
-    
-    plt.colorbar(mesh, label='Value')
-    plt.title(plot_title)
-    plt.xlabel(r'Reconstructed Energy $E_{calo}$ [GeV]')
-    plt.ylabel(r'$\delta p$ [GeV/c]')
-    
-    mesh.get_cmap().set_bad(color='gray')
-    plt.savefig('/exp/sbnd/app/users/nrowe/cafpyana/analysis_village/gump/rwt_outputs/2d_ratio_'+output_tag+'.png', dpi=300)
-    plt.clf() 
-
-def remake_detvar_maps(detector, DF_DIR, selection=gmpl.all_gump_cuts, binning="2D", outdir="rwt_outputs"):
-        
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
-    if detector == "ICARUS Run2":
-        GOAL_POT = 2e20
-        DETVAR_FILES = [sorted(glob.glob(DF_DIR + "ICARUSRun2_SpringMCOverlay_rewgt_*.df")), [DF_DIR + "ICARUSRun2_Spring_Overlay_WMXThXW.df"], [DF_DIR + "ICARUSRun2_Spring_Overlay_WMYZ.df"], [DF_DIR + "ICARUSRun2_Spring_Overlay_SCE.df"]]
-        DETVAR_NAMES = ["Nominal", "WMXThetaXW", "WMYZ", "SCE"]
-    elif detector == "ICARUS Run4":
-        GOAL_POT = 3e20
-        DETVAR_FILES = [sorted(glob.glob(DF_DIR + "ICARUSRun4_SpringMCOverlay_rewgt_*.df")), [DF_DIR + "ICARUSRun4_Spring_Overlay_WMXThXW.df"], [DF_DIR + "ICARUSRun4_Spring_Overlay_WMYZ.df"], [DF_DIR + "ICARUSRun4_Spring_Overlay_SCE.df"]]
-        DETVAR_NAMES = ["Nominal", "WMXThetaXW", "WMYZ", "SCE"]
-    elif detector == "SBND": 
-        GOAL_POT = 1e20
-        DETVAR_FILES = [sorted(glob.glob(DF_DIR + "SBNDMCCV_*.df")), 
-                        [DF_DIR + "SBND_SpringMC_WMXThetaXW.df"], 
-                        [DF_DIR + "SBND_SpringMC_WMYZ.df"], 
-                       ]
-
-        DETVAR_NAMES = [
-                        "Nominal", 
-                        "WMXThetaXW", 
-                        "WMYZ", 
-                        ]
+        weights.append(FileHistogramFunction(mf)(df.nu_E_calo.values, df.del_p.values))
+    return pd.DataFrame({col_name: np.column_stack(weights).tolist()}, index=df.index)
 
 
-        DETVAR_FILES_SMALL = [DF_DIR + "SBND_SpringMC_Nom.df", 
-                              DF_DIR + "SBND_SpringMC_2xSCE.df", 
-                              DF_DIR + "SBND_SpringMC_0xSCE.df",
-                              DF_DIR + "SBND_SpringMC_DENT.df"]
+# ---------------------------------------------------------------------------
+# Debug plots
+# ---------------------------------------------------------------------------
 
-        DETVAR_NAMES_SMALL = ["Nominal", "2xSCE", "0xSCE", "DENT"]
-  
+def plot_2d_hist_from_file(filename, plot_title, output_tag, plotdir=DEFAULT_PLOTDIR):
+    x_edges, y_edges, grid = read_map_file(filename)
+    z = np.ma.masked_invalid(grid.T)
 
-    if binning == "1D":
-        b = [np.array([0.3, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.10, 1.25, 1.5]), [-1000.0, 0.0, 1000.0]]
+    # Colour scale symmetric about 1 so white always means "no change".
+    dev = float(np.abs(z - 1).max()) if z.count() else 0.0
+    dev = dev if dev > 0 else 0.01
+
+    cmap = plt.get_cmap("seismic").copy()
+    cmap.set_bad(color="gray")  # empty CV bins
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    mesh = ax.pcolormesh(x_edges, y_edges, z, cmap=cmap, vmin=1 - dev, vmax=1 + dev)
+    fig.colorbar(mesh, ax=ax, label="Ratio (Variation / CV)")
+    ax.set_title(plot_title)
+    ax.set_xlabel(r"Reconstructed Energy $E_{calo}$ [GeV]")
+    ax.set_ylabel(r"$\delta p$ [GeV/c]")
+
+    os.makedirs(plotdir, exist_ok=True)
+    fig.savefig(os.path.join(plotdir, f"2d_ratio_{output_tag}.png"), dpi=300)
+    plt.close(fig)
+
+
+def plot_del_p_slices(filename, plot_title, output_tag, plotdir=DEFAULT_PLOTDIR):
+    """Ratio vs nu_E_calo, one curve per del_p bin of the map."""
+    x_edges, y_edges, grid = read_map_file(filename)
+    x_centers = 0.5 * (x_edges[:-1] + x_edges[1:])
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for iy in range(len(y_edges) - 1):
+        label = rf"$\delta p \in [{y_edges[iy]:.1f}, {y_edges[iy+1]:.1f}]$ GeV/c"
+        ax.plot(x_centers, grid[:, iy], marker="o", markersize=4, label=label)
+
+    ax.axhline(1.0, color="gray", linestyle="--", linewidth=1)
+    ax.set_xlabel(r"Reconstructed Energy $E_{calo}$ [GeV]")
+    ax.set_ylabel("Ratio (Variation / CV)")
+    ax.set_title(plot_title)
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    os.makedirs(plotdir, exist_ok=True)
+    fig.savefig(os.path.join(plotdir, f"slice_{output_tag}.png"), dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_map(filename, plotdir=DEFAULT_PLOTDIR):
+    """Make the 2D map and del_p-slice debug plots for one saved map file."""
+    tag = os.path.splitext(os.path.basename(filename))[0]
+    title = tag.replace("_", " ")
+    plot_2d_hist_from_file(filename, title, tag, plotdir)
+    plot_del_p_slices(filename, title + r" -- $\delta p$ slices", tag, plotdir)
+
+
+# ---------------------------------------------------------------------------
+# sbruce trees
+# ---------------------------------------------------------------------------
+
+class SbruceTreeWriter:
+    """
+    Write the selected events of a sample as an sbruce tree: a flat TTree via
+    export_dataframe_to_uproot, converted by run_makesbruce_macro. The flat file
+    is removed if the conversion succeeds and kept for inspection if it fails.
+
+    tree_vars=None (the default) writes every column of the dataframe; otherwise
+    only tree_vars plus weight_col are written.
+    """
+
+    def __init__(self, treeoutdir, tree_vars=None, weight_col=DEFAULT_WEIGHT_COL):
+        try:  # only needed when trees are requested, so imported here
+            from sbruce import export_dataframe_to_uproot, run_makesbruce_macro
+        except ImportError as e:
+            raise ImportError(f"--sbruce-trees needs the sbruce module on the Python path: {e}")
+        self._export = export_dataframe_to_uproot
+        self._convert = run_makesbruce_macro
+        self.weight_col = weight_col
+        self.columns = None if tree_vars is None else list(dict.fromkeys(list(tree_vars) + [weight_col]))
+        self.outdir = os.path.join(treeoutdir, SBRUCE_SUBDIR)
+        os.makedirs(self.outdir, exist_ok=True)
+
+    def __call__(self, selected_df, tag):
+        columns = self.columns if self.columns is not None else list(selected_df.columns)
+
+        # A missing weight column only warns; the tree is still written without it.
+        if self.weight_col not in selected_df.columns:
+            print(f"  [!] {tag}: weight column '{self.weight_col}' not in dataframe, "
+                  "writing the tree without it")
+            columns = [c for c in columns if c != self.weight_col]
+
+        # Explicitly requested (-v) variables must all be present.
+        missing = [c for c in columns if c not in selected_df.columns]
+        if missing:
+            print(f"  [!] Skipping sbruce tree for {tag}: missing columns {missing}")
+            return
+
+        flat_file = os.path.join(self.outdir, f"{tag}_flat.root")
+        sbruce_file = os.path.join(self.outdir, f"{tag}_sbruce.root")
+        print(f"Writing sbruce tree: {sbruce_file}")
+        self._export(selected_df[columns].copy(), flat_file, tree_name="SelectedEvents")
+
+        if self._convert(flat_file, sbruce_file) == 0:
+            os.remove(flat_file)
+        else:
+            print(f"  [!] sbruce conversion failed for {tag}, keeping {flat_file} for inspection")
+
+
+# ---------------------------------------------------------------------------
+# Loading / histogramming helpers
+# ---------------------------------------------------------------------------
+
+def _copy(x):
+    return x.copy() if hasattr(x, "copy") else x
+
+
+def _set_total_pot(df, pot):
+    """After matching, make loaddf's total_pot column (if present) the sample's matched POT."""
+    if "total_pot" not in df.columns:
+        return
+    if np.ndim(pot) != 0:
+        raise TypeError(f"Expected a single POT value after matching, got {type(pot).__name__} "
+                        f"with shape {np.shape(pot)}; total_pot can't be updated")
+    df["total_pot"] = float(pot)
+
+
+def _clean_name(name):
+    return name.replace("/", "").replace(" ", "")
+
+
+def _resolve_files(df_dir, patterns):
+    """Expand file names / globs relative to df_dir. Fails loudly if nothing matches."""
+    if isinstance(patterns, str):
+        patterns = [patterns]
+    files = []
+    for p in patterns:
+        matched = sorted(glob.glob(os.path.join(df_dir, p)))
+        if not matched:
+            raise FileNotFoundError(f"No files match {os.path.join(df_dir, p)}")
+        files += matched
+    return files
+
+
+def load_sample(files, detector, light=True, **kwargs):
+    """Load a sample with the standard preselection. Returns (df, match, pot)."""
+    common = dict(preselection=gmpl.slcfv_cut, include_syst=False, detector=detector)
+    if light:
+        return loaddf.loadl(files, lightmem=True, drops=loaddf.get_std_drops(), **common, **kwargs)
+    if len(files) != 1:
+        raise ValueError(f"Non-light loads take exactly one file, got {files}")
+    return loaddf.load(files[0], **common, **kwargs)
+
+
+def hist2d(selected_df, bins):
+    """POT-weighted (nu_E_calo, del_p) histogram of already-selected events."""
+    return np.histogram2d(selected_df.nu_E_calo.to_numpy(), selected_df.del_p.to_numpy(),
+                          bins=bins, weights=selected_df.glob_scale.to_numpy())[0]
+
+
+def ratio_hist(var_hist, cv_hist, scale=1.0):
+    """(cv + scale*(var - cv)) / cv. Bins with an empty CV are NaN (-> weight 1)."""
+    numerator = cv_hist + scale * (var_hist - cv_hist)
+    return np.divide(numerator, cv_hist,
+                     out=np.full(cv_hist.shape, np.nan), where=cv_hist > 0)
+
+
+# ---------------------------------------------------------------------------
+# Processing
+# ---------------------------------------------------------------------------
+
+class _Outputs:
+    """Sends each CV / variation comparison to the enabled outputs (maps and/or trees)."""
+
+    def __init__(self, detector, selection, bins, outdir, treeoutdir, plotdir, write_maps, tree_writer):
+        self.tag = detector.replace(" ", "")
+        self.selection = selection
+        self.bins = bins
+        self.outdir = outdir
+        self.treeoutdir = treeoutdir
+        self.plotdir = plotdir
+        self.write_maps = write_maps
+        self.tree_writer = tree_writer
+
+    def _name(self, name):
+        return f"{self.tag}_{_clean_name(name)}"
+
+    def compare(self, cv_df, variations, cv_tree_name, bins=None):
+        """
+        cv_df: POT-scaled CV. variations: iterable of (name, POT-scaled df, map scale),
+        consumed one at a time so a generator can build each variation lazily.
+        """
+        bins = self.bins if bins is None else bins
+
+        cv_sel = cv_df.loc[self.selection(cv_df)]
+        cv_hist = hist2d(cv_sel, bins) if self.write_maps else None
+        if self.tree_writer is not None:
+            self.tree_writer(cv_sel, self._name(cv_tree_name))
+        del cv_sel
+
+        for name, var_df, scale in variations:
+            var_sel = var_df.loc[self.selection(var_df)]
+            if self.write_maps:
+                path = os.path.join(self.outdir, f"{self._name(name)}.txt")
+                save_histogram(path, ratio_hist(hist2d(var_sel, bins), cv_hist, scale), bins[0], bins[1])
+                if self.plotdir is not None:
+                    plot_map(path, self.plotdir)
+            if self.tree_writer is not None:
+                self.tree_writer(var_sel, self._name(name))
+            del var_df, var_sel
+
+
+def _run_match_set(match_set, main_cv, detector, df_dir, goal_pot, out):
+    """Process one match set, matching each group to its own copy of the CV."""
+    light = match_set.get("light", True)
+    bins = BINNINGS[match_set["binning"]] if match_set.get("binning") else None
+
+    if match_set["cv"] is None:
+        cv_df, cv_match, cv_pot = main_cv
     else:
-        b = [np.array([0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.25, 1.5]), [0.0, 0.2, 0.4, 0.6]]
+        cv_df, cv_match, cv_pot = load_sample(_resolve_files(df_dir, match_set["cv"]), detector, light=light)
 
-    print(f"Using binning: {binning}")
-    print(b)
+    for group in tqdm(match_set["groups"], desc=f"{detector} matched variations"):
+        names = list(group)
+        loaded = [load_sample(_resolve_files(df_dir, files), detector, light=light)
+                  for files in group.values()]
 
-    detvars, detvarsmatch, detvar_pots = zip(*tqdm([loaddf.loadl(f, preselection=gmpl.slcfv_cut, include_syst=False, detector=detector, lightmem=True, drops=loaddf.get_std_drops()) for f in DETVAR_FILES]))
-    ## Binding E, track splitting req separate loads 
-    bind_df, _, bind_pot = loaddf.loadl(DETVAR_FILES[0], preselection=gmpl.slcfv_cut, include_syst=False, detector=detector, lightmem=True, shift_binding_E=True, drops=loaddf.get_std_drops())
+        # Copies so the shared CV stays unmatched and unscaled for later groups
+        dfs = [cv_df.copy()] + [l[0] for l in loaded]
+        matches = [_copy(cv_match)] + [l[1] for l in loaded]
+        pots = [_copy(cv_pot)] + [l[2] for l in loaded]
+        del loaded
 
-    cv_df = detvars[0].copy()
-    cv_pot = detvar_pots[0].copy()
+        dfs, pots = loaddf.match_common_evts(matches, dfs, pots)
+        for d, p in zip(dfs, pots):
+            _set_total_pot(d, p)  # loaddf's value is the pre-matching POT
+            loaddf.scale_pot(d, p, goal_pot)
 
-    loaddf.scale_pot(cv_df, cv_pot, GOAL_POT)
-    loaddf.scale_pot(bind_df, bind_pot, GOAL_POT)
+        cv_tree_name = "_".join(_clean_name(n) for n in names) + "Nominal"
+        out.compare(dfs[0], [(n, d, 1.0) for n, d in zip(names, dfs[1:])], cv_tree_name, bins)
+        del dfs
 
-    cv_df['selected'] = selection(cv_df)
-    bind_df['selected'] = selection(bind_df)
 
-    cv_hist = np.histogram2d(*cv_df.loc[cv_df['selected'], ['nu_E_calo', 'del_p']].to_numpy().T, bins=b, weights=cv_df.loc[cv_df['selected'], 'glob_scale'].to_numpy())[0]
-    bind_hist = np.histogram2d(*bind_df.loc[bind_df['selected'], ['nu_E_calo', 'del_p']].to_numpy().T, bins=b, weights=bind_df.loc[bind_df['selected'], 'glob_scale'].to_numpy())[0]
-    save_histogram(f"{outdir}/{detector.replace(' ','')}_BIND.txt", bind_hist/cv_hist, b[0], b[1])
-    del bind_df
+def remake_detvar_maps(detector, df_dir, selection=gmpl.all_gump_cuts, binning="2D", outdir=DEFAULT_OUTDIR, treeoutdir=DEFAULT_TREEOUTDIR,
+                       plotdir=None, write_maps=True, tree_writer=None):
+    """
+    Process all detector variations for one detector.
+      write_maps  : write reweight maps to outdir
+      plotdir     : if given (and maps are written), also make debug plots there
+      tree_writer : an SbruceTreeWriter to also write sbruce trees, or None
+    """
+    cfg = DETECTOR_CONFIG[detector]
+    goal_pot = cfg["goal_pot"]
+    os.makedirs(outdir, exist_ok=True)
+    os.makedirs(treeoutdir, exist_ok=True)
+    out = _Outputs(detector, selection, BINNINGS[binning], outdir, treeoutdir, plotdir, write_maps, tree_writer)
 
-    ### track splitting
-    if "ICARUS" in detector:
-        for split_region in ["Z=0","East Cathode","West Cathode"]:
-            trksplt_df, _, trksplt_pot = loaddf.loadl(DETVAR_FILES[0], preselection=gmpl.slcfv_cut, include_syst=False, detector=detector, lightmem=True, split_tracks=split_region, drops=loaddf.get_std_drops())
-            loaddf.scale_pot(trksplt_df, trksplt_pot, GOAL_POT)
-            trksplt_df['selected'] = selection(trksplt_df)
-            trksplt_hist = np.histogram2d(*trksplt_df.loc[trksplt_df['selected'], ['nu_E_calo', 'del_p']].to_numpy().T, bins=b, weights=trksplt_df.loc[trksplt_df['selected'], 'glob_scale'].to_numpy())[0]
-            save_histogram(f"{outdir}/{detector.replace(' ','')}_{split_region.replace(' ','')}_TRKSPLT.txt", trksplt_hist/cv_hist, b[0], b[1])
-            del trksplt_df
+    products = (["maps"] if write_maps else []) + (["sbruce trees"] if tree_writer is not None else [])
+    print(f"=== {detector}: {' + '.join(products)}, binning {binning}, writing to {os.path.abspath(outdir)} ===")
+    print(out.bins)
 
-    ### detvars which don't require matching can use full df
-    large_detvars = [cv_df, syst.v_chi2smear(cv_df), syst.v_chi2dedxbias(cv_df), syst.v_chi2hi(cv_df), syst.v_chi2alphap(cv_df), syst.v_chi2betap(cv_df), syst.v_chi2Rp(cv_df), syst.v_chi2alpham(cv_df), syst.v_chi2betam(cv_df), syst.v_chi2Rm(cv_df), syst.v_flashscale(cv_df, 1), syst.v_flashscale(cv_df, -1)]
-    LARGE_DETVAR_NAMES = ["Nominal", "Smeared dE/dx", "Biased dE/dx", "Gain Hi", "EMB Alpha", "EMB Beta p", "EMB R p", "EMB Alpha m", "EMB Beta m", "EMB R m", "TrigEffPls", "TrigEffMin"] 
-    large_hists = []
-    
-    for d in large_detvars:
-        d['selected'] = selection(d)
-        large_hists.append(np.histogram2d(*d.loc[d['selected'], ['nu_E_calo', 'del_p']].to_numpy().T, bins=b, weights=d.loc[d['selected'], 'glob_scale'].to_numpy())[0])
+    cv_files = _resolve_files(df_dir, cfg["cv"])
+    main_cv = load_sample(cv_files, detector)  # (df, match, pot), unscaled
 
-    for name, h in zip(LARGE_DETVAR_NAMES[1:], large_hists[1:]):
-        cv = large_hists[0]
-        if name == "Smeared dE/dx" and detector == "SBND":
-            save_histogram(f"{outdir}/{detector.replace(' ','')}_{name.replace('/', '').replace(' ','')}.txt", (2*(h-cv)+cv)/cv, b[0], b[1])
-        else:
-            save_histogram(f"{outdir}/{detector.replace(' ','')}_{name.replace('/', '').replace(' ','')}.txt", h/cv, b[0], b[1])
+    # 1. Dedicated-sample variations, each matched to its own CV copy
+    for match_set in cfg["match_sets"]:
+        _run_match_set(match_set, main_cv, detector, df_dir, goal_pot, out)
 
-    ### Other big stuff
-    detvars, detvar_pots = loaddf.match_common_evts(detvarsmatch, detvars, detvar_pots)
+    # 2. Everything else is compared to the full, unmatched CV
+    cv_df, _, cv_pot = main_cv
+    del main_cv
+    loaddf.scale_pot(cv_df, cv_pot, goal_pot)
 
-    for i in range(len(detvars)):
-        loaddf.scale_pot(detvars[i], detvar_pots[i], GOAL_POT)
-    
-    hists = []
-    
-    for d in detvars:
-        d['selected'] = selection(d)
-        hists.append(np.histogram2d(*d.loc[d['selected'], ['nu_E_calo', 'del_p']].to_numpy().T, bins=b, weights=d.loc[d['selected'], 'glob_scale'].to_numpy())[0])
+    def unmatched_variations():
+        # Loaded / built one at a time to limit memory
+        bind_df, _, bind_pot = load_sample(cv_files, detector, shift_binding_E=True)
+        loaddf.scale_pot(bind_df, bind_pot, goal_pot)
+        yield "BIND", bind_df, 1.0
+        del bind_df
 
-    for name, h in zip(DETVAR_NAMES[1:], hists[1:]):
-        cv = hists[0]
-        if name == "Smeared dE/dx" and detector == "SBND":
-            save_histogram(f"{outdir}/{detector.replace(' ','')}_{name.replace('/', '').replace(' ','')}.txt", (2*(h-cv)+cv)/cv, b[0], b[1])
-        else:
-            save_histogram(f"{outdir}/{detector.replace(' ','')}_{name.replace('/', '').replace(' ','')}.txt", h/cv, b[0], b[1])
+        for region in cfg["trksplt_regions"]:
+            split_df, _, split_pot = load_sample(cv_files, detector, split_tracks=region)
+            loaddf.scale_pot(split_df, split_pot, goal_pot)
+            yield f"{region}_TRKSPLT", split_df, 1.0
+            del split_df
 
-    ## SBND SCE now uses a different CV file than the WM samples, this is really cool and not annoying at all
-    if detector == "SBND":
-        detvars, detvarsmatch, detvar_pots = zip(*tqdm([loaddf.load(f, preselection=gmpl.slcfv_cut, include_syst=False, detector=detector) for f in DETVAR_FILES_SMALL]))
-        detvars, detvar_pots = loaddf.match_common_evts(detvarsmatch, detvars, detvar_pots)
+        for name, make_variation in CV_DERIVED_VARIATIONS:
+            yield name, make_variation(cv_df), cfg["ratio_scales"].get(name, 1.0)
 
-        for i in range(len(detvars)):
-            loaddf.scale_pot(detvars[i], detvar_pots[i], GOAL_POT)
-        
-        b = [np.array([0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.25, 1.5]), [0.0, 0.2, 0.4, 0.6]]
-        hists = []
-        for d in detvars:
-            d['selected'] = selection(d)
-            hists.append(np.histogram2d(*d.loc[d['selected'], ['nu_E_calo', 'del_p']].to_numpy().T, bins=b, weights=d.loc[d['selected'], 'glob_scale'].to_numpy())[0])
+    out.compare(cv_df, unmatched_variations(), UNMATCHED_CV_TREE_NAME)
 
-        for name, h in zip(DETVAR_NAMES_SMALL[1:], hists[1:]):
-            save_histogram(f"{outdir}/{detector.replace(' ','')}_{name.replace('/', '').replace(' ','')}.txt", h/hists[0], b[0], b[1])
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 def resolve_function(func_string):
     """
-    Resolves strings like 'gmpl.all_gump_cuts', 'gmpl.coworker_cuts', or 
+    Resolve strings like 'gmpl.all_gump_cuts', 'all_gump_cuts', or
     'my_cuts_module.custom_cut' into callable Python functions.
     """
     if "." not in func_string:
         if hasattr(gmpl, func_string):
             return getattr(gmpl, func_string)
-        raise ValueError(f"Function name must be 'module.function' (e.g. 'gmpl.all_gump_cuts'), got '{func_string}'")
+        raise argparse.ArgumentTypeError(
+            f"Function name must be 'module.function' (e.g. 'gmpl.all_gump_cuts'), got '{func_string}'")
 
     module_name, func_name = func_string.rsplit(".", 1)
-
     if module_name == "gmpl":
         module_name = "analysis_village.gumple.gumple_cuts"
 
     try:
-        mod = importlib.import_module(module_name)
-        return getattr(mod, func_name)
+        return getattr(importlib.import_module(module_name), func_name)
     except (ImportError, AttributeError) as e:
         raise argparse.ArgumentTypeError(f"Could not import '{func_string}': {e}")
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run reweighting maps with selection cuts.")
-    parser.add_argument(
-        "-s", "--selection",
-        type=resolve_function,
-        default=gmpl.all_gump_cuts,
-        help="Selection function to run (e.g., 'gmpl.all_gump_cuts' or 'gmpl.coworker_cuts')"
-    )
-    parser.add_argument(
-        "-o", "--outdir",
-        type=str,
-        default="rwt_outputs",
-        help="Output directory for reweight maps"
-    )
-    parser.add_argument(
-        "-d", "--dfdir",
-        type=str,
-        default="/exp/sbnd/data/users/gputnam/GUMP/sbn-rewgted-14/",
-        help="Output directory for reweight maps"
-    )
-    parser.add_argument(
-        "-b", "--binning",
-        type=str,
-        default="2D",
-        help="Use 2D or 1D binning reweights."
-    )
-   
+    parser = argparse.ArgumentParser(
+        description="Build detector-systematic reweight maps and/or sbruce trees.")
+    parser.add_argument("-s", "--selection", type=resolve_function, default=gmpl.all_gump_cuts,
+                        help="Selection function (e.g. 'gmpl.all_gump_cuts' or 'gmpl.all_maplemp_cuts')")
+    parser.add_argument("-o", "--outdir", type=str, default=DEFAULT_OUTDIR,
+                        help="Output directory (relative to the current directory) for maps.")
+    parser.add_argument("--treeoutdir", type=str, default=DEFAULT_OUTDIR,
+                        help="Output directory (relative to the current directory) for trees. "
+                             f"sbruce trees go in its '{SBRUCE_SUBDIR}' subdirectory")
+    parser.add_argument("-d", "--dfdir", type=str, default=DEFAULT_DFDIR,
+                        help="Input directory containing the dataframe (.df) files")
+    parser.add_argument("-b", "--binning", type=str, default="2D", choices=list(BINNINGS),
+                        help="Reweight map binning")
+    parser.add_argument("-D", "--detectors", nargs="+", default=list(DETECTOR_CONFIG),
+                        choices=list(DETECTOR_CONFIG),
+                        help="Detectors to process (quote names with spaces, e.g. 'ICARUS Run2')")
+    parser.add_argument("--no-maps", dest="maps", action="store_false",
+                        help="Don't write reweight maps (e.g. to make only sbruce trees)")
+    parser.add_argument("-p", "--plot", action="store_true",
+                        help="Also make debug plots (2D map + del_p slices) for every map")
+    parser.add_argument("--plotdir", type=str, default=DEFAULT_PLOTDIR,
+                        help="Directory for debug plots, used with --plot (relative to the current directory)")
+    parser.add_argument("-t", "--sbruce-trees", action="store_true",
+                        help="Also write sbruce trees of the selected events for every variation and its CV")
+    parser.add_argument("-v", "--tree-vars", type=str, nargs="+", default=None,
+                        help="Variables in each sbruce tree, in addition to --weight-col "
+                             "(default: every column of the dataframe)")
+    parser.add_argument("-w", "--weight-col", type=str, default=DEFAULT_WEIGHT_COL,
+                        help="Event weight column saved in the sbruce trees")
     args = parser.parse_args()
 
-    remake_detvar_maps("SBND", args.dfdir, selection=args.selection, outdir=args.outdir, binning=args.binning)
-    remake_detvar_maps("ICARUS Run2", args.dfdir, selection=args.selection, outdir=args.outdir, binning=args.binning)
-    remake_detvar_maps("ICARUS Run4", args.dfdir,  selection=args.selection, outdir=args.outdir, binning=args.binning)
+    if not args.maps and not args.sbruce_trees:
+        parser.error("--no-maps without --sbruce-trees would produce no output")
+    if args.plot and not args.maps:
+        parser.error("--plot makes plots of the maps, so it can't be combined with --no-maps")
+
+    tree_writer = (SbruceTreeWriter(args.treeoutdir, args.tree_vars, args.weight_col)
+                   if args.sbruce_trees else None)
+
+    for det in args.detectors:
+        remake_detvar_maps(det, args.dfdir, selection=args.selection, outdir=args.outdir, treeoutdir=args.treeoutdir,
+                           binning=args.binning, plotdir=args.plotdir if args.plot else None,
+                           write_maps=args.maps, tree_writer=tree_writer)
