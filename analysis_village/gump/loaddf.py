@@ -24,6 +24,8 @@ sys.path.insert(0, workspace_root + "/../gumple/")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gumple"))
 import rwt_map as rw
 import gumple_cuts as gmpl
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import dataquality as dq
 
 def tmatch(reco, mc):
     for c in mc.columns:
@@ -791,6 +793,20 @@ def load_one(fname, idf,
         df["flash_maxpe"] = df["flash_maxpe"] * pe_scale
     df["flash_maxpe"] = df["flash_maxpe"].fillna(0.).astype(float)
 
+    # Apply the data-only cuts: good-run list (on- and off-beam) and per-spill
+    # beam quality (on-beam only -- off-beam carries no spill information). The
+    # event's spill_* columns hold the beam-monitor readings of its spill.
+    if not ismc:
+        evt_run = hdr.run.reindex(df.index.droplevel(-1)).to_numpy()
+        keep = np.ones(len(df), dtype=bool)
+        if data_quality:
+            keep &= dq.data_quality_cut(evt_run, detector)
+        if beam_quality and not offbeampot:
+            keep &= dq.beam_quality_cut(df).to_numpy()
+        print(f"[{os.path.basename(fname)} idf={idf}] data cuts (BQ={beam_quality and not offbeampot}, "
+              f"DQ={data_quality}): kept {keep.sum()}/{len(df)} slices")
+        df = df[keep]
+
     # Apply preselection
     if preselection is not None:
         df = df[preselection(df)]
@@ -870,8 +886,20 @@ def load_one(fname, idf,
             trig = pd.read_hdf(fname, "trig_%i" % idf)
             N_GATES_ON_PER_5e12POT = 1.3886218026202426
             pot = trig.gate_delta.sum()*(1-1/20.)/N_GATES_ON_PER_5e12POT*5e12
+    elif not ismc and (beam_quality or data_quality):
+        # sum of TOR875 over the spills passing the data cuts
+        pot = dq.split_onbeam_pot(fname, idf, detector, beam_quality=beam_quality, data_quality=data_quality)
     else:
         pot = hdr.pot.sum()
+
+    # Off-beam: restrict the gate counting to good runs
+    if offbeampot and not ismc and data_quality:
+        good = dq.data_quality_cut(hdr.run, detector)
+        if detector == "SBND":
+            pot = hdr.noffbeambnb[good].sum()/N_GATES_ON_PER_5e12POT*5e12
+        else:
+            tgood = dq.data_quality_cut(hdr.run.reindex(trig.index).to_numpy(), detector)
+            pot = trig.gate_delta[tgood].sum()*(1-1/20.)/N_GATES_ON_PER_5e12POT*5e12
 
     # CORRECT POT FOR THE DEDUP
     # The dedup above dropped events from `match`/`df`, but `hdr` (and the ICARUS
