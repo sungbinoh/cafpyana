@@ -816,8 +816,17 @@ def load_one(fname, idf,
     # after this point is metadata carried along as a column, NOT part of the key --
     # in particular AVnu, which is derived from gmpl._fv_cut and so depends on `detector`.
     match_ind = list(match.columns)
-    # if needed, include neutrino energy in matching information
-    if match_Enu:
+    # if needed, include neutrino energy in matching information.
+    # The GUMPLE data productions (sbn-rewgted-19+) ship no mcnu key at all
+    # (older ones carried an empty one); treat a missing key like the empty
+    # frame the old files had -- nu_E0/AVnu come out NaN, exactly as before.
+    with h5py.File(fname, "r") as _f:
+        _has_mcnu = (mcname % idf) in _f
+    if match_Enu and not _has_mcnu:
+        match["nu_E0"] = np.nan
+        match_ind = list(match.columns)
+        match["AVnu"] = np.nan
+    if match_Enu and _has_mcnu:
         mcdf = pd.read_hdf(fname, mcname % idf)
         mcdf["detector"] = detector
         if "Run2" in detector.replace(" ", ""):
@@ -920,6 +929,13 @@ def load_one(fname, idf,
         for setv, load in truthvars.items():
             mc_tosave[setv] = mcdf[load]
         mcdf = pd.DataFrame(mc_tosave, mcdf.index)
+        # The GUMPLE evt frame natively carries some truthvars names (true_vtx_*,
+        # true_nu_pdg, ...). mcnu is authoritative (it always was, and unmatched
+        # slices correctly come out NaN), so drop the evt copies rather than
+        # letting merge() produce _x/_y suffixed duplicates.
+        overlap = [c for c in mcdf.columns if c in df.columns]
+        if overlap:
+            df = df.drop(columns=overlap)
         df = df.merge(mcdf, left_on=["__ntuple", "entry", "tmatch_idx"], right_index=True, how="left")
 
     # LOAD GENIE EVENT RECORD
