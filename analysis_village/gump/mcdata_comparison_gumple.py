@@ -100,6 +100,7 @@ import kinematics
 sys.path.insert(0, os.path.join(_HERE, "..", "gumple"))
 import gumple_cuts as gc
 import loaddf
+import dataquality
 import syst
 
 DETECTORS = ["ICARUS Run2", "ICARUS Run4", "SBND"]
@@ -300,57 +301,17 @@ def read_dfs(file, key):
 # Normalization: gate counts, POT, off-beam weight
 # ============================================================
 def compute_norm(detector, files, log):
-    onbeam = files["ONBEAM"]
-    offbeam_files = files["OFFBEAM_FILES"]
-
-    if detector == "ICARUS Run2":
-        # NB: the old *(1-1/100.) on-beam prescale correction is dropped -- the new
-        # "unblind" files are the full (non-prescaled) stream.
-        ngates_ON = read_dfs(onbeam, "trig").gate_delta.sum()*(1.-1/200.)
-        ngates_OFF = sum(read_dfs(f, "trig").gate_delta.sum() for f in offbeam_files)*(1-1/20.)
-
-        off_w = ngates_ON / ngates_OFF
-    elif detector == "ICARUS Run4":
-        # NB: the old *(1-1/100.) on-beam prescale correction is dropped -- the new
-        # "unblind" files are the full (non-prescaled) stream.
-        ngates_ON = read_dfs(onbeam, "trig").gate_delta.sum()*(1.-1/40.)
-        ngates_OFF = sum(read_dfs(f, "trig").gate_delta.sum() for f in offbeam_files)*(1-1/20.)
-
-        off_w = ngates_ON / ngates_OFF
-    elif "SBND" in detector:
-        ngates_ON = read_dfs(onbeam, "bnb").shape[0]
-        ngates_OFF = sum(read_dfs(f, "hdr").noffbeambnb.sum() for f in offbeam_files)
-
-        f_factor = 0.0754
-        off_w = (1. - f_factor) * (ngates_ON) / (ngates_OFF)
-
-    log("ngates_ON = %r, ngates_OFF = %r, OFF_w = %r" % (ngates_ON, ngates_OFF, off_w))
+    """Gate counts, POT and off-beam weight, after the data-only beam-quality and
+    good-run cuts (the same cuts loaddf.load_one applies to the data frames).
+    See dataquality.data_norm."""
+    norm = dataquality.data_norm(detector, files["ONBEAM"], files["OFFBEAM_FILES"], log)
 
     if "ICARUS" in detector:
         log("gate_delta mean: ON: %r  OFF: %r" % (
-            1/read_dfs(onbeam, "trig").gate_delta.mean(),
-            [1/read_dfs(f, "trig").gate_delta.mean() for f in offbeam_files]))
+            1/read_dfs(files["ONBEAM"], "trig").gate_delta.mean(),
+            [1/read_dfs(f, "trig").gate_delta.mean() for f in files["OFFBEAM_FILES"]]))
 
-    if "ICARUS" in detector:
-        pot = read_dfs(onbeam, "hdr").pot.sum()
-    elif "SBND" in detector:
-        pot = read_dfs(onbeam, "bnb").TOR875.sum()
-        log("TOR875 / 1e19: %r" % (pot / 1e19))
-
-    log("POT = %r" % pot)
-    log("N GATES ON / 5e12 POT")
-    log("%r" % (5e12*ngates_ON/pot))
-
-    nevt_ON = read_dfs(onbeam, "hdr").shape[0]
-    nevt_OFF = sum(read_dfs(f, "hdr").shape[0] for f in offbeam_files)
-
-    nevt = nevt_ON - nevt_OFF*off_w
-
-    log("NEVT_ON = %r, POT = %r, NEVT_ON/1e15 POT = %r" % (nevt_ON, pot, nevt_ON / (pot / 1e15)))
-    log("NEVT = %r, POT = %r, NEVT/1e15 POT = %r" % (nevt, pot, nevt / (pot / 1e15)))
-
-    return dict(ngates_ON=ngates_ON, ngates_OFF=ngates_OFF, OFF_w=off_w, POT=pot,
-                NEVT_ON=nevt_ON, NEVT_OFF=nevt_OFF, NEVT=nevt)
+    return norm
 
 
 # ============================================================
@@ -672,9 +633,17 @@ def syst_band(ax, bins, lo, hi, **kw):
                            step="post", **style)
 
 
-def f_chi2(NMC, Ndata, cov):
-    # ignore singular entries
+def f_chi2(NMC, Ndata, cov, NON=None):
+    """chi2 and the number of bins used.
+
+    Bins with no MC (singular) are dropped, and so are EMPTY data bins -- bins
+    with no on-beam entries (NON == 0), when the on-beam counts are passed.
+    An empty bin's data stat error is sqrt(NON + NOff*OFF_w^2) ~ 0, so its term
+    would be limited only by the (small) systematic error and blow up the chi2.
+    Dropped bins are removed from both the chi2 sum and the bin count (ndof)."""
     which_bin = NMC > 0
+    if NON is not None:
+        which_bin = which_bin & (np.asarray(NON) > 0)
 
     NMC = NMC[which_bin]
     Ndata = Ndata[which_bin]
@@ -743,7 +712,7 @@ def make_plot_data(var, bins, cut, mc_weight, breakdown, areanorm, breakdown_lab
     err = np.sqrt(np.diag(cov))
 
     cov_w_stat = cov + np.diag(Nerr**2) # add stat uncertainty
-    chi2, ndof = f_chi2(NMC, N, cov_w_stat)
+    chi2, ndof = f_chi2(NMC, N, cov_w_stat, NON=NON)
 
     return {
         "det": det,
@@ -757,6 +726,7 @@ def make_plot_data(var, bins, cut, mc_weight, breakdown, areanorm, breakdown_lab
         "NMC_total": NMC,
         "NData": N,
         "NDataErr": Nerr,
+        "NON": NON,  # raw on-beam counts per bin: NON == 0 bins are dropped from the chi2
         "cov": cov,
         "cov_w_stat": cov_w_stat,
         "chi2": chi2,
@@ -1255,7 +1225,7 @@ def plot_bins(detector):
         y_range = np.linspace(-200, 200, 21)
         z_range = np.linspace(0, 500, 21)
     else:
-        x_range = np.linspace(-360, 260, 21)
+        x_range = np.linspace(-360, 360, 25)
         y_range = np.linspace(-182, 135, 21)
         z_range = np.linspace(-895, 895, 21)
 

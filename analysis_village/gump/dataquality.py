@@ -6,7 +6,12 @@ technical note (itself following the ICARUS single-detector analysis):
   1. beam intensity: TOR860 > 1e11 and TOR875 > 1e11 protons,
                      LM875A, LM875B, LM875C > 1e-2
   2. horn current:   173 <= THCURR <= 175 kA
-  3. figure of merit: 0.98 < FOM <= 1          -- SBND only (FOM_DETECTORS), see below
+  3. figure of merit: 0.98 < FOM <= 1          -- run sets in FOM_DETECTORS, see below
+
+The FOM is the CORRECTED one (FOM_best) from the beam-quality ROOT files in data/
+(beamqual_*_fom.root, written by bnb_fom_caf.py), joined to each bnb spill on the
+exact (spill_time_sec, spill_time_nsec) stamp as in match_fom.py. Spills those
+files do not cover keep the production FOM. See correct_fom().
 
 POT is counted as the sum of TOR875 over surviving spills (spills with a
 non-finite or non-positive TOR875 -- IFBeam query failures -- never count).
@@ -23,12 +28,21 @@ Both cuts apply to DATA ONLY. The beam-quality cut needs spill information, so
 it applies to on-beam data only; the good-run cut applies to on-beam and
 off-beam data alike.
 """
+import functools
+import importlib.util
 import os
 import re
 
 import h5py
 import numpy as np
 import pandas as pd
+
+# match_fom.py sits next to this file. Load it by path rather than putting this
+# directory first on sys.path, where gump's makedf.py would shadow the package.
+_spec = importlib.util.spec_from_file_location(
+    "match_fom", os.path.join(os.path.dirname(os.path.abspath(__file__)), "match_fom.py"))
+mf = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(mf)
 
 RUN_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "run_lists.md")
 
@@ -136,13 +150,25 @@ EXTRA_GOOD_RUNS = {"SBND": {18255: "Absent from the run list; physics-like, adde
 
 # Run sets the figure-of-merit cut, 0.98 < FOM <= 1, is applied to. The cut is
 # bounded on both sides so the failure flags -1/2/3/4/-999 and the ICARUS Run 4
-# +100 assumed-width tier are rejected. SBND's FOM is well behaved in
-# sbn-rewgted-24 (no -999; the cut keeps ~97-98% of the beam-quality POT).
-# TODO: ICARUS is excluded for now: 34% of the ICARUS Run 2 POT carries FOM = -999
-# (IFBeam query failed), so the cut would keep only ~56% of the Run 2 exposure
-# (vs 90% in the tech note), and Run 4 would lose ~25% to the +100 tier. Add the
-# ICARUS run sets once their FOM values are understood.
-FOM_DETECTORS = {"SBND"}
+# +100 assumed-width tier of the production FOM are rejected (spills not covered
+# by FOM_FILES still carry the production value). With the corrected FOM the
+# ICARUS -999s (34% of the Run 2 POT in sbn-rewgted-24) and the Run 4 +100 tier
+# are gone, so the cut now applies to every run set.
+# NB the Run 2 beamqual file covers the _unblind sample only: ~90% of the Run 2
+# FullOnBeam spills keep the production FOM, and their -999s fail the cut (55.5%
+# of FullOnBeam spills pass beam quality, vs 81.5% for unblind). This POT loss is
+# accepted (2026-10-01) until a FullOnBeam beamqual file exists.
+FOM_DETECTORS = {"SBND", "ICARUS Run2", "ICARUS Run4"}
+
+# Beam-quality ROOT files carrying the corrected FOM (FOM_best), per run set. The
+# SBND file covers runs 18255-18259 only (the FixedDev sample): FullOnBeam and
+# RollingDev spills are not matched and keep the production FOM.
+_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+FOM_FILES = {
+    "SBND": [os.path.join(_DATA_DIR, "beamqual_sbnd_run1dev_fom.root")],
+    "ICARUS Run2": [os.path.join(_DATA_DIR, "beamqual_run2_fom.root")],
+    "ICARUS Run4": [os.path.join(_DATA_DIR, "beamqual_run4_fom.root")],
+}
 
 RUN_LISTS = parse_run_lists()
 RESCUED_RUNS = _apply_ignored(RUN_LISTS)
@@ -158,14 +184,16 @@ def cut_reason(run, detector):
         return None
     return RUN_LISTS[detector]["reasons"].get(run, NOT_IN_LIST)
 
-# Identifies the run list (and the FOM run sets) in loaddf cache keys, so editing
-# either busts the data caches.
+# Identifies the run list (and the FOM run sets and files) in loaddf cache keys,
+# so editing any of them busts the data caches.
 with open(RUN_LIST_FILE, "rb") as _f:
     import hashlib
     RUN_LIST_HASH = hashlib.sha256(_f.read() + repr((
         sorted((d, sorted(c)) for d, c in IGNORED_PREFILTER.items()),
         sorted((d, sorted(r)) for d, r in EXTRA_GOOD_RUNS.items()),
-        sorted(FOM_DETECTORS))).encode()).hexdigest()[:12]
+        sorted(FOM_DETECTORS),
+        sorted((d, [(os.path.basename(p), os.path.getsize(p) if os.path.exists(p) else None) for p in ps])
+               for d, ps in FOM_FILES.items()))).encode()).hexdigest()[:12]
 
 # ============================================================
 # Cuts
@@ -197,6 +225,74 @@ def valid_tor(bnb):
     return np.isfinite(bnb.TOR875) & (bnb.TOR875 > 0)
 
 # ============================================================
+# Corrected FOM
+# ============================================================
+@functools.lru_cache(maxsize=None)
+def fom_lookup(detector):
+    """(sorted unique spill stamp, {column: array}) from FOM_FILES[detector], or
+    None (no correction) when the run set has no files or one is missing."""
+    paths = FOM_FILES.get(detector, [])
+    missing = [p for p in paths if not os.path.exists(p)]
+    if not paths or missing:
+        print("dataquality: no corrected FOM for %s (missing %s); keeping the production FOM"
+              % (detector, missing or "FOM_FILES entry"))
+        return None
+    stamp, values, _ = mf.load_lookup(paths, "bnbinfo", "FOM_best", [])
+    return stamp, values
+
+def correct_fom(bnb, detector, log=print):
+    """Overwrite bnb.FOM with the corrected FOM (FOM_best) of each matched spill.
+
+    Joined on the exact (spill_time_sec, spill_time_nsec) stamp, as in
+    match_fom.py. Unmatched spills keep the production FOM; a matched spill with
+    no formable FOM gets NaN (and so fails the FOM cut). Returns the matched mask.
+    """
+    lut = fom_lookup(detector)
+    if lut is None or len(bnb) == 0:
+        return np.zeros(len(bnb), dtype=bool)
+    stamp_lut, values = lut
+    stamp = mf.ns_stamp(bnb.spill_time_sec, bnb.spill_time_nsec)
+    idx = mf.match(stamp, stamp_lut, 0)
+    m = idx >= 0
+    if m.any():
+        old = bnb.FOM.to_numpy(dtype=np.float64)[m]
+        ref = values["FOM"][idx[m]].astype(np.float64)
+        both = np.isfinite(old) & np.isfinite(ref)
+        repro = np.isclose(old[both], ref[both], atol=1e-4, rtol=0).mean() if both.any() else np.nan
+        msg = "corrected FOM: matched %d/%d spills (%.2f%%), production FOM reproduced %.4f%%" % (
+            m.sum(), len(bnb), 100*m.mean(), 100*repro)
+        if "run" in bnb.columns:
+            agree = (bnb.run.to_numpy()[m].astype(np.int64) == values["run"][idx[m]].astype(np.int64)).mean()
+            msg += ", run agreement %.4f%%" % (100*agree)
+            if agree < 1:
+                msg += "  <-- WRONG JOIN"
+        if repro < 0.999:
+            msg += "  <-- join or file mismatch"
+        log(msg)
+        fom = bnb.FOM.to_numpy(dtype=np.float64).copy()
+        fom[m] = values["FOM_best"][idx[m]]
+        bnb["FOM"] = fom
+    else:
+        log("corrected FOM: matched 0/%d spills; keeping the production FOM" % len(bnb))
+    return m
+
+def event_spill_fom(bnb, hdr):
+    """The (corrected) FOM and TOR875 of each event's spill, indexed (__ntuple, entry),
+    with `mapped` False for events that have no spill row.
+
+    The evt frame's spill_* columns carry the LAST bnb row of the event's
+    (run, subrun, event) group -- checked on sbn-rewgted-24 SBND FixedDev and
+    ICARUS Run 4 to hold for every event. `bnb` is a spill_table() of the same split.
+    """
+    last = bnb.drop_duplicates(["run", "subrun", "event"], keep="last")
+    last = last.set_index(["run", "subrun", "event"])[["FOM", "TOR875"]].assign(mapped=True)
+    key = pd.MultiIndex.from_frame(hdr[["run", "subrun", "evt"]].astype(np.int64))
+    out = last.reindex(key)
+    out.index = hdr.index
+    out["mapped"] = out["mapped"].eq(True)
+    return out
+
+# ============================================================
 # Per-spill tables and normalization
 # ============================================================
 def _keys(fname, prefix):
@@ -205,7 +301,8 @@ def _keys(fname, prefix):
                       key=lambda k: int(k.split("_")[-1]))
 
 def spill_table(fname, idf, detector):
-    """The per-spill bnb table of one split, with run/subrun and the cut flags.
+    """The per-spill bnb table of one split, with run/subrun, the corrected FOM
+    (correct_fom) and the cut flags.
 
     bnb rows are indexed (__ntuple, entry, spill) with (__ntuple, entry) the
     first_in_subrun header record that carries them.
@@ -216,6 +313,8 @@ def spill_table(fname, idf, detector):
     bnb = bnb.join(rs, on=["__ntuple", "entry"])
     assert not bnb.run.isna().any(), "bnb rows without a header record in %s split %i" % (fname, idf)
     bnb["run"] = bnb.run.astype(int)
+    bnb["subrun"] = bnb.subrun.astype(int)
+    correct_fom(bnb, detector, log=lambda m: print("[%s idf=%i] %s" % (os.path.basename(fname), idf, m)))
     bnb["valid"] = valid_tor(bnb)
     bnb["bq"] = beam_quality_cut(bnb, detector, prefix="") & bnb.valid
     return bnb
