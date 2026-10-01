@@ -802,7 +802,7 @@ def load_one(fname, idf,
         if data_quality:
             keep &= dq.data_quality_cut(evt_run, detector)
         if beam_quality and not offbeampot:
-            keep &= dq.beam_quality_cut(df).to_numpy()
+            keep &= dq.beam_quality_cut(df, detector).to_numpy()
         print(f"[{os.path.basename(fname)} idf={idf}] data cuts (BQ={beam_quality and not offbeampot}, "
               f"DQ={data_quality}): kept {keep.sum()}/{len(df)} slices")
         df = df[keep]

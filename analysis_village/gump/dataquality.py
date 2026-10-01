@@ -6,7 +6,7 @@ technical note (itself following the ICARUS single-detector analysis):
   1. beam intensity: TOR860 > 1e11 and TOR875 > 1e11 protons,
                      LM875A, LM875B, LM875C > 1e-2
   2. horn current:   173 <= THCURR <= 175 kA
-  3. figure of merit: 0.98 < FOM <= 1          -- NOT APPLIED, see TODO below
+  3. figure of merit: 0.98 < FOM <= 1          -- SBND only (FOM_DETECTORS), see below
 
 POT is counted as the sum of TOR875 over surviving spills (spills with a
 non-finite or non-positive TOR875 -- IFBeam query failures -- never count).
@@ -134,6 +134,16 @@ def _apply_ignored(lists):
 # quality). It carries 74% of the SBND FixedDev POT.
 EXTRA_GOOD_RUNS = {"SBND": {18255: "Absent from the run list; physics-like, added to the good runs by hand"}}
 
+# Run sets the figure-of-merit cut, 0.98 < FOM <= 1, is applied to. The cut is
+# bounded on both sides so the failure flags -1/2/3/4/-999 and the ICARUS Run 4
+# +100 assumed-width tier are rejected. SBND's FOM is well behaved in
+# sbn-rewgted-24 (no -999; the cut keeps ~97-98% of the beam-quality POT).
+# TODO: ICARUS is excluded for now: 34% of the ICARUS Run 2 POT carries FOM = -999
+# (IFBeam query failed), so the cut would keep only ~56% of the Run 2 exposure
+# (vs 90% in the tech note), and Run 4 would lose ~25% to the +100 tier. Add the
+# ICARUS run sets once their FOM values are understood.
+FOM_DETECTORS = {"SBND"}
+
 RUN_LISTS = parse_run_lists()
 RESCUED_RUNS = _apply_ignored(RUN_LISTS)
 for _det, _runs in EXTRA_GOOD_RUNS.items():
@@ -148,12 +158,14 @@ def cut_reason(run, detector):
         return None
     return RUN_LISTS[detector]["reasons"].get(run, NOT_IN_LIST)
 
-# Identifies the run list in loaddf cache keys, so editing it busts the data caches.
+# Identifies the run list (and the FOM run sets) in loaddf cache keys, so editing
+# either busts the data caches.
 with open(RUN_LIST_FILE, "rb") as _f:
     import hashlib
     RUN_LIST_HASH = hashlib.sha256(_f.read() + repr((
         sorted((d, sorted(c)) for d, c in IGNORED_PREFILTER.items()),
-        sorted((d, sorted(r)) for d, r in EXTRA_GOOD_RUNS.items()))).encode()).hexdigest()[:12]
+        sorted((d, sorted(r)) for d, r in EXTRA_GOOD_RUNS.items()),
+        sorted(FOM_DETECTORS))).encode()).hexdigest()[:12]
 
 # ============================================================
 # Cuts
@@ -162,8 +174,10 @@ def data_quality_cut(runs, detector):
     """True for runs on the good-run list. `runs` is array-like of run numbers."""
     return np.isin(np.asarray(runs), list(GOOD_RUNS[detector]))
 
-def beam_quality_cut(df, prefix="spill_"):
+def beam_quality_cut(df, detector, prefix="spill_"):
     """Per-spill beam-quality cut (tech note Sec. 6.1.2), on columns <prefix>TOR860 etc.
+
+    The FOM requirement is applied only for run sets in FOM_DETECTORS.
 
     Evaluated on the per-spill bnb table with prefix="" or on the evt frame
     (whose spill_* columns carry the spill matched to each event) with the
@@ -173,14 +187,9 @@ def beam_quality_cut(df, prefix="spill_"):
     intensity = (v("TOR860") > 1e11) & (v("TOR875") > 1e11) & \
                 (v("LM875A") > 1e-2) & (v("LM875B") > 1e-2) & (v("LM875C") > 1e-2)
     horn = (v("THCURR") >= 173) & (v("THCURR") <= 175)
-    # TODO: apply the figure-of-merit cut, 0.98 < FOM <= 1 (bounded on both sides so
-    # the failure flags -1/2/3/4/-999 and the ICARUS Run 4 +100 assumed-width tier
-    # are rejected). Disabled for now: in sbn-rewgted-24 34% of the ICARUS Run 2 POT
-    # carries FOM = -999 (IFBeam query failed), so the cut would keep only ~56% of
-    # the Run 2 exposure (vs 90% in the tech note), and Run 4 would lose ~25% to the
-    # +100 tier. Re-enable once the FOM values are understood:
-    #   fom = (v("FOM") > 0.98) & (v("FOM") <= 1)
-    #   return intensity & horn & fom
+    if detector in FOM_DETECTORS:
+        fom = (v("FOM") > 0.98) & (v("FOM") <= 1)
+        return intensity & horn & fom
     return intensity & horn
 
 def valid_tor(bnb):
@@ -195,7 +204,7 @@ def _keys(fname, prefix):
         return sorted([k for k in f.keys() if re.fullmatch(prefix + r"_\d+", k)],
                       key=lambda k: int(k.split("_")[-1]))
 
-def spill_table(fname, idf):
+def spill_table(fname, idf, detector):
     """The per-spill bnb table of one split, with run/subrun and the cut flags.
 
     bnb rows are indexed (__ntuple, entry, spill) with (__ntuple, entry) the
@@ -208,12 +217,12 @@ def spill_table(fname, idf):
     assert not bnb.run.isna().any(), "bnb rows without a header record in %s split %i" % (fname, idf)
     bnb["run"] = bnb.run.astype(int)
     bnb["valid"] = valid_tor(bnb)
-    bnb["bq"] = beam_quality_cut(bnb, prefix="") & bnb.valid
+    bnb["bq"] = beam_quality_cut(bnb, detector, prefix="") & bnb.valid
     return bnb
 
 def split_onbeam_pot(fname, idf, detector, beam_quality=True, data_quality=True):
     """POT of one on-beam split after the requested cuts (sum of TOR875)."""
-    bnb = spill_table(fname, idf)
+    bnb = spill_table(fname, idf, detector)
     m = bnb.valid.copy()
     if beam_quality:
         m &= bnb.bq
@@ -230,7 +239,7 @@ def per_run_spills(fname, detector):
     """
     rows = []
     for k in _keys(fname, "bnb"):
-        b = spill_table(fname, int(k.split("_")[-1]))
+        b = spill_table(fname, int(k.split("_")[-1]), detector)
         tor = b.TOR875.astype(float)
         rows.append(pd.DataFrame({
             "run": b.run, "nspill": 1, "nspill_valid": b.valid.astype(int), "nspill_bq": b.bq.astype(int),
@@ -305,8 +314,8 @@ def data_norm(detector, onbeam, offbeam_files, log=print, beam_quality=True, dat
     nevt_OFF = float(sum(good.sum() for _, _, good in offs))
     nevt = nevt_ON - nevt_OFF*off_w
 
-    log("data cuts: beam_quality=%s data_quality=%s (FOM cut disabled, see dataquality.py TODO)"
-        % (beam_quality, data_quality))
+    log("data cuts: beam_quality=%s data_quality=%s (FOM cut %s)"
+        % (beam_quality, data_quality, "applied" if detector in FOM_DETECTORS else "not applied, see dataquality.FOM_DETECTORS"))
     log("  on-beam: %d runs -> %d good; spill BQ fraction (good runs) = %.4f"
         % (len(per), int(per.good.sum()), bq_frac))
     log("  on-beam POT: initial %.4e  after BQ %.4e  after BQ+DQ %.4e"
