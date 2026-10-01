@@ -24,6 +24,8 @@ sys.path.insert(0, workspace_root + "/../gumple/")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gumple"))
 import rwt_map as rw
 import gumple_cuts as gmpl
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import dataquality as dq
 
 def tmatch(reco, mc):
     for c in mc.columns:
@@ -487,12 +489,9 @@ detvar_rwt_files = [
   'ICARUSRun2_SCE.txt',
   'ICARUSRun4_SCE.txt',
   'SBND_SmeareddEdx.txt',
-  'SBND_BiaseddEdx.txt',
   'ICARUSRun2_SmeareddEdx.txt',
-  'ICARUSRun2_BiaseddEdx.txt',
   'ICARUSRun2_WMXThetaXW.txt',
   'ICARUSRun4_SmeareddEdx.txt',
-  'ICARUSRun4_BiaseddEdx.txt',
   'ICARUSRun4_WMXThetaXW.txt',
   'SBND_GainHi.txt',
   'ICARUSRun2_GainHi.txt',
@@ -530,12 +529,9 @@ detvar_rwt_lbls = [
   'SCE_ICARUSRun2_multisigma_SCE',
   'SCE_ICARUSRun4_multisigma_SCE',
   'SBND_PID_Smear',
-  'SBND_PID_Bias',
   'ICARUSRun2_PID_Smear',
-  'ICARUSRun2_PID_Bias',
   'WireMod_ICARUSRun2_multisigma_WMXThetaXW',
   'ICARUSRun4_PID_Smear',
-  'ICARUSRun4_PID_Bias',
   'WireMod_ICARUSRun4_multisigma_WMXThetaXW',
   'SBND_PID_Gain',
   'ICARUSRun2_PID_Gain',
@@ -797,6 +793,20 @@ def load_one(fname, idf,
         df["flash_maxpe"] = df["flash_maxpe"] * pe_scale
     df["flash_maxpe"] = df["flash_maxpe"].fillna(0.).astype(float)
 
+    # Apply the data-only cuts: good-run list (on- and off-beam) and per-spill
+    # beam quality (on-beam only -- off-beam carries no spill information). The
+    # event's spill_* columns hold the beam-monitor readings of its spill.
+    if not ismc:
+        evt_run = hdr.run.reindex(df.index.droplevel(-1)).to_numpy()
+        keep = np.ones(len(df), dtype=bool)
+        if data_quality:
+            keep &= dq.data_quality_cut(evt_run, detector)
+        if beam_quality and not offbeampot:
+            keep &= dq.beam_quality_cut(df, detector).to_numpy()
+        print(f"[{os.path.basename(fname)} idf={idf}] data cuts (BQ={beam_quality and not offbeampot}, "
+              f"DQ={data_quality}): kept {keep.sum()}/{len(df)} slices")
+        df = df[keep]
+
     # Apply preselection
     if preselection is not None:
         df = df[preselection(df)]
@@ -806,8 +816,17 @@ def load_one(fname, idf,
     # after this point is metadata carried along as a column, NOT part of the key --
     # in particular AVnu, which is derived from gmpl._fv_cut and so depends on `detector`.
     match_ind = list(match.columns)
-    # if needed, include neutrino energy in matching information
-    if match_Enu:
+    # if needed, include neutrino energy in matching information.
+    # The GUMPLE data productions (sbn-rewgted-19+) ship no mcnu key at all
+    # (older ones carried an empty one); treat a missing key like the empty
+    # frame the old files had -- nu_E0/AVnu come out NaN, exactly as before.
+    with h5py.File(fname, "r") as _f:
+        _has_mcnu = (mcname % idf) in _f
+    if match_Enu and not _has_mcnu:
+        match["nu_E0"] = np.nan
+        match_ind = list(match.columns)
+        match["AVnu"] = np.nan
+    if match_Enu and _has_mcnu:
         mcdf = pd.read_hdf(fname, mcname % idf)
         mcdf["detector"] = detector
         if "Run2" in detector.replace(" ", ""):
@@ -876,8 +895,20 @@ def load_one(fname, idf,
             trig = pd.read_hdf(fname, "trig_%i" % idf)
             N_GATES_ON_PER_5e12POT = 1.3886218026202426
             pot = trig.gate_delta.sum()*(1-1/20.)/N_GATES_ON_PER_5e12POT*5e12
+    elif not ismc and (beam_quality or data_quality):
+        # sum of TOR875 over the spills passing the data cuts
+        pot = dq.split_onbeam_pot(fname, idf, detector, beam_quality=beam_quality, data_quality=data_quality)
     else:
         pot = hdr.pot.sum()
+
+    # Off-beam: restrict the gate counting to good runs
+    if offbeampot and not ismc and data_quality:
+        good = dq.data_quality_cut(hdr.run, detector)
+        if detector == "SBND":
+            pot = hdr.noffbeambnb[good].sum()/N_GATES_ON_PER_5e12POT*5e12
+        else:
+            tgood = dq.data_quality_cut(hdr.run.reindex(trig.index).to_numpy(), detector)
+            pot = trig.gate_delta[tgood].sum()*(1-1/20.)/N_GATES_ON_PER_5e12POT*5e12
 
     # CORRECT POT FOR THE DEDUP
     # The dedup above dropped events from `match`/`df`, but `hdr` (and the ICARUS
@@ -898,6 +929,13 @@ def load_one(fname, idf,
         for setv, load in truthvars.items():
             mc_tosave[setv] = mcdf[load]
         mcdf = pd.DataFrame(mc_tosave, mcdf.index)
+        # The GUMPLE evt frame natively carries some truthvars names (true_vtx_*,
+        # true_nu_pdg, ...). mcnu is authoritative (it always was, and unmatched
+        # slices correctly come out NaN), so drop the evt copies rather than
+        # letting merge() produce _x/_y suffixed duplicates.
+        overlap = [c for c in mcdf.columns if c in df.columns]
+        if overlap:
+            df = df.drop(columns=overlap)
         df = df.merge(mcdf, left_on=["__ntuple", "entry", "tmatch_idx"], right_index=True, how="left")
 
     # LOAD GENIE EVENT RECORD
