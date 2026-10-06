@@ -80,6 +80,12 @@ CHI2_VARIATIONS = SCALE_SMEAR_VARIATIONS + CALO_VARIATIONS + ["cafana"]
 
 # The four per-slice chi2 candidate columns, GUMP naming ("%s" is the
 # variation suffix; "" is nominal).
+# BNB beam-monitor fields (sbnanaobj SRBNBInfo) needed for the spill-level
+# beam quality selection of the SBN SPINE numu-dis technote (DocDB 49387,
+# Sec. 6.1; the cut itself is gumple_cuts.beam_quality_cut).
+BEAM_QUALITY_VARS = ["TOR860", "TOR875", "LM875A", "LM875B", "LM875C", "THCURR", "FOM"]
+BEAM_SPILL_ID_VARS = ["spill_time_sec", "spill_time_nsec", "event"]
+
 CHI2_CAND_COLS = [
     "mu_chi2%s_of_mu_cand",
     "prot_chi2%s_of_mu_cand",
@@ -397,6 +403,32 @@ def add_pmt(f, S, DETECTOR):
     S = S.join(flash_cryo1)
     return S
 
+def _load_bnbinfo(f, leaf, varlist):
+    # Load the requested SRBNBInfo fields of rec.hdr.<leaf> (bnbinfo or
+    # spillbnbinfo), skipping any the CAF doesn't have (older CAFs lack
+    # FOM/THCURR/LM875*). Returns (df or None, list of loaded fields).
+    keys = set(f["recTree"].keys())
+    present = [v for v in varlist if "rec.hdr.%s.%s" % (leaf, v) in keys]
+    if len(present) == 0:
+        return None, present
+    df = loadbranches(f["recTree"], ["rec.hdr.%s.%s" % (leaf, v) for v in present]).rec.hdr[leaf]
+    return df, present
+
+def add_beam_quality(f, S):
+    # Per-event matched-spill beam monitors (SBN SPINE numu-dis technote,
+    # DocDB 49387 Sec. 6.1), stored as spill_<var> on every slice. CAFMaker
+    # only fills spillbnbinfo when it finds the event's spill, so MC (and
+    # unmatched data events) carry NaN.
+    B, present = _load_bnbinfo(f, "spillbnbinfo", BEAM_QUALITY_VARS)
+    if B is not None:
+        B.index.name = S.index.names[0]
+    for v in BEAM_QUALITY_VARS:
+        if v in present:
+            S = S.join(B[v].astype(float).rename("spill_" + v))
+        else:
+            S["spill_" + v] = np.nan
+    return S
+
 def fetch_metadata(f):
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
 
@@ -556,6 +588,7 @@ def fetch_info(f):
         S["crthit_ismc"] = False 
 
     S = add_pmt(f, S, DETECTOR)
+    S = add_beam_quality(f, S)
 
     return S, P, DETECTOR, RUN, ismc
 
@@ -1165,6 +1198,21 @@ def make_maple_evt_fullsel_data_df(f):
 # =====================================================================
 # mcnu builder
 # =====================================================================
+def make_maple_bnbdf(f):
+    # Per-spill BNB info (rec.hdr.bnbinfo: all spills of the subrun, stored on
+    # its first record) for POT accounting with the beam quality selection.
+    # Superset of make_potdf_bnb (same TOR860/TOR875 columns), plus the
+    # beam quality inputs and the boolean cut result (good_spill; False when
+    # any input is missing/NaN).
+    B, present = _load_bnbinfo(f, "bnbinfo", BEAM_SPILL_ID_VARS + BEAM_QUALITY_VARS)
+    if B is None:
+        return pd.DataFrame()
+    for v in BEAM_QUALITY_VARS:
+        if v not in present:
+            B[v] = np.nan
+    B["good_spill"] = gmpl.beam_quality_cut(B, prefix="").astype(bool)
+    return B
+
 def make_maple_nudf(f):
     mc = _flatcols(loadbranches(f["recTree"], mcbranches).rec.mc.nu)
     if mc.empty:

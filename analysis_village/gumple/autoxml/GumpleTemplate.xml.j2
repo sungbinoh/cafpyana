@@ -131,7 +131,7 @@
 
     <systematic type="norm" tag="SBND Det" plotname="Corsika Unc">nu_SBND_numu.*_cvbkgcosmic:0.1</systematic>
     <systematic type="norm" tag="SBND Det" plotname="SBND Dirt">nu_SBND_numu.*_dirt:1.0</systematic>
-    <systematic name="Gain_sbnd" apply_to_subchannel="nu_SBND_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="SBNDGain" tag="SBND Det" />
+    <systematic name="Gain_sbnd" apply_to_subchannel="nu_SBND_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDGain" tag="SBND Det" />
     <systematic name="Smear_sbnd" apply_to_subchannel="nu_SBND_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" inflate="2" plotname="SBNDSmear" tag="SBND Det" />
     <systematic name="Trigger_sbnd" apply_to_subchannel="nu_SBND_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBND Trig Eff" tag="SBND Det" />
     <systematic name="Alpha_sbnd" apply_to_subchannel="nu_SBND_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDAlpha" tag="SBND Det" />
@@ -146,7 +146,7 @@
     <systematic name="SCE_icarus2" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 SCE" tag="ICARUS Run 2 Det" />
     <systematic name="Smear_icarus2" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun2Smear" tag="ICARUS Run 2 Det" />
     <systematic name="BiasdEdx_icarus2" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun2Bias" tag="ICARUS Run 2 Det" />
-    <systematic name="Gain_icarus2" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun2Gain" tag="ICARUS Run 2 Det" />
+    <systematic name="Gain_icarus2" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun2Gain" tag="ICARUS Run 2 Det" />
     <systematic name="Trigger_icarus2" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun2 Trig Eff" tag="ICARUS Run 2 Det" />
     <systematic name="WM-Xtheta_xw_icarus2" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 XThetaXW" tag="ICARUS Run 2 Det" />
     <systematic name="WM-YZ_icarus2" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run2 YZ" tag="ICARUS Run 2 Det" />
@@ -158,7 +158,7 @@
     <systematic name="SCE_icarus4" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 SCE" tag="ICARUS Run 4 Det" />
     <systematic name="Smear_icarus4" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun4Smear" tag="ICARUS Run 4 Det" />
     <systematic name="BiasdEdx_icarus4" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun4Bias" tag="ICARUS Run 4 Det" />
-    <systematic name="Gain_icarus4" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun4Gain" tag="ICARUS Run 4 Det" />
+    <systematic name="Gain_icarus4" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun4Gain" tag="ICARUS Run 4 Det" />
     <systematic name="Trigger_icarus4" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun4 Trig Eff" tag="ICARUS Run 4 Det" />
     <systematic name="WM-Xtheta_xw_icarus4" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 XThetaXW" tag="ICARUS Run 4 Det" />
     <systematic name="WM-YZ_icarus4" apply_to_subchannel="nu_ICARUS_numu.*_cv.*" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run4 YZ" tag="ICARUS Run 4 Det" />
@@ -275,7 +275,7 @@
     </branch>
 </MCFile>
 
-<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUSRun2_SpringMCOverlay_rewgt_*sbruce_fakedata.root" scale = "{{ icarus_r2_mc_scale }}" pot="5e20">
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUSRun2_SpringMCOverlay_rewgt_*sbruce_fakedata.root" scale = "0.4" pot="{{ icarus_r2_mc_pot }}">
     <friend treename="multisigmaTree" />
     <friend treename="fakedataTree" />
     <friend treename="multisimTree" />
@@ -316,7 +316,7 @@
 
 </MCFile>
 
-<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUS_SpringRun2BNBOff_unblind_sbruce_fakedata.root" scale = "{{ icarus_r2_offbeam_scale }}" pot="5e20">
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUS_SpringRun2BNBOff_unblind_sbruce_fakedata.root" scale = "0.4" pot="{{ icarus_r2_offbeam_pot }}">
     <branch
         associated_subchannel = "nu_ICARUS_numu1p_intime"
         model_rule            = "0"
@@ -327,7 +327,7 @@
     </branch>
 </MCFile>
 
-<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUSRun2_Spring_Overlay_Dirt_sbruce_fakedata.root" scale = "{{ icarus_r2_dirt_scale }}" pot="5e20">
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUSRun2_Spring_Overlay_Dirt_sbruce_fakedata.root" scale = "0.4" pot="{{ icarus_r2_dirt_pot }}">
     <branch
         associated_subchannel = "nu_ICARUS_numu1p_Run2dirt"
         model_rule            = "0"
@@ -338,7 +338,7 @@
     </branch>
 </MCFile>
 
-<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUSRun4_SpringMCOverlay_rewgt_*_sbruce_fakedata.root" scale = "{{ icarus_r4_mc_scale }}" pot="5e20">
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUSRun4_SpringMCOverlay_rewgt_*_sbruce_fakedata.root" scale = "0.6" pot="{{ icarus_r4_mc_pot }}">
     <friend treename="multisigmaTree" />
     <friend treename="fakedataTree" />
     <friend treename="multisimTree" />
@@ -376,7 +376,7 @@
     </branch>
 </MCFile>
 
-<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUS_SpringRun4BNBOff_unblind_sbruce_fakedata.root" scale = "{{ icarus_r4_offbeam_scale }}" pot="5e20">
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUS_SpringRun4BNBOff_unblind_sbruce_fakedata.root" scale = "0.6" pot="{{ icarus_r4_offbeam_pot }}">
     <branch
         associated_subchannel = "nu_ICARUS_numu1p_intime"
         model_rule            = "0"
@@ -387,7 +387,7 @@
     </branch>
 </MCFile>
 
-<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUSRun4_Spring_Overlay_Dirt_sbruce_fakedata.root" scale = "{{ icarus_r4_dirt_scale }}" pot="5e20">
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUSRun4_Spring_Overlay_Dirt_sbruce_fakedata.root" scale = "0.6" pot="{{ icarus_r4_dirt_pot }}">
     <branch
         associated_subchannel = "nu_ICARUS_numu1p_Run4dirt"
         model_rule            = "0"
@@ -634,6 +634,7 @@
 		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_BINDNominal_sbruce.root" pot="1" />
 		<variation name="BIND" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_BIND_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Gain_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_GainHi_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_GainLow_sbruce.root" pot="1" knobval="-1"/>
 		<variation name="Smear_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Trigger_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Trigger_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
@@ -691,6 +692,7 @@
 		<variation name="Smear_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="BiasdEdx_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_BiaseddEdx_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Gain_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_GainHi_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_GainLow_sbruce.root" pot="1" knobval="-1"/>
 		<variation name="Trigger_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Trigger_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
 		<variation name="z0_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_Z=0_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
@@ -743,6 +745,7 @@
 		<variation name="Smear_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="BiasdEdx_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_BiaseddEdx_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Gain_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_GainHi_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_GainLow_sbruce.root" pot="1" knobval="-1"/>
 		<variation name="Trigger_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Trigger_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
 		<variation name="z0_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_Z=0_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
@@ -798,6 +801,7 @@
 		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_BINDNominal_sbruce.root" pot="1" />
 		<variation name="BIND" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_BIND_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Gain_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_GainHi_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_GainLow_sbruce.root" pot="1" knobval="-1"/>
 		<variation name="Smear_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Trigger_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Trigger_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
@@ -855,6 +859,7 @@
 		<variation name="Smear_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="BiasdEdx_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_BiaseddEdx_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Gain_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_GainHi_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_GainLow_sbruce.root" pot="1" knobval="-1"/>
 		<variation name="Trigger_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Trigger_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
 		<variation name="z0_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_Z=0_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
@@ -907,6 +912,7 @@
 		<variation name="Smear_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="BiasdEdx_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_BiaseddEdx_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Gain_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_GainHi_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_GainLow_sbruce.root" pot="1" knobval="-1"/>
 		<variation name="Trigger_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
 		<variation name="Trigger_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
 		<variation name="z0_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_Z=0_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
