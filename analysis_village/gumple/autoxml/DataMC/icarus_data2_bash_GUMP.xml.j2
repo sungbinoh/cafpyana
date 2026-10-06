@@ -1,0 +1,40 @@
+
+<?xml version="1.0" ?>
+
+<!--specifies neutrino mode or antineutrino mode-->
+<mode name="nu" />
+
+<!--detector name="ICARUS2" pot="1.985e19"/-->
+
+<detector name="ICARUS2" pot="{{ icarus_r2_data_pot }}"/>
+
+
+
+<channel name="numu" unit="Reconstructed Neutrino Energy [GeV]">
+    <!--bins unit="RecoE" edges="0.3 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0 1.25 1.5"/-->
+    BINS
+    <bins unit = "True L/E" min="0" max="3" nbins="250" plot="false"/>
+    <bins unit = "True E [GeV]" min="0.3" max="3.0" nbins="20"  plot="false"/>
+
+    <subchannel name="data" plotname="Data" color="#99CCFF"/>
+
+</channel>
+
+<!--MCFile treename="SelectedEvents" filename="/exp/icarus/app/users/marterop/cafpy_gump/cafpyana/analysis_village/gumple/sbruce_rwt20/ICARUS_Run2_data_MAPLEonly_rwt20.root" scale = "1.0" pot="1.985e19"-->
+<!--MCFile treename="SelectedEvents" filename="/exp/sbnd/data/users/nrowe/sbn-rewgted-22-new/GUMP/ICARUS_SpringRun2BNB_unblind_sbruce.root" scale = "1" pot="1.985e19"--> <!-- 4.024e19-->
+<!--MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/ICARUS_SpringRun2BNB_FullOnBeam_sbruce.root" scale = "1" pot="1.9721e20"--> <!-- 4.024e19-->
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/ICARUS_SpringRun2BNB_unblind_sbruce.root" scale = "1" pot="{{ icarus_r2_data_pot }}"> <!-- 4.024e19-->
+
+    <branch
+        associated_subchannel = "nu_ICARUS2_numu_data"
+        incl_systematics      = "false"
+        model_rule            = "0"
+    >
+        <variable>BRANCH</variable>
+	    <variable>0.0</variable>
+	    <variable>0.0</variable>
+
+
+    </branch>
+</MCFile>
+

@@ -12,37 +12,45 @@ gump_dir = os.path.abspath(os.path.join(script_dir, "../../gump"))
 if gump_dir not in sys.path:
     sys.path.insert(0, gump_dir)
 
+# Import grab_pot function from pot.py
+from pot import grab_pot
 import loaddf as loaddf
 
 def format_sci(value, precision=3):
     """Formats floats in scientific notation without the '+' in the exponent (e.g. 5.272e20)."""
     return f"{value:.{precision}e}".replace("e+", "e")
 
-def get_sample_pot(file_pattern, detector, offbeampot=False, data_quality=False, beam_quality=False):
+def get_sample_dqpot(file_pattern, DETECTOR, use_pot=True, offbeampot=False):
     """
-    Finds all files matching pattern and returns the total POT via loaddf.loadl,
-    including dedup correction. For offbeam samples pass offbeampot=True.
-    For data samples that need good-run / beam-quality filtering pass the
-    corresponding flags.
+    Finds all files matching pattern and passes them to grab_pot
+    to return total aggregated POT.
     """
     files = glob.glob(file_pattern)
     if not files:
         print(f"Warning: No files found matching pattern: {file_pattern}")
         return 0.0
+ 
+    if offbeampot:
+        beam_quality=False
+    else:
+        beam_quality=True
 
-    _, _, total_pot = loaddf.loadl(
-        files,
-        detector=detector,
-        load_truth=False,
-        load_evtrec=False,
-        include_syst=False,
-        reweight_aFF=False,
-        match_Enu=True,
-        offbeampot=offbeampot,
-        data_quality=data_quality,
-        beam_quality=beam_quality,
-    )
-    print(f"  {file_pattern}  ->  POT = {total_pot:.4e}")
+    _, _, total_pot = loaddf.loadl(files, load_truth=False, include_syst=False, match_Enu=False, offbeampot=offbeampot, detector=DETECTOR, beam_quality=beam_quality, data_quality=True)
+    return total_pot
+
+def get_sample_pot(file_pattern, use_pot=True):
+    """
+    Finds all files matching pattern and passes them to grab_pot
+    to return total aggregated POT.
+    """
+    files = glob.glob(file_pattern)
+    if not files:
+        print(f"Warning: No files found matching pattern: {file_pattern}")
+        return 0.0
+    
+    pot_bools = [use_pot] * len(files)
+    total_pot = grab_pot(files, onbeam_bools=pot_bools, sep_bool=False)
+    print("sample: ", total_pot)
     return total_pot
 
 def get_scale(sample_pot, target_pot):
@@ -61,57 +69,57 @@ def build_context(base_dir, hdf_dir, target_sbnd_pot=1e20, target_icarus_r2_pot=
 
     # 1. SBND MC (Wildcard)
     sbnd_mc_pattern = os.path.join(hdf_dir, "SBNDMCCV_*.df")
-    sbnd_mc_pot = get_sample_pot(sbnd_mc_pattern, detector="SBND")
+    sbnd_mc_pot = get_sample_pot(sbnd_mc_pattern, use_pot=True)
 
     # 6. SBND OffBeam (Data)
     sbnd_offbeam_pattern = os.path.join(hdf_dir, "SBND_SpringBNBOffData.df")
-    sbnd_offbeam_pot = get_sample_pot(sbnd_offbeam_pattern, detector="SBND",
-                                      offbeampot=True, data_quality=True)
+    sbnd_offbeam_pot = get_sample_dqpot(sbnd_offbeam_pattern, "SBND", use_pot=False, offbeampot=True)
 
     # 9. SBND Dirt (MC)
     sbnd_dirt_pattern = os.path.join(hdf_dir, "SBND_SpringLowEMC.df")
-    sbnd_dirt_pot = get_sample_pot(sbnd_dirt_pattern, detector="SBND")
+    sbnd_dirt_pot = get_sample_pot(sbnd_dirt_pattern, use_pot=True)
 
-    # SBND OnBeam (Data)
+    # 6. SBND OnBeam (Data)
     sbnd_onbeam_pattern = os.path.join(hdf_dir, "SBND_SpringBNBData_FixedDev.df")
-    sbnd_onbeam_pot = get_sample_pot(sbnd_onbeam_pattern, detector="SBND",
-                                     data_quality=True, beam_quality=True)
+    sbnd_onbeam_pot = get_sample_dqpot(sbnd_onbeam_pattern, "SBND", use_pot=True, offbeampot=False)
 
     # 3. ICARUS Run 2 MC (Wildcard)
     icarus_r2_mc_pattern = os.path.join(hdf_dir, "ICARUSRun2_SpringMCOverlay_rewgt_*.df")
-    icarus_r2_mc_pot = get_sample_pot(icarus_r2_mc_pattern, detector="ICARUS Run2")
+    icarus_r2_mc_pot = get_sample_pot(icarus_r2_mc_pattern, use_pot=True)
+    icarus_r2_mc_scale = get_scale(icarus_r2_mc_pot, target_icarus_r2_pot)
 
     # 4. ICARUS Run 2 OffBeam (Data)
     icarus_r2_offbeam_pattern = os.path.join(hdf_dir, "ICARUS_SpringRun2BNBOff_unblind.df")
-    icarus_r2_offbeam_pot = get_sample_pot(icarus_r2_offbeam_pattern, detector="ICARUS Run2",
-                                           offbeampot=True, data_quality=True)
+    icarus_r2_offbeam_pot = get_sample_dqpot(icarus_r2_offbeam_pattern, "ICARUS Run2", use_pot=False, offbeampot=True)
+    icarus_r2_offbeam_scale = get_scale(icarus_r2_offbeam_pot, target_icarus_r2_pot)
 
     # 7. ICARUS Run 2 Dirt (MC)
     icarus_r2_dirt_pattern = os.path.join(hdf_dir, "ICARUSRun2_Spring_Overlay_Dirt.df")
-    icarus_r2_dirt_pot = get_sample_pot(icarus_r2_dirt_pattern, detector="ICARUS Run2")
+    icarus_r2_dirt_pot = get_sample_pot(icarus_r2_dirt_pattern, use_pot=True)
+    icarus_r2_dirt_scale = get_scale(icarus_r2_dirt_pot, target_icarus_r2_pot)
 
-    # ICARUS Run 2 OnBeam (Data)
+    # 4. ICARUS Run 2 OnBeam (Data)
     icarus_r2_onbeam_pattern = os.path.join(hdf_dir, "ICARUS_SpringRun2BNB_unblind.df")
-    icarus_r2_onbeam_pot = get_sample_pot(icarus_r2_onbeam_pattern, detector="ICARUS Run2",
-                                          data_quality=True, beam_quality=True)
+    icarus_r2_onbeam_pot = get_sample_dqpot(icarus_r2_onbeam_pattern, "ICARUS Run2", use_pot=True, offbeampot=False)
 
     # 2. ICARUS Run 4 MC (Wildcard)
     icarus_r4_mc_pattern = os.path.join(hdf_dir, "ICARUSRun4_SpringMCOverlay_rewgt_*.df")
-    icarus_r4_mc_pot = get_sample_pot(icarus_r4_mc_pattern, detector="ICARUS Run4")
+    icarus_r4_mc_pot = get_sample_pot(icarus_r4_mc_pattern, use_pot=True)
+    icarus_r4_mc_scale = get_scale(icarus_r4_mc_pot, target_icarus_r4_pot)
 
     # 5. ICARUS Run 4 OffBeam (Data)
     icarus_r4_offbeam_pattern = os.path.join(hdf_dir, "ICARUS_SpringRun4BNBOff_ReCAF2026.df")
-    icarus_r4_offbeam_pot = get_sample_pot(icarus_r4_offbeam_pattern, detector="ICARUS Run4",
-                                           offbeampot=True, data_quality=True)
+    icarus_r4_offbeam_pot = get_sample_dqpot(icarus_r4_offbeam_pattern, "ICARUS Run4", use_pot=False, offbeampot=True)
+    icarus_r4_offbeam_scale = get_scale(icarus_r4_offbeam_pot, target_icarus_r4_pot)
 
     # 8. ICARUS Run 4 Dirt (MC)
     icarus_r4_dirt_pattern = os.path.join(hdf_dir, "ICARUSRun4_Spring_Overlay_Dirt.df")
-    icarus_r4_dirt_pot = get_sample_pot(icarus_r4_dirt_pattern, detector="ICARUS Run4")
+    icarus_r4_dirt_pot = get_sample_pot(icarus_r4_dirt_pattern, use_pot=True)
+    icarus_r4_dirt_scale = get_scale(icarus_r4_dirt_pot, target_icarus_r4_pot)
 
-    # ICARUS Run 4 OnBeam (Data)
+    # 4. ICARUS Run 4 OnBeam (Data)
     icarus_r4_onbeam_pattern = os.path.join(hdf_dir, "ICARUS_SpringRun4BNB_unblind.df")
-    icarus_r4_onbeam_pot = get_sample_pot(icarus_r4_onbeam_pattern, detector="ICARUS Run4",
-                                          data_quality=True, beam_quality=True)
+    icarus_r4_onbeam_pot = get_sample_dqpot(icarus_r4_onbeam_pattern, "ICARUS Run4", use_pot=True, offbeampot=False)
 
     context = {
         "BASE_DIR": base_dir,
@@ -137,6 +145,16 @@ def build_context(base_dir, hdf_dir, target_sbnd_pot=1e20, target_icarus_r2_pot=
         "icarus_r4_mc_pot": format_sci(icarus_r4_mc_pot, 3),
         "icarus_r4_offbeam_pot": format_sci(icarus_r4_offbeam_pot, 3),
         "icarus_r4_dirt_pot": format_sci(icarus_r4_dirt_pot, 3),
+
+        # Scale factors: still read by GumpTemplate / GumpleTemplate / MapleNPTemplate,
+        # which normalise ICARUS with scale=ratio and pot="5e20". The DataMC templates
+        # use the raw POTs above instead.
+        "icarus_r2_mc_scale": f"{icarus_r2_mc_scale:.3f}",
+        "icarus_r2_offbeam_scale": f"{icarus_r2_offbeam_scale:.3f}",
+        "icarus_r2_dirt_scale": f"{icarus_r2_dirt_scale:.3f}",
+        "icarus_r4_mc_scale": f"{icarus_r4_mc_scale:.3f}",
+        "icarus_r4_offbeam_scale": f"{icarus_r4_offbeam_scale:.3f}",
+        "icarus_r4_dirt_scale": f"{icarus_r4_dirt_scale:.3f}",
     }
 
     return context

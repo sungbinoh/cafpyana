@@ -80,15 +80,18 @@ def build_context(base_dir, hdf_dir, target_sbnd_pot=1e20, target_icarus_r2_pot=
     # 3. ICARUS Run 2 MC (Wildcard)
     icarus_r2_mc_pattern = os.path.join(hdf_dir, "ICARUSRun2_SpringMCOverlay_rewgt_*.df")
     icarus_r2_mc_pot = get_sample_pot(icarus_r2_mc_pattern, detector="ICARUS Run2")
+    icarus_r2_mc_scale = get_scale(icarus_r2_mc_pot, target_icarus_r2_pot)
 
     # 4. ICARUS Run 2 OffBeam (Data)
     icarus_r2_offbeam_pattern = os.path.join(hdf_dir, "ICARUS_SpringRun2BNBOff_unblind.df")
     icarus_r2_offbeam_pot = get_sample_pot(icarus_r2_offbeam_pattern, detector="ICARUS Run2",
                                            offbeampot=True, data_quality=True)
+    icarus_r2_offbeam_scale = get_scale(icarus_r2_offbeam_pot, target_icarus_r2_pot)
 
     # 7. ICARUS Run 2 Dirt (MC)
     icarus_r2_dirt_pattern = os.path.join(hdf_dir, "ICARUSRun2_Spring_Overlay_Dirt.df")
     icarus_r2_dirt_pot = get_sample_pot(icarus_r2_dirt_pattern, detector="ICARUS Run2")
+    icarus_r2_dirt_scale = get_scale(icarus_r2_dirt_pot, target_icarus_r2_pot)
 
     # ICARUS Run 2 OnBeam (Data)
     icarus_r2_onbeam_pattern = os.path.join(hdf_dir, "ICARUS_SpringRun2BNB_unblind.df")
@@ -98,15 +101,18 @@ def build_context(base_dir, hdf_dir, target_sbnd_pot=1e20, target_icarus_r2_pot=
     # 2. ICARUS Run 4 MC (Wildcard)
     icarus_r4_mc_pattern = os.path.join(hdf_dir, "ICARUSRun4_SpringMCOverlay_rewgt_*.df")
     icarus_r4_mc_pot = get_sample_pot(icarus_r4_mc_pattern, detector="ICARUS Run4")
+    icarus_r4_mc_scale = get_scale(icarus_r4_mc_pot, target_icarus_r4_pot)
 
     # 5. ICARUS Run 4 OffBeam (Data)
     icarus_r4_offbeam_pattern = os.path.join(hdf_dir, "ICARUS_SpringRun4BNBOff_ReCAF2026.df")
     icarus_r4_offbeam_pot = get_sample_pot(icarus_r4_offbeam_pattern, detector="ICARUS Run4",
                                            offbeampot=True, data_quality=True)
+    icarus_r4_offbeam_scale = get_scale(icarus_r4_offbeam_pot, target_icarus_r4_pot)
 
     # 8. ICARUS Run 4 Dirt (MC)
     icarus_r4_dirt_pattern = os.path.join(hdf_dir, "ICARUSRun4_Spring_Overlay_Dirt.df")
     icarus_r4_dirt_pot = get_sample_pot(icarus_r4_dirt_pattern, detector="ICARUS Run4")
+    icarus_r4_dirt_scale = get_scale(icarus_r4_dirt_pot, target_icarus_r4_pot)
 
     # ICARUS Run 4 OnBeam (Data)
     icarus_r4_onbeam_pattern = os.path.join(hdf_dir, "ICARUS_SpringRun4BNB_unblind.df")
@@ -137,6 +143,16 @@ def build_context(base_dir, hdf_dir, target_sbnd_pot=1e20, target_icarus_r2_pot=
         "icarus_r4_mc_pot": format_sci(icarus_r4_mc_pot, 3),
         "icarus_r4_offbeam_pot": format_sci(icarus_r4_offbeam_pot, 3),
         "icarus_r4_dirt_pot": format_sci(icarus_r4_dirt_pot, 3),
+
+        # Scale factors: still read by GumpTemplate / GumpleTemplate / MapleNPTemplate,
+        # which normalise ICARUS with scale=ratio and pot="5e20". The DataMC templates
+        # use the raw POTs above instead.
+        "icarus_r2_mc_scale": f"{icarus_r2_mc_scale:.3f}",
+        "icarus_r2_offbeam_scale": f"{icarus_r2_offbeam_scale:.3f}",
+        "icarus_r2_dirt_scale": f"{icarus_r2_dirt_scale:.3f}",
+        "icarus_r4_mc_scale": f"{icarus_r4_mc_scale:.3f}",
+        "icarus_r4_offbeam_scale": f"{icarus_r4_offbeam_scale:.3f}",
+        "icarus_r4_dirt_scale": f"{icarus_r4_dirt_scale:.3f}",
     }
 
     return context
