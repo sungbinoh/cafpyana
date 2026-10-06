@@ -489,13 +489,16 @@ detvar_rwt_files = [
   'ICARUSRun2_SCE.txt',
   'ICARUSRun4_SCE.txt',
   'SBND_SmeareddEdx.txt',
+  'SBND_BiaseddEdx.txt',
   'ICARUSRun2_SmeareddEdx.txt',
+  'ICARUSRun2_BiaseddEdx.txt',
   'ICARUSRun2_WMXThetaXW.txt',
   'ICARUSRun4_SmeareddEdx.txt',
+  'ICARUSRun4_BiaseddEdx.txt',
   'ICARUSRun4_WMXThetaXW.txt',
-  'SBND_GainHi.txt',
-  'ICARUSRun2_GainHi.txt',
-  'ICARUSRun4_GainHi.txt',
+  ['SBND_GainLow.txt','SBND_GainHi.txt'],
+  ['ICARUSRun2_GainLow.txt','ICARUSRun2_GainHi.txt'],
+  ['ICARUSRun4_GainLow.txt','ICARUSRun4_GainHi.txt'],
   ['SBND_EMBAlpham.txt','SBND_EMBAlphap.txt'],
   ['ICARUSRun2_EMBAlpham.txt','ICARUSRun2_EMBAlphap.txt'],
   ['ICARUSRun4_EMBAlpham.txt','ICARUSRun4_EMBAlphap.txt'],
@@ -529,9 +532,12 @@ detvar_rwt_lbls = [
   'SCE_ICARUSRun2_multisigma_SCE',
   'SCE_ICARUSRun4_multisigma_SCE',
   'SBND_PID_Smear',
+  'SBND_PID_Bias',
   'ICARUSRun2_PID_Smear',
+  'ICARUSRun2_PID_Bias',
   'WireMod_ICARUSRun2_multisigma_WMXThetaXW',
   'ICARUSRun4_PID_Smear',
+  'ICARUSRun4_PID_Bias',
   'WireMod_ICARUSRun4_multisigma_WMXThetaXW',
   'SBND_PID_Gain',
   'ICARUSRun2_PID_Gain',
@@ -756,6 +762,7 @@ def load_one(fname, idf,
     pot_spline=False, detvar_spline=False, spline_dir="rwt_outputs",
     load_truth=True, load_crt=False, load_evtrec=False, match_Enu=True, # load extra information
     offbeampot=False, # POT handling
+    data_quality=False, beam_quality=False,# POT handling
     preselection=None, # apply preselection cut
     beam_quality=True, data_quality=True, # data-only cuts: per-spill beam quality (on-beam) and good-run list (on- and off-beam), see dataquality.py
     shift_binding_E=False, split_tracks=None, # variations applied to the output df (see _apply_variations)
@@ -1059,7 +1066,7 @@ def load_one(fname, idf,
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
-            df["total_pot"] = pot
+            df["total_pot_1e20"] = pot/1e20
 
         return _apply_variations(df, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
@@ -1316,7 +1323,7 @@ def load_one(fname, idf,
     if cache_dir is not None:
         _write_cache(cache_file, mrg, match, pot)
 
-    mrg["total_pot"] = pot
+    mrg["total_pot_1e20"] = pot/1e20
     return _apply_variations(mrg, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
 
@@ -1369,7 +1376,7 @@ def load(fname, maxdf=None, **kwargs):
               f"{n_dup_pairs} duplicated {tuple(dedup_levels)} keys "
               f"({n_dup_rows} match rows)")
 
-    df["total_pot"] = pots
+    df["total_pot_1e20"] = pots/1e20
     return df, match, pots
     
 def loadl(flist, progress=True, njob=None, **kwargs):
@@ -1402,7 +1409,7 @@ def loadl(flist, progress=True, njob=None, **kwargs):
     if njob is not None:
         pool.close()
 
-    df["total_pot"] = pots
+    df["total_pot_1e20"] = pots/1e20
     return df, matches, pots
 
 def match_common_evts(mrgs, dfs, pots):
