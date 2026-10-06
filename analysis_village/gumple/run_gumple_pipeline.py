@@ -92,6 +92,13 @@ def main():
         "-w", "--weights", action="store_true", help="include weights"
     )
     parser.add_argument(
+        "-q", "--dataquality", action="store_true", help="include data quality cuts"
+    )
+    parser.add_argument(
+        "-b", "--beamquality", action="store_true", help="include beam quality cuts"
+    )
+
+    parser.add_argument(
         "-j", "--cores", type=int, default=1, help="Number of cores for loadl"
     )
     parser.add_argument(
@@ -137,6 +144,8 @@ def main():
     df, _, _ = loaddf.loadl(
         [args.input],
         njob=args.cores,
+        data_quality=args.dataquality,
+        beam_quality=args.beamquality,
         xsec_univ=False,
         flux_univ=False,
         sep_flux_univ=args.weights,  # Enable multisim loops only for MC configurations

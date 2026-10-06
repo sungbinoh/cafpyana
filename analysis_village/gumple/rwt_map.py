@@ -24,6 +24,7 @@ import glob
 import importlib
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
 import matplotlib
 matplotlib.use("Agg")  # files only; avoids slow/hanging GUI backends over X forwarding
@@ -71,6 +72,7 @@ BINNINGS = {
 CV_DERIVED_VARIATIONS = [
     ("Smeared dE/dx", syst.v_chi2smear),
     ("Biased dE/dx",  syst.v_chi2dedxbias),
+    ("Gain Low",       syst.v_chi2lo),
     ("Gain Hi",       syst.v_chi2hi),
     ("EMB Alpha p",   syst.v_chi2alphap),
     ("EMB Beta p",    syst.v_chi2betap),
@@ -349,10 +351,68 @@ def _resolve_files(df_dir, patterns):
 
 
 def load_sample(files, detector, light=True, **kwargs):
+    slim_drops = [
+    # Misc / matching
+    "charge_center_z", "tmatch_idx", "tmatch_eff", "slice_index", "crthi_ismc",
+
+    # True muon
+    "true_mu_end_x", "true_mu_end_y", "true_mu_end_z",
+
+    # True proton
+    "true_p_end_x", "true_p_end_y", "true_p_end_z",
+
+    # True second proton
+    "true_p2_p", "true_p2_dir_x", "true_p2_dir_y", "true_p2_dir_z",
+
+    # True charged pion
+    "true_cpi_dir_x", "true_cpi_dir_y", "true_cpi_pdg",
+
+    # True gamma
+    "true_g_p", "true_g_dir_x", "true_g_dir_y", "true_g_dir_z",
+    "true_g_end_x", "true_g_end_y", "true_g_end_z",
+
+    # True pi0
+    "true_pi0_p", "true_pi0_dir_x", "true_pi0_dir_y", "true_pi0_dir_z",
+    "true_pi0_end_x", "true_pi0_end_y", "true_pi0_end_z",
+
+    # Spill info
+    "spill_TOR860", "spill_TOR875", "spill_LM875A", "spill_LM875B",
+    "spill_LM875C", "spill_THCURR", "spill_FOM",
+
+    # Early cuts and PFP counts
+    "cut_contained", "cut_cathode",
+    "n_pfp_no_calo", "n_shower", "n_other", "has_muon",
+    "cut_np", "cut_0shwother",
+
+    # Momentum sum
+    "psum_p", "psum_ke", "psum_E",
+    "psum_dir_x", "psum_dir_y", "psum_dir_z",
+
+    # Muon candidate (reco)
+    "mu_dist_start", "mu_prim_pfp", "mu_contained10",
+    "mu_true_p", "mu_true_pdg",
+    "true_mucand_p",  # NOTE: likely a typo of "true_mucand_p" below
+
+    # Muon candidate (truth)
+    "true_mucand_p", "true_mucand_dir_x", "true_mucand_dir_y", "true_mucand_dir_z",
+    "true_mucand_end_x", "true_mucand_end_y", "true_mucand_end_z",
+
+    # Proton candidate
+    "p_dist_to_vertex", "true_pcand_pdg",
+    "true_pcand_dir_x", "true_pcand_dir_y", "true_pcand_dir_z",
+    "true_pcand_end_x", "true_pcand_end_y", "true_pcand_end_z",
+
+    # Selection cuts
+    "cut_presel", "cut_cosmic", "cut_flash", "cut_trk",
+    "cut_muon", "cut_protons", "cut_far_shw",
+
+    # Selection flags / weights
+    "gump_sel", "maple_sel", "common", "glob_scale",
+]
     """Load a sample with the standard preselection. Returns (df, match, pot)."""
     common = dict(preselection=gmpl.slcfv_cut, include_syst=False, detector=detector)
     if light:
-        return loaddf.loadl(files, lightmem=True, drops=loaddf.get_std_drops(), **common, **kwargs)
+        return loaddf.loadl(files, lightmem=True, drops=slim_drops, **common, **kwargs)
     if len(files) != 1:
         raise ValueError(f"Non-light loads take exactly one file, got {files}")
     return loaddf.load(files[0], **common, **kwargs)
@@ -416,7 +476,7 @@ class _Outputs:
             del var_df, var_sel
 
 
-def _run_match_set(match_set, main_cv, detector, df_dir, goal_pot, out):
+def _run_match_set(match_set, main_cv, detector, df_dir, goal_pot, out, max_workers=None):
     """Process one match set, matching each group to its own copy of the CV."""
     light = match_set.get("light", True)
     bins = BINNINGS[match_set["binning"]] if match_set.get("binning") else None
@@ -426,29 +486,49 @@ def _run_match_set(match_set, main_cv, detector, df_dir, goal_pot, out):
     else:
         cv_df, cv_match, cv_pot = load_sample(_resolve_files(df_dir, match_set["cv"]), detector, light=light)
 
-    for group in tqdm(match_set["groups"], desc=f"{detector} matched variations"):
+    def _load_group(group):
         names = list(group)
         loaded = [load_sample(_resolve_files(df_dir, files), detector, light=light)
                   for files in group.values()]
+        return names, loaded
 
-        # Copies so the shared CV stays unmatched and unscaled for later groups
-        dfs = [cv_df.copy()] + [l[0] for l in loaded]
-        matches = [_copy(cv_match)] + [l[1] for l in loaded]
-        pots = [_copy(cv_pot)] + [l[2] for l in loaded]
-        del loaded
+    # Pipeline: prefetch the next group's files in the background while processing
+    # the current one. Only one HDF5 file is ever open at a time, avoiding
+    # thread-safety issues, but I/O is hidden behind CPU work.
+    groups = list(match_set["groups"])
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_load_group, groups[0])
+        for i, group in enumerate(tqdm(groups, desc=f"{detector} matched variations")):
+            names, loaded = future.result()
+            if i + 1 < len(groups):
+                future = pool.submit(_load_group, groups[i + 1])
 
-        dfs, pots = loaddf.match_common_evts(matches, dfs, pots)
-        for d, p in zip(dfs, pots):
-            _set_total_pot(d, p)  # loaddf's value is the pre-matching POT
-            loaddf.scale_pot(d, p, goal_pot)
+            # Copies so the shared CV stays unmatched and unscaled for later groups
+            dfs = [cv_df.copy()] + [l[0] for l in loaded]
+            matches = [_copy(cv_match)] + [l[1] for l in loaded]
+            pots = [_copy(cv_pot)] + [l[2] for l in loaded]
+            del loaded
 
-        cv_tree_name = "_".join(_clean_name(n) for n in names) + "Nominal"
-        out.compare(dfs[0], [(n, d, 1.0) for n, d in zip(names, dfs[1:])], cv_tree_name, bins)
-        del dfs
+            print("Number of dfs being handed in: ", len(dfs))
+            for indD, D in enumerate(dfs):
+                print(f"Length of DF{indD} handed in: {len(D)}")
+
+            dfs, pots = loaddf.match_common_evts(matches, dfs, pots)
+            print("Number of dfs being coming out: ", len(dfs))
+            for indD, D in enumerate(dfs):
+                print(f"Length of DF{indD} coming out: {len(D)}")
+
+            for d, p in zip(dfs, pots):
+                _set_total_pot(d, p)  # loaddf's value is the pre-matching POT
+                loaddf.scale_pot(d, p, goal_pot)
+
+            cv_tree_name = "_".join(_clean_name(n) for n in names) + "Nominal"
+            out.compare(dfs[0], [(n, d, 1.0) for n, d in zip(names, dfs[1:])], cv_tree_name, bins)
+            del dfs
 
 
 def remake_detvar_maps(detector, df_dir, selection=gmpl.all_gump_cuts, binning="2D", outdir=DEFAULT_OUTDIR, treeoutdir=DEFAULT_TREEOUTDIR,
-                       plotdir=None, write_maps=True, tree_writer=None):
+                       plotdir=None, write_maps=True, tree_writer=None, max_workers=None):
     """
     Process all detector variations for one detector.
       write_maps  : write reweight maps to outdir
@@ -470,7 +550,7 @@ def remake_detvar_maps(detector, df_dir, selection=gmpl.all_gump_cuts, binning="
 
     # 1. Dedicated-sample variations, each matched to its own CV copy
     for match_set in cfg["match_sets"]:
-        _run_match_set(match_set, main_cv, detector, df_dir, goal_pot, out)
+        _run_match_set(match_set, main_cv, detector, df_dir, goal_pot, out, max_workers=max_workers)
 
     # 2. Everything else is compared to the full, unmatched CV
     cv_df, _, cv_pot = main_cv
@@ -478,17 +558,38 @@ def remake_detvar_maps(detector, df_dir, selection=gmpl.all_gump_cuts, binning="
     loaddf.scale_pot(cv_df, cv_pot, goal_pot)
 
     def unmatched_variations():
-        # Loaded / built one at a time to limit memory
-        bind_df, _, bind_pot = load_sample(cv_files, detector, shift_binding_E=True)
-        loaddf.scale_pot(bind_df, bind_pot, goal_pot)
-        yield "BIND", bind_df, 1.0
-        del bind_df
+        def _load_bind():
+            df, _, pot = load_sample(cv_files, detector, shift_binding_E=True)
+            loaddf.scale_pot(df, pot, goal_pot)
+            return "BIND", df, 1.0
+    
+        yield _load_bind()
 
-        for region in cfg["trksplt_regions"]:
-            split_df, _, split_pot = load_sample(cv_files, detector, split_tracks=region)
-            loaddf.scale_pot(split_df, split_pot, goal_pot)
-            yield f"{region}_TRKSPLT", split_df, 1.0
-            del split_df
+    def unmatched_variations():
+        # Pipeline: each file is prefetched in a single background thread while
+        # the previous result is being yielded and processed. Only one HDF5 file
+        # is ever open at a time, avoiding thread-safety issues.
+        def _load_bind():
+            df, _, pot = load_sample(cv_files, detector, shift_binding_E=True)
+            print(df.del_Tp)
+            loaddf.scale_pot(df, pot, goal_pot)
+            return "BIND", df, 1.0
+
+        def _load_trksplt(region):
+            df, _, pot = load_sample(cv_files, detector, split_tracks=region)
+            loaddf.scale_pot(df, pot, goal_pot)
+            return f"{region}_TRKSPLT", df, 1.0
+
+        disk_tasks = [_load_bind] + [
+            (lambda r=region: _load_trksplt(r)) for region in cfg["trksplt_regions"]
+        ]
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(disk_tasks[0])
+            for i, task in enumerate(disk_tasks):
+                name, df, scale = future.result()
+                if i + 1 < len(disk_tasks):
+                    future = pool.submit(disk_tasks[i + 1])
+                yield name, df, scale
 
         for name, make_variation in CV_DERIVED_VARIATIONS:
             yield name, make_variation(cv_df), cfg["ratio_scales"].get(name, 1.0)
@@ -522,6 +623,7 @@ def resolve_function(func_string):
 
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser(
         description="Build detector-systematic reweight maps and/or sbruce trees.")
     parser.add_argument("-s", "--selection", type=resolve_function, default=gmpl.all_gump_cuts,
@@ -551,6 +653,8 @@ if __name__ == "__main__":
                              "(default: every column of the dataframe)")
     parser.add_argument("-w", "--weight-col", type=str, default=DEFAULT_WEIGHT_COL,
                         help="Event weight column saved in the sbruce trees")
+    parser.add_argument("-j", "--jobs", type=int, default=None,
+                        help="Number of parallel worker threads (default: one per CPU)")
     args = parser.parse_args()
 
     if not args.maps and not args.sbruce_trees:
@@ -561,7 +665,11 @@ if __name__ == "__main__":
     tree_writer = (SbruceTreeWriter(args.treeoutdir, args.tree_vars, args.weight_col)
                    if args.sbruce_trees else None)
 
-    for det in args.detectors:
-        remake_detvar_maps(det, args.dfdir, selection=args.selection, outdir=args.outdir, treeoutdir=args.treeoutdir,
-                           binning=args.binning, plotdir=args.plotdir if args.plot else None,
-                           write_maps=args.maps, tree_writer=tree_writer)
+    with ProcessPoolExecutor(max_workers=len(args.detectors)) as pool:
+        futures = [pool.submit(remake_detvar_maps, det, args.dfdir, selection=args.selection,
+                               outdir=args.outdir, treeoutdir=args.treeoutdir,
+                               binning=args.binning, plotdir=args.plotdir if args.plot else None,
+                               write_maps=args.maps, tree_writer=tree_writer,
+                               max_workers=args.jobs) for det in args.detectors]
+        for f in as_completed(futures):
+            f.result()

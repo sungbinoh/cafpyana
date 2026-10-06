@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Define the absolute input storage directories
-gray_prefix='/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-23-new/'
+gray_prefix='/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-24/'
 gumple_prefix='../gumple/'
-output='/exp/sbnd/data/users/nrowe/sbn-rewgted-23/MAPLENP/'
+output='/exp/sbnd/data/users/nrowe/sbn-rewgted-24-refom-light/MAPLENP/'
 MAX_JOBS=8
 
 # Navigate to the working directory context
@@ -15,7 +15,7 @@ echo "Remaking det var maps..."
 selection="gmpl.all_maplenp_cuts"
 splinedir="${selection#*.}"
 
-python3 ${gumple_prefix}rwt_map.py -t -s ${selection} -o ${splinedir} --treeoutdir ${output} -d ${gray_prefix} -b "2D"
+python3 ${gumple_prefix}rwt_map.py -t -s ${selection} -o ${splinedir} --treeoutdir ${output} -d ${gray_prefix} -j 2 -b "2D"
 
 ### 1. SBND MC (20 files, 0 to 9)
 echo "--> Staging SBND Spring MC Files..."
@@ -43,6 +43,7 @@ done
 echo "--> Launching ICARUS Run 2 OffBeam Data..."
 python3 ${gumple_prefix}/run_gumple_pipeline.py \
     -c data \
+    -q \
     -f ${splinedir} \
     -s ${selection} \
     -i ${gray_prefix}ICARUS_SpringRun2BNBOff_unblind.df \
@@ -56,6 +57,7 @@ done
 echo "--> Launching ICARUS Run 4 OffBeam Data..."
 python3 ${gumple_prefix}/run_gumple_pipeline.py \
     -c data \
+    -q \
     -s ${selection} \
     -i ${gray_prefix}ICARUS_SpringRun4BNBOff_ReCAF2026.df \
     -o ${output}ICARUS_SpringRun4BNBOff_unblind_sbruce.root &
@@ -92,7 +94,7 @@ done
 ### 8. ICARUS Run 4 Dirt
 echo "--> Launching ICARUS Run 4 Dirt..."
 python3 ${gumple_prefix}/run_gumple_pipeline.py \
-    -c data \
+    -c mc \
     -s ${selection} \
     -i ${gray_prefix}ICARUSRun4_Spring_Overlay_Dirt.df \
     -o ${output}ICARUSRun4_Spring_Overlay_Dirt_sbruce.root &
@@ -139,6 +141,7 @@ done
 echo "--> Launching SBND OffBeam Data..."
 python3 ${gumple_prefix}/run_gumple_pipeline.py \
     -c data \
+    -q \
     -s ${selection} \
     -i ${gray_prefix}SBND_SpringBNBOffData.df \
     -o ${output}SBND_SpringBNBOffData_sbruce.root &
@@ -162,6 +165,8 @@ done
 echo "--> Launching SBND OnBeam DevData..."
 python3 ${gumple_prefix}/run_gumple_pipeline.py \
     -c data \
+    -q \
+    -b \
     -s ${selection} \
     -i ${gray_prefix}SBND_SpringBNBData_FixedDev.df \
     -o ${output}SBND_SpringBNBData_Fixed_Dev_sbruce.root &
@@ -173,6 +178,8 @@ done
 echo "--> Launching ICARUS Run 2 OnBeam DevData..."
 python3 ${gumple_prefix}/run_gumple_pipeline.py \
     -c data \
+    -q \
+    -b \
     -s ${selection} \
     -i ${gray_prefix}ICARUS_SpringRun2BNB_unblind.df \
     -o ${output}ICARUS_SpringRun2BNB_unblind_sbruce.root &
@@ -184,6 +191,8 @@ done
 echo "--> Launching ICARUS Run 4 OnBeam DevData..."
 python3 ${gumple_prefix}/run_gumple_pipeline.py \
     -c data \
+    -q \
+    -b \
     -s ${selection} \
     -i ${gray_prefix}ICARUS_SpringRun4BNB_unblind.df \
     -o ${output}ICARUS_SpringRun4BNB_unblind_sbruce.root &
@@ -205,6 +214,34 @@ python3 ${gumple_prefix}/run_gumple_pipeline.py \
     -s ${selection} \
     -i ${gray_prefix}ICARUS_SpringRun2BNB_FullOnBeam.df \
     -o ${output}ICARUS_SpringRun2BNB_FullOnBeam_sbruce.root &
+
+echo "--> Launching SBND Ar25..."
+python3 ${gumple_prefix}/run_gumple_pipeline.py \
+    -c mc \
+    -s ${selection} \
+    -i ${gray_prefix}SBNDAr25.df \
+    -o ${output}SBNDAr25_sbruce.root &
+
+echo "--> Launching ICARUS Ar25..."
+python3 ${gumple_prefix}/run_gumple_pipeline.py \
+    -c mc \
+    -s ${selection} \
+    -i ${gray_prefix}ICARUSRun4_AR25.df \
+    -o ${output}ICARUSRun4_AR25_sbruce.root &
+
+echo "--> Launching SBND GIBUU..."
+python3 ${gumple_prefix}/run_gumple_pipeline.py \
+    -c mc \
+    -s ${selection} \
+    -i ${gray_prefix}SBNDGIBUU.df \
+    -o ${output}SBNDGIBUU_sbruce.root &
+
+echo "--> Launching ICARUS GIBUU..."
+python3 ${gumple_prefix}/run_gumple_pipeline.py \
+    -c mc \
+    -s ${selection} \
+    -i ${gray_prefix}ICARUSRun4_GIBUU.df \
+    -o ${output}ICARUSRun4_GIBUU_sbruce.root &
 
 ### This makes some copies of the sbruce files which have fake data weights attached
 $gumple_prefix/run_all.sh $output $output/FD/
