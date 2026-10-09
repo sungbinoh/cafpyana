@@ -11,14 +11,20 @@ from pyanalib.pandas_helpers import *
 def fetch_metadata(f):
     det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
 
+    # Callers unpack three values, so raise rather than return another type.
     if det.empty:
-        return pd.DataFrame()
-    if 1 == det.unique():
+        raise ValueError("fetch_metadata: rec.hdr.det is empty; cannot identify detector.")
+
+    dets = pd.unique(det)
+    if len(dets) != 1:
+        raise ValueError("fetch_metadata: file mixes detectors (rec.hdr.det = %s)." % dets)
+
+    if dets[0] == 1:
         DETECTOR = "SBND"
-    elif 2 == det.unique():
+    elif dets[0] == 2:
         DETECTOR = "ICARUS"
     else:
-        raise ValueError("df maker needs rec.hdr.det == 1 (SBND) or 2 (ICARUS); got %s" % det.unique())
+        raise ValueError("df maker needs rec.hdr.det == 1 (SBND) or 2 (ICARUS); got %s" % dets[0])
     run = loadbranches(f["recTree"], ["rec.hdr.run"]).rec.hdr.run
     RUN = 1 if DETECTOR == "SBND" else (2 if run.iloc[0] < 12960 else 4)
     ismc = bool(loadbranches(f["recTree"], ["rec.hdr.ismc"]).rec.hdr.ismc.iloc[0])
@@ -111,9 +117,9 @@ def make_geom1u1p_trkdf_mc(f):
 
     TrueP = pd.DataFrame({
         "true_pdg": trkdf.pfp.trk.truth.p.pdg,
-        "true_end_x": trkdf.pfp.trk.truth.p.start.x,
-        "true_end_x": trkdf.pfp.trk.truth.p.start.y,
-        "true_end_x": trkdf.pfp.trk.truth.p.start.z,
+        "true_start_x": trkdf.pfp.trk.truth.p.start.x,
+        "true_start_y": trkdf.pfp.trk.truth.p.start.y,
+        "true_start_z": trkdf.pfp.trk.truth.p.start.z,
         "true_end_x": trkdf.pfp.trk.truth.p.end.x,
         "true_end_y": trkdf.pfp.trk.truth.p.end.y,
         "true_end_z": trkdf.pfp.trk.truth.p.end.z,
@@ -146,9 +152,9 @@ def make_mcs_trkdf(f):
         "p_pion": trkdf.pfp.trk.rangeP.p_pion,
         "trackScore": trkdf.pfp.trackScore,
         "true_pdg": trkdf.pfp.trk.truth.p.pdg,
-        "true_end_x": trkdf.pfp.trk.truth.p.start.x,
-        "true_end_x": trkdf.pfp.trk.truth.p.start.y,
-        "true_end_x": trkdf.pfp.trk.truth.p.start.z,
+        "true_start_x": trkdf.pfp.trk.truth.p.start.x,
+        "true_start_y": trkdf.pfp.trk.truth.p.start.y,
+        "true_start_z": trkdf.pfp.trk.truth.p.start.z,
         "true_end_x": trkdf.pfp.trk.truth.p.end.x,
         "true_end_y": trkdf.pfp.trk.truth.p.end.y,
         "true_end_z": trkdf.pfp.trk.truth.p.end.z,

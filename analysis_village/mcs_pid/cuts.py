@@ -6,10 +6,6 @@ import sys
 import pandas as pd
 import numpy as np
 
-# function for picking cut val based on detector
-def _det_cut_th(detector, key):
-    return np.where(detector == "SBND", SBND_CUTS[key], ICARUS_CUTS[key])
-
 # Fiducial volume cuts for SBND and ICARUS
 SBNDFVCuts = {
     "lowYZ": {
@@ -167,7 +163,8 @@ def intersects_prism_vectorized(p1_array, p2_array, prism_min=(-200., 100., 250.
 
     direction = p2 - p1
 
-    inside_bool = np.zeros(len(p1))
+    # bool, not float: the final `|` raises on a float array when solid=False
+    inside_bool = np.zeros(len(p1), dtype=bool)
 
     p_mins = np.array([p_min]*len(p1))
     p_maxs = np.array([p_max]*len(p1))
@@ -197,7 +194,9 @@ def intersects_prism_vectorized(p1_array, p2_array, prism_min=(-200., 100., 250.
         t_min = np.where(parallel_mask & outside_bounds, 1.0, t_min)
         t_max = np.where(parallel_mask & outside_bounds, 0.0, t_max)
 
-    return (t_min <= t_max) | inside_bool
+    # NaN coords must not count as a crossing
+    finite = np.isfinite(p1).all(axis=1) & np.isfinite(p2).all(axis=1)
+    return ((t_min <= t_max) | inside_bool) & finite
 
 def sbnd_cathode_crossing(vtx_x, vtx_y, vtx_z, end_x, end_y, end_z):
     """Per-track SBND cathode-crossing flag (GUMP cathode_cut semantics).
@@ -221,9 +220,9 @@ def sbnd_cathode_crossing(vtx_x, vtx_y, vtx_z, end_x, end_y, end_z):
 def containment_cut(df):
     interaction_levels = ['__ntuple', 'entry', 'rec.slc..index']
 
-    # 3. Track score cut: evaluated ONLY across real particles
-    # (Dummy rows are assigned True so they don't break the group .all() condition)
-    contained_track = prefix_fv_cut(df, "end") | (df['trackScore'] != -5.0)
+    # Dummy rows (trackScore == -5) pass so they don't break the group .all().
+    # Track ends use the track inset (inzback=10), not the vertex's 50.
+    contained_track = prefix_fv_cut(df, "end", is_trk=True) | (df['trackScore'] == -5.0)
     slc_contained_mask = contained_track.groupby(level=interaction_levels).transform('all')
 
     return slc_contained_mask
@@ -250,11 +249,12 @@ def twoprong_cut(df):
     in_twopfp_slice = is_real_particle & twopfp_mask
     real_lengths = df['len'].where(in_twopfp_slice)   # NaN for dummies / other slices
 
-    slc_max_len = real_lengths.groupby(level=interaction_levels).transform('max')
-    slc_min_len = real_lengths.groupby(level=interaction_levels).transform('min')
+    # Rank 1 = longest; method='first' breaks exact ties, so an equal-length
+    # pair isn't labelled both muon and proton (as max/min comparison did).
+    len_rank = real_lengths.groupby(level=interaction_levels).rank(method='first', ascending=False)
 
-    is_muon_candidate   = in_twopfp_slice & (real_lengths == slc_max_len)
-    is_proton_candidate = in_twopfp_slice & (real_lengths == slc_min_len)
+    is_muon_candidate   = in_twopfp_slice & (len_rank == 1)
+    is_proton_candidate = in_twopfp_slice & (len_rank == 2)
 
     muon_length_ok   = (~is_muon_candidate)   | (df['len'] >= 140.0)
     proton_length_ok = (~is_proton_candidate) | ((df['len'] >= 10.0) & (df['len'] <= 50.0))
@@ -285,4 +285,4 @@ def geom1u1p_cuts(df):
 
     containment_mask = containment_cut(df)
 
-    return twoprong_mask & fv_mask & nuscore_mask & containment_mask
+    return twoprong_mask & fv_mask & nuscore_mask & baryscore_mask & containment_mask
