@@ -24,6 +24,8 @@ sys.path.insert(0, workspace_root + "/../gumple/")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gumple"))
 import rwt_map as rw
 import gumple_cuts as gmpl
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import dataquality as dq
 
 def tmatch(reco, mc):
     for c in mc.columns:
@@ -487,13 +489,16 @@ detvar_rwt_files = [
   'ICARUSRun2_SCE.txt',
   'ICARUSRun4_SCE.txt',
   'SBND_SmeareddEdx.txt',
+  'SBND_BiaseddEdx.txt',
   'ICARUSRun2_SmeareddEdx.txt',
+  'ICARUSRun2_BiaseddEdx.txt',
   'ICARUSRun2_WMXThetaXW.txt',
   'ICARUSRun4_SmeareddEdx.txt',
+  'ICARUSRun4_BiaseddEdx.txt',
   'ICARUSRun4_WMXThetaXW.txt',
-  'SBND_GainHi.txt',
-  'ICARUSRun2_GainHi.txt',
-  'ICARUSRun4_GainHi.txt',
+  ['SBND_GainLow.txt','SBND_GainHi.txt'],
+  ['ICARUSRun2_GainLow.txt','ICARUSRun2_GainHi.txt'],
+  ['ICARUSRun4_GainLow.txt','ICARUSRun4_GainHi.txt'],
   ['SBND_EMBAlpham.txt','SBND_EMBAlphap.txt'],
   ['ICARUSRun2_EMBAlpham.txt','ICARUSRun2_EMBAlphap.txt'],
   ['ICARUSRun4_EMBAlpham.txt','ICARUSRun4_EMBAlphap.txt'],
@@ -527,9 +532,12 @@ detvar_rwt_lbls = [
   'SCE_ICARUSRun2_multisigma_SCE',
   'SCE_ICARUSRun4_multisigma_SCE',
   'SBND_PID_Smear',
+  'SBND_PID_Bias',
   'ICARUSRun2_PID_Smear',
+  'ICARUSRun2_PID_Bias',
   'WireMod_ICARUSRun2_multisigma_WMXThetaXW',
   'ICARUSRun4_PID_Smear',
+  'ICARUSRun4_PID_Bias',
   'WireMod_ICARUSRun4_multisigma_WMXThetaXW',
   'SBND_PID_Gain',
   'ICARUSRun2_PID_Gain',
@@ -590,6 +598,11 @@ def scale_pot(df, pot, desired_pot):
     df['glob_scale'] = scale * df.cvwgt
     return pot, scale
 
+# Bump to invalidate every existing cache entry (e.g. after changing what
+# load_one puts in the df). Part of the cache key, so old entries are simply
+# never looked up again rather than being served stale.
+_CACHE_VERSION = 2
+
 def _cache_key(fname, idf, **kwargs):
     """Build a deterministic hash from the input file path, split index, and all keyword args."""
     key_dict = {"fname": os.path.abspath(fname), "idf": idf, "_cache_version": _CACHE_VERSION}
@@ -609,6 +622,12 @@ def _cache_key(fname, idf, **kwargs):
             key_dict[k] = v
     raw = json.dumps(key_dict, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+# Sentinel for the default cache location: the directory the input .df lives in
+# (i.e. inside the sbn-rewgted-NN production directory itself). Caching is on by
+# default; pass cache_dir=None to turn it off, or an explicit path to cache
+# somewhere else.
+CACHE_WITH_INPUT = "__with_input__"
 
 def _write_cache(cache_file, df, match, pot):
     """Write load_one output to an HDF5 cache file."""
@@ -743,15 +762,27 @@ def load_one(fname, idf,
     pot_spline=False, detvar_spline=False, spline_dir="rwt_outputs",
     load_truth=True, load_crt=False, load_evtrec=False, match_Enu=True, # load extra information
     offbeampot=False, # POT handling
+    data_quality=False, beam_quality=False,# POT handling
     preselection=None, # apply preselection cut
+    beam_quality=True, data_quality=True, # data-only cuts: per-spill beam quality (on-beam) and good-run list (on- and off-beam), see dataquality.py
     shift_binding_E=False, split_tracks=None, # variations applied to the output df (see _apply_variations)
     shift_fraction=None, split_fraction=None, # fraction of events each variation is applied to (None -> BE_FRACTION / SPLIT_FRAC)
-    cache_dir=None, # directory to cache output; None disables caching
+    cache_dir=CACHE_WITH_INPUT, # directory to cache output; default is alongside the input .df, None disables caching
     flashname=FLASH, hdrname=HDR, evtname=EVT, wgtname=WGT, mcname=MC, crtname=CRT, evtrecname=EVTREC, drops=None, lightmem=False): # override default table names
     assert(detector == "SBND" or detector == "ICARUS Run2" or detector == "ICARUS Run4")
+
+    if cache_dir == CACHE_WITH_INPUT:
+        cache_dir = os.path.dirname(os.path.abspath(fname))
+
     # Check cache
     if cache_dir is not None:
-        cache_hash = _cache_key(fname, idf, detector=detector, include_syst=include_syst,
+        # The data cuts only enter the key for data files (no mcnu key in the
+        # GUMPLE productions), so MC cache entries are unchanged by them.
+        with h5py.File(fname, "r") as _f:
+            _is_data = (mcname % idf) not in _f
+        data_cut_key = dict(beam_quality=beam_quality, data_quality=data_quality,
+                            run_list=dq.RUN_LIST_HASH) if _is_data else {}
+        cache_hash = _cache_key(fname, idf, **data_cut_key, detector=detector, include_syst=include_syst,
             nuniv=nuniv, spline=spline, xsec_univ=xsec_univ, xsec_spline=xsec_spline, reweight_aFF=reweight_aFF, pot_univ=pot_univ,
             flux_univ=flux_univ, sep_flux_univ=sep_flux_univ, g4_univ=g4_univ,
             load_truth=load_truth, load_crt=load_crt, load_evtrec=load_evtrec,
@@ -791,6 +822,33 @@ def load_one(fname, idf,
         df["flash_maxpe"] = df["flash_maxpe"] * pe_scale
     df["flash_maxpe"] = df["flash_maxpe"].fillna(0.).astype(float)
 
+    # Apply the data-only cuts: good-run list (on- and off-beam) and per-spill
+    # beam quality (on-beam only -- off-beam carries no spill information). The
+    # event's spill_* columns hold the beam-monitor readings of its spill.
+    if not ismc:
+        evt_run = hdr.run.reindex(df.index.droplevel(-1)).to_numpy()
+        keep = np.ones(len(df), dtype=bool)
+        if data_quality:
+            keep &= dq.data_quality_cut(evt_run, detector)
+        if beam_quality and not offbeampot:
+            # Overwrite each event's spill_FOM with the corrected FOM of its spill
+            # (dataquality.correct_fom); events whose spill is not covered by the
+            # beam-quality files keep the production value.
+            with h5py.File(fname, "r") as _f:
+                _has_bnb = ("bnb_%i" % idf) in _f
+            if _has_bnb:
+                spill = dq.event_spill_fom(dq.spill_table(fname, idf, detector), hdr)
+                spill = spill.reindex(df.index.droplevel(-1))
+                has = spill.mapped.eq(True).to_numpy()
+                tor_ok = np.isclose(spill.TOR875.to_numpy()[has], df.spill_TOR875.to_numpy()[has], rtol=0, atol=1)
+                print(f"[{os.path.basename(fname)} idf={idf}] corrected spill_FOM: {has.sum()}/{len(df)} slices mapped "
+                      f"to a spill, TOR875 agreement {tor_ok.mean() if has.any() else np.nan:.4%}")
+                df["spill_FOM"] = np.where(has, spill.FOM.to_numpy(), df.spill_FOM.to_numpy())
+            keep &= dq.beam_quality_cut(df, detector).to_numpy()
+        print(f"[{os.path.basename(fname)} idf={idf}] data cuts (BQ={beam_quality and not offbeampot}, "
+              f"DQ={data_quality}): kept {keep.sum()}/{len(df)} slices")
+        df = df[keep]
+
     # Apply preselection
     if preselection is not None:
         df = df[preselection(df)]
@@ -800,8 +858,17 @@ def load_one(fname, idf,
     # after this point is metadata carried along as a column, NOT part of the key --
     # in particular AVnu, which is derived from gmpl._fv_cut and so depends on `detector`.
     match_ind = list(match.columns)
-    # if needed, include neutrino energy in matching information
-    if match_Enu:
+    # if needed, include neutrino energy in matching information.
+    # The GUMPLE data productions (sbn-rewgted-19+) ship no mcnu key at all
+    # (older ones carried an empty one); treat a missing key like the empty
+    # frame the old files had -- nu_E0/AVnu come out NaN, exactly as before.
+    with h5py.File(fname, "r") as _f:
+        _has_mcnu = (mcname % idf) in _f
+    if match_Enu and not _has_mcnu:
+        match["nu_E0"] = np.nan
+        match_ind = list(match.columns)
+        match["AVnu"] = np.nan
+    if match_Enu and _has_mcnu:
         mcdf = pd.read_hdf(fname, mcname % idf)
         mcdf["detector"] = detector
         if "Run2" in detector.replace(" ", ""):
@@ -870,8 +937,20 @@ def load_one(fname, idf,
             trig = pd.read_hdf(fname, "trig_%i" % idf)
             N_GATES_ON_PER_5e12POT = 1.3886218026202426
             pot = trig.gate_delta.sum()*(1-1/20.)/N_GATES_ON_PER_5e12POT*5e12
+    elif not ismc and (beam_quality or data_quality):
+        # sum of TOR875 over the spills passing the data cuts
+        pot = dq.split_onbeam_pot(fname, idf, detector, beam_quality=beam_quality, data_quality=data_quality)
     else:
         pot = hdr.pot.sum()
+
+    # Off-beam: restrict the gate counting to good runs
+    if offbeampot and not ismc and data_quality:
+        good = dq.data_quality_cut(hdr.run, detector)
+        if detector == "SBND":
+            pot = hdr.noffbeambnb[good].sum()/N_GATES_ON_PER_5e12POT*5e12
+        else:
+            tgood = dq.data_quality_cut(hdr.run.reindex(trig.index).to_numpy(), detector)
+            pot = trig.gate_delta[tgood].sum()*(1-1/20.)/N_GATES_ON_PER_5e12POT*5e12
 
     # CORRECT POT FOR THE DEDUP
     # The dedup above dropped events from `match`/`df`, but `hdr` (and the ICARUS
@@ -892,6 +971,13 @@ def load_one(fname, idf,
         for setv, load in truthvars.items():
             mc_tosave[setv] = mcdf[load]
         mcdf = pd.DataFrame(mc_tosave, mcdf.index)
+        # The GUMPLE evt frame natively carries some truthvars names (true_vtx_*,
+        # true_nu_pdg, ...). mcnu is authoritative (it always was, and unmatched
+        # slices correctly come out NaN), so drop the evt copies rather than
+        # letting merge() produce _x/_y suffixed duplicates.
+        overlap = [c for c in mcdf.columns if c in df.columns]
+        if overlap:
+            df = df.drop(columns=overlap)
         df = df.merge(mcdf, left_on=["__ntuple", "entry", "tmatch_idx"], right_index=True, how="left")
 
     # LOAD GENIE EVENT RECORD
@@ -980,7 +1066,7 @@ def load_one(fname, idf,
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
-            df["total_pot"] = pot
+            df["total_pot_1e20"] = pot/1e20
 
         return _apply_variations(df, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
@@ -1237,7 +1323,7 @@ def load_one(fname, idf,
     if cache_dir is not None:
         _write_cache(cache_file, mrg, match, pot)
 
-    mrg["total_pot"] = pot
+    mrg["total_pot_1e20"] = pot/1e20
     return _apply_variations(mrg, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
 
@@ -1290,7 +1376,7 @@ def load(fname, maxdf=None, **kwargs):
               f"{n_dup_pairs} duplicated {tuple(dedup_levels)} keys "
               f"({n_dup_rows} match rows)")
 
-    df["total_pot"] = pots
+    df["total_pot_1e20"] = pots/1e20
     return df, match, pots
     
 def loadl(flist, progress=True, njob=None, **kwargs):
@@ -1323,7 +1409,7 @@ def loadl(flist, progress=True, njob=None, **kwargs):
     if njob is not None:
         pool.close()
 
-    df["total_pot"] = pots
+    df["total_pot_1e20"] = pots/1e20
     return df, matches, pots
 
 def match_common_evts(mrgs, dfs, pots):

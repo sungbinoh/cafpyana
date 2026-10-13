@@ -1,0 +1,327 @@
+<?xml version="1.0" ?>
+
+<mode name="nu" />
+
+<!--detector name="SBND" pot="1e20"/-->
+<!--detector name="SBND" pot="8.3722e19"/--> 
+<detector name="SBND" pot="{{ sbnd_data_pot }}"/> 
+
+<!--
+<detector name="SBND" pot="4.57e18"/>
+<detector name="ICARUS2" pot="1.985e19"/>
+<detector name="ICARUS4" pot="1.916e19"/>
+-->
+<channel name="numu" unit="Reconstructed Neutrino Energy [GeV]">
+    <!--bins unit="RecoE" edges="0.3 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0 1.25 1.5"/-->
+    BINS
+    <bins unit = "True L/E" min="0" max="3" nbins="250" plot="false"/>
+    <bins unit = "True E [GeV]" min="0.3" max="3.0" nbins="20"  plot="false"/>
+
+    <subchannel name="Run1intime"    plotname="Intime"        color="#E570FF"/>
+    <subchannel name="Run1dirt"    plotname="Dirt"        color="#FF6961"/>
+    <subchannel name="Run1cos"    plotname="OOT"        color="#E37400"/> 
+    <subchannel name="Run1numunc"     plotname="#nu_{#mu}NC"             color="#0645F4"/> 
+    <subchannel name="Run1nue"  plotname="#nu_{e}"     color="#34A853"/>
+    <subchannel name="Run1numucc" plotname="#nu_{#mu}CC"   color="#99CCFF"/>
+
+</channel>
+
+<model tag="SBL_2flav_numudis">
+    <rule index="0" name="No Osc"/>
+    <rule index="1" name="Numu Disapp"/>
+    <parameter variable_index = "1" name="L/E"/>
+</model>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLENP/SBNDMCCV_*_sbruce.root" scale = "1" pot="{{ sbnd_mc_pot }}">  
+    <friend treename="multisigmaTree" />
+    <friend treename="multisimTree" />
+    <branch
+        associated_subchannel = "nu_SBND_numu_Run1numucc"
+        model_rule            = "1"
+        additional_weight     = "((!true_isnc) && (true_pdg == 14 || true_pdg == -14))*cvwgt"
+        >
+        
+        <variable>BRANCH</variable>
+        <variable>baseline/(nu_E*1000.0)</variable>
+	    <variable>nu_E</variable>
+
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numu_Run1numunc"
+        model_rule            = "1"
+        additional_weight     = "((true_isnc == 1) && (true_pdg == 14 || true_pdg == -14))*cvwgt"
+
+        >
+        <variable>BRANCH</variable>
+        <variable>baseline/(nu_E*1000.0)</variable>
+	    <variable>nu_E</variable>
+
+    </branch>
+
+    <branch
+        associated_subchannel = "nu_SBND_numu_Run1nue"
+        model_rule            = "0"
+        additional_weight     = "((true_pdg == 12 || true_pdg == -12))*cvwgt"
+
+        >
+        <variable>BRANCH</variable>
+        <variable>baseline/(nu_E*1000.0)</variable>
+	    <variable>nu_E</variable>
+
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numu_Run1cos"
+        model_rule            = "0"
+        additional_weight     = "(true_iscosmic == 1)*cvwgt"
+        >
+        <variable>BRANCH</variable>
+	    <variable>0.0</variable>
+	    <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLENP/SBND_SpringBNBOffData_sbruce.root" scale = "1" pot="{{ sbnd_offbeam_pot }}">  
+    <branch
+        associated_subchannel = "nu_SBND_numu_Run1intime"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable>BRANCH</variable>
+	    <variable>0.0</variable>
+	    <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLENP/SBND_SpringLowEMC_sbruce.root" scale = "1" pot="{{ sbnd_dirt_pot }}">  
+    <branch
+        associated_subchannel = "nu_SBND_numu_Run1dirt"
+        model_rule            = "0"
+        incl_systematics      = "false"
+
+        >
+        <variable>BRANCH</variable>
+	    <variable>0.0</variable>
+	    <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+
+<DetVarFiles>
+
+	<DetVarSection treename="SelectedEvents">
+	<!--DetVarSection treename="events/selectedAll" cv_variation_matching_vars="Run,Subrun,Evt" extra_weight="selected"-->
+
+		<cv filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_WMXThetaXWNominal_sbruce.root" pot="1" />       <!-- 1.4614e20 -->
+        <variation name="WM-Xtheta_xw_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_WMXThetaXW_sbruce.root" pot="1" knobval="+1"/>         <!-- 5.9415e20 -->
+
+		<subchannel>nu_SBND_numu_Run1intime</subchannel>
+		<subchannel>nu_SBND_numu_Run1dirt</subchannel>
+		<subchannel>nu_SBND_numu_Run1cos</subchannel>
+		<subchannel>nu_SBND_numu_Run1numunc</subchannel>
+		<subchannel>nu_SBND_numu_Run1nue</subchannel> 
+        <subchannel>nu_SBND_numu_Run1numucc</subchannel>
+
+	</DetVarSection>
+
+	<DetVarSection treename="SelectedEvents">
+	<!--DetVarSection treename="events/selectedAll" cv_variation_matching_vars="Run,Subrun,Evt" extra_weight="selected"-->
+
+		<cv filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_WMYZNominal_sbruce.root" pot="1" />       <!-- 1.4614e20 -->
+        <variation name="WM-YZ_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_WMYZ_sbruce.root" pot="1" knobval="+1"/>                        <!-- 6.03e20 -->
+
+		<subchannel>nu_SBND_numu_Run1intime</subchannel>
+		<subchannel>nu_SBND_numu_Run1dirt</subchannel>
+		<subchannel>nu_SBND_numu_Run1cos</subchannel>
+		<subchannel>nu_SBND_numu_Run1numunc</subchannel>
+		<subchannel>nu_SBND_numu_Run1nue</subchannel> 
+        <subchannel>nu_SBND_numu_Run1numucc</subchannel>
+
+	</DetVarSection>
+
+	<DetVarSection treename="SelectedEvents">
+	<!--DetVarSection treename="events/selectedAll" cv_variation_matching_vars="Run,Subrun,Evt" extra_weight="selected"-->
+
+		<cv filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_DENTNominal_sbruce.root" pot="1" />       <!-- 1.4614e20 -->
+        <variation name="Dent_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_DENT_sbruce.root" pot="1" knobval="+1"/>                        <!-- 1.449e20 -->
+
+		<subchannel>nu_SBND_numu_Run1intime</subchannel>
+		<subchannel>nu_SBND_numu_Run1dirt</subchannel>
+		<subchannel>nu_SBND_numu_Run1cos</subchannel>
+		<subchannel>nu_SBND_numu_Run1numunc</subchannel>
+		<subchannel>nu_SBND_numu_Run1nue</subchannel> 
+        <subchannel>nu_SBND_numu_Run1numucc</subchannel>
+
+	</DetVarSection>
+
+
+	<DetVarSection treename="SelectedEvents">
+	<!--DetVarSection treename="events/selectedAll" cv_variation_matching_vars="Run,Subrun,Evt" extra_weight="selected"-->
+
+		<cv filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_BINDNominal_sbruce.root" pot="1" />
+        <variation name="R_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_EMBRp_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="R_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_EMBRm_sbruce.root" pot="1" knobval="-1"/>
+        <variation name="Alpha_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_EMBAlphap_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="Alpha_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_EMBAlpham_sbruce.root" pot="1" knobval="-1"/>
+        <variation name="Beta_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_EMBBetap_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="Beta_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_EMBBetam_sbruce.root" pot="1" knobval="-1"/>
+        <variation name="Gain_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_GainHi_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="Gain_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_GainLow_sbruce.root" pot="1" knobval="-1"/>
+        <variation name="Smear_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="BiasdEdx_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_BiaseddEdx_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="Trigger_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="Trigger_sbnd"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
+        <variation name="Binding"    filename="{{ BASE_DIR }}/MAPLENP/sbruce_trees/SBND_BIND_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_SBND_numu_Run1intime</subchannel>
+		<subchannel>nu_SBND_numu_Run1dirt</subchannel>
+		<subchannel>nu_SBND_numu_Run1cos</subchannel>
+		<subchannel>nu_SBND_numu_Run1numunc</subchannel>
+		<subchannel>nu_SBND_numu_Run1nue</subchannel> 
+        <subchannel>nu_SBND_numu_Run1numucc</subchannel>
+
+	</DetVarSection>
+
+</DetVarFiles>
+
+<variation_list>
+    <!--allowlist type="mcstat" tag="MCstat" plotname="MC Stats" >mcstats</allowlist-->
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="SF" plotname="Spectral Function Bin 0">multisigma_CCQETemplateReweight_SBN_v3_LFGToSF_q0bin0</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="SF" plotname="Spectral Function Bin 1">multisigma_CCQETemplateReweight_SBN_v3_LFGToSF_q0bin1</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="SF" plotname="Spectral Function Bin 2">multisigma_CCQETemplateReweight_SBN_v3_LFGToSF_q0bin2</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="SF" plotname="Spectral Function Bin 3">multisigma_CCQETemplateReweight_SBN_v3_LFGToSF_q0bin3</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="SF" plotname="Spectral Function Bin 4">multisigma_CCQETemplateReweight_SBN_v3_LFGToSF_q0bin4</allowlist>
+
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="HF" plotname="Hartree Fock Bin 0">multisigma_CCQETemplateReweight_SBN_v3_LFGToHF_q0bin0</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="HF" plotname="Hartree Fock Bin 1">multisigma_CCQETemplateReweight_SBN_v3_LFGToHF_q0bin1</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="HF" plotname="Hartree Fock Bin 2">multisigma_CCQETemplateReweight_SBN_v3_LFGToHF_q0bin2</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="HF" plotname="Hartree Fock Bin 3">multisigma_CCQETemplateReweight_SBN_v3_LFGToHF_q0bin3</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="HF" plotname="Hartree Fock Bin 4">multisigma_CCQETemplateReweight_SBN_v3_LFGToHF_q0bin4</allowlist>
+
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="CRPA" plotname="CRPA Bin 0">multisigma_CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin0</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="CRPA" plotname="CRPA Bin 1">multisigma_CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin1</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="CRPA" plotname="CRPA Bin 2">multisigma_CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin2</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="CRPA" plotname="CRPA Bin 3">multisigma_CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin3</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="CRPA" plotname="CRPA Bin 4">multisigma_CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin4</allowlist>
+
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="QE" plotname="QEInterference Bin 0">multisigma_QEInterference_SBN_v3_QEIntf_dial_0</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="QE" plotname="QEInterference Bin 1">multisigma_QEInterference_SBN_v3_QEIntf_dial_1</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="QE" plotname="QEInterference Bin 2">multisigma_QEInterference_SBN_v3_QEIntf_dial_2</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="QE" plotname="QEInterference Bin 3">multisigma_QEInterference_SBN_v3_QEIntf_dial_3</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="QE" plotname="QEInterference Bin 4">multisigma_QEInterference_SBN_v3_QEIntf_dial_4</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="QE" plotname="QEInterference Bin 5">multisigma_QEInterference_SBN_v3_QEIntf_dial_5</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="QE" plotname="CoulombCCQE">GENIEReWeight_SBN_v1_multisigma_CoulombCCQE</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="QE" plotname="VecFFCCQEshape">GENIEReWeight_SBN_v1_multisigma_VecFFCCQEshape</allowlist>
+
+
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="FrG4LoE_N">multisigma_GENIEReWeight_SBN_v3_FrG4LoE_N</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="FrG4M1E_N">multisigma_GENIEReWeight_SBN_v3_FrG4M1E_N</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="FrG4M2E_N">multisigma_GENIEReWeight_SBN_v3_FrG4M2E_N</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="FrG4HiE_N">multisigma_GENIEReWeight_SBN_v3_FrG4HiE_N</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="FrINCLLoE_N">multisigma_GENIEReWeight_SBN_v3_FrINCLLoE_N</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="FrINCLM1_N">multisigma_GENIEReWeight_SBN_v3_FrINCLM1E_N</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="FrINCLM2_N">multisigma_GENIEReWeight_SBN_v3_FrINCLM2E_N</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="FrINCLHi_N">multisigma_GENIEReWeight_SBN_v3_FrINCLHiE_N</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="MFPLoE_N">multisigma_GENIEReWeight_SBN_v3_MFPLoE_N</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="MFPM1E_N">multisigma_GENIEReWeight_SBN_v3_MFPM1E_N</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="MFPM2E_N">multisigma_GENIEReWeight_SBN_v3_MFPM2E_N</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="MFPHiE_N">multisigma_GENIEReWeight_SBN_v3_MFPHiE_N</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="AxialFF" plotname="ZExpPCA_b1">multisigma_ZExpPCAWeighter_SBN_v3_MvA_b1</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="AxialFF" plotname="ZExpPCA_b2">multisigma_ZExpPCAWeighter_SBN_v3_MvA_b2</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="AxialFF" plotname="ZExpPCA_b3">multisigma_ZExpPCAWeighter_SBN_v3_MvA_b3</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="AxialFF" plotname="ZExpPCA_b4">multisigma_ZExpPCAWeighter_SBN_v3_MvA_b4</allowlist>
+
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="RES" plotname="MaNCRES">GENIEReWeight_SBN_v1_multisigma_MaNCRES</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="RES" plotname="MaCCRES">GENIEReWeight_SBN_v1_multisigma_MaCCRES</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="RES" plotname="MvCCRES">GENIEReWeight_SBN_v1_multisigma_MvCCRES</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="RES" plotname="MvNCRES">GENIEReWeight_SBN_v1_multisigma_MvNCRES</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="RES" plotname="ThetaDelta2NRad">GENIEReWeight_SBN_v1_multisigma_ThetaDelta2NRad</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="RES" plotname="ThetaDelta2Npi">GENIEReWeight_SBN_v1_multisigma_Theta_Delta2Npi</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="RES" plotname="RDecBR1eta">GENIEReWeight_SBN_v1_multisigma_RDecBR1eta</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="RES" plotname="RDecBR1gamma">GENIEReWeight_SBN_v1_multisigma_RDecBR1gamma</allowlist>
+
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="OtherXSec" plotname="AhtBY">GENIEReWeight_SBN_v1_multisigma_AhtBY</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="OtherXSec" plotname="BhtBY">GENIEReWeight_SBN_v1_multisigma_BhtBY</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="OtherXSec" plotname="CV1uBY">GENIEReWeight_SBN_v1_multisigma_CV1uBY</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="OtherXSec" plotname="CV2uBY">GENIEReWeight_SBN_v1_multisigma_CV2uBY</allowlist>
+
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="OtherXSec" plotname="CCCOH">GENIEReWeight_SBN_v1_multisigma_NormCCCOH</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="OtherXSec" plotname="NCCOH">GENIEReWeight_SBN_v1_multisigma_NormNCCOH</allowlist>
+
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="OtherXSec" plotname="MaNCEL">GENIEReWeight_SBN_v1_multisigma_MaNCEL</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="OtherXSec" plotname="EtaNCEL">GENIEReWeight_SBN_v1_multisigma_EtaNCEL</allowlist>
+
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="MFP_pi">GENIEReWeight_SBN_v1_multisigma_MFP_pi</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="FrAbs_pi">GENIEReWeight_SBN_v1_multisigma_FrAbs_pi</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="FrInel_pi">GENIEReWeight_SBN_v1_multisigma_FrInel_pi</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="FrCEx_pi">GENIEReWeight_SBN_v1_multisigma_FrCEx_pi</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="FSI" plotname="FrPiProd_pi">GENIEReWeight_SBN_v1_multisigma_FrPiProd_pi</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="MEC" plotname="NormCCMEC">GENIEReWeight_SBN_v1_multisigma_NormCCMEC</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="MEC" plotname="NormNCMEC">GENIEReWeight_SBN_v1_multisigma_NormNCMEC</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="MEC" plotname="DecayAngMEC">GENIEReWeight_SBN_v1_multisigma_DecayAngMEC</allowlist>
+
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="MEC" plotname="MEC Valencia Bin 0">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin0</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="MEC" plotname="MEC Valencia Bin 1">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin1</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="MEC" plotname="MEC Valencia Bin 2">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin2</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="MEC" plotname="MEC Valencia Bin 3">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin3</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="MEC" plotname="MEC Martini Bin 0">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin0</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="MEC" plotname="MEC Martini Bin 1">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin1</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="MEC" plotname="MEC Martini Bin 2">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin2</allowlist>
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="MEC" plotname="MEC Martini Bin 3">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin3</allowlist>
+
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvpCC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvpCC1pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvpCC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvpCC2pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvpNC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvpNC1pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvpNC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvpNC2pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvnCC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvnCC1pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvnCC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvnCC2pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvnNC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvnNC1pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvnNC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvnNC2pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvbarpCC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpCC1pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvbarpCC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpCC2pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvbarpNC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpNC1pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvbarpNC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpNC2pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvbarnCC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnCC1pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvbarnCC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnCC2pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvbarnNC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnNC1pi</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="NonRES" plotname="NonRESBGvbarnNC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnNC2pi</allowlist>
+
+    <allowlist type="norm" tag="Det" plotname="SBND Dirt">nu_SBND_numu_Run1dirt:1.0</allowlist>
+    <allowlist type="norm" tag="Det" plotname="Corsika Unc">nu_SBND_numu_Run1cos:0.1</allowlist>
+
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="G4" plotname="G4piminus">multisim_reinteractions_piminus_Geant4</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="G4" plotname="G4piplus">multisim_reinteractions_piplus_Geant4</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var2" tag="G4" plotname="G4proton">multisim_reinteractions_proton_Geant4</allowlist>
+
+    <allowlist type="spline" apply_to_subchannel="_Run1(numucc|nue|numunc)$" binning="var0" tag="Flux-POT" plotname="POT SBND">multisigma_SBND_POT</allowlist>
+
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="nucleoninexsec">multisim_nucleoninexsec_Flux</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="kminus">multisim_kminus_Flux</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="kzero">multisim_kzero_Flux</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="piontotxsec">multisim_piontotxsec_Flux</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="horncurrent">multisim_horncurrent_Flux</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="piplus">multisim_piplus_Flux</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="piminus">multisim_piminus_Flux</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="pioninexsec">multisim_pioninexsec_Flux</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="pionqexsec">multisim_pionqexsec_Flux</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="kplus">multisim_kplus_Flux</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="nucleontotxsec">multisim_nucleontotxsec_Flux</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="nucleonqexsec">multisim_nucleonqexsec_Flux</allowlist>
+    <allowlist type="covariance" apply_to_subchannel="_Run1(numucc|nue|numunc)$" tag="Flux" plotname="expskin">multisim_expskin_Flux</allowlist>
+
+    <systematic name="WM-YZ_sbnd"            apply_to_subchannel="_Run1(numucc|nue|numunc|cos)$" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-3, 3" plotname="WM-YZ" tag="WireMod 1" />
+    <systematic name="WM-Xtheta_xw_sbnd"     apply_to_subchannel="_Run1(numucc|nue|numunc|cos)$" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-3, 3" plotname="WM-Xtheta_xw" tag="WireMod 1" />
+    <systematic name="Dent_sbnd"             apply_to_subchannel="_Run1(numucc|nue|numunc|cos)$" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-3, 3" plotname="Dent" tag="Dent 1" />
+
+
+    <systematic name="R_sbnd"           apply_to_subchannel="_Run1(numucc|nue|numunc|cos)$" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-3, 3" plotname="R" tag="Calorimetry 1" />
+    <systematic name="Alpha_sbnd"       apply_to_subchannel="_Run1(numucc|nue|numunc|cos)$" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-3, 3" plotname="#alpha" tag="Calorimetry 1" />
+    <systematic name="Beta_sbnd"        apply_to_subchannel="_Run1(numucc|nue|numunc|cos)$" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-3, 3" plotname="#beta" tag="Calorimetry 1" />
+    <systematic name="Gain_sbnd"        apply_to_subchannel="_Run1(numucc|nue|numunc|cos)$" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="Gain" tag="Calorimetry 1" />
+    <systematic name="Smear_sbnd"       apply_to_subchannel="_Run1(numucc|nue|numunc|cos)$" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" inflate="2" plotname="Smear" tag="Calorimetry 1" />
+    <systematic name="BiasdEdx_sbnd"    apply_to_subchannel="_Run1(numucc|nue|numunc|cos)$" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-3, 3" plotname="BiasdEdx" tag="Calorimetry 1" />
+    <systematic name="Trigger_sbnd"     apply_to_subchannel="_Run1(numucc|nue|numunc|cos)$" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-3, 3" plotname="Trigger" tag="Calorimetry 1" />
+    <systematic name="Binding"          apply_to_subchannel="_Run1(numucc|nue|numunc)$"     type="spline" xvar="var0" binning="var0" mirror="false" restrict="-3, 3" plotname="Binding" tag="Binding" />
+
+
+</variation_list>
+
