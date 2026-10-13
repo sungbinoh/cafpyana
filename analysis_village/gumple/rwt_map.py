@@ -62,10 +62,10 @@ DEFAULT_DFDIR = "/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-22/"
 #          statistics of the 1p vs N>1p channels
 #   "2D" : production binning
 BINNINGS = {
-    "1D": [np.array([0.3, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.10, 1.25, 1.5]),
+    "1D": [np.array([0.3, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.10, 1.5]),
            np.array([-1000.0, 0.0, 1000.0])],
     "2D": [np.array([0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.25, 1.5]),
-           np.array([0.0, 0.2, 0.4, 0.6])],
+           np.array([0.0, 0.3, 0.6])],
 }
 
 # Variations built directly from the (unmatched) CV dataframe: (name, function).
@@ -254,7 +254,6 @@ def plot_del_p_slices(filename, plot_title, output_tag, plotdir=DEFAULT_PLOTDIR)
     fig.savefig(os.path.join(plotdir, f"slice_{output_tag}.png"), dpi=300, bbox_inches="tight")
     plt.close(fig)
 
-
 def plot_map(filename, plotdir=DEFAULT_PLOTDIR):
     """Make the 2D map and del_p-slice debug plots for one saved map file."""
     tag = os.path.splitext(os.path.basename(filename))[0]
@@ -380,16 +379,13 @@ def load_sample(files, detector, light=True, **kwargs):
     "spill_LM875C", "spill_THCURR", "spill_FOM",
 
     # Early cuts and PFP counts
-    "cut_contained", "cut_cathode",
-    "n_pfp_no_calo", "n_shower", "n_other", "has_muon",
-    "cut_np", "cut_0shwother",
+    "n_pfp_no_calo", "n_shower", "n_other",
+    "cut_0shwother",
 
     # Momentum sum
-    "psum_p", "psum_ke", "psum_E",
-    "psum_dir_x", "psum_dir_y", "psum_dir_z",
+    "psum_p", "psum_ke"
 
     # Muon candidate (reco)
-    "mu_dist_start", "mu_prim_pfp", "mu_contained10",
     "mu_true_p", "mu_true_pdg",
     "true_mucand_p",  # NOTE: likely a typo of "true_mucand_p" below
 
