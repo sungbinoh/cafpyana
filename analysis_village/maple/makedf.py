@@ -63,9 +63,23 @@ from analysis_village.gump.kinematics import *
 import analysis_village.gumple.gumple_cuts as gmpl
 from analysis_village.maple import chi2pid_cafana
 from makedf.branches import (
-    crtpmtbranches, shwbranches,
+    crtpmtbranches, shwbranches, trkbranch,
     mcbranches, mcprimbranches, mcprimvisEbranches, trueparticlebranches,
+    slc_mcbranches, slc_mcprimbranches,
 )
+
+# extra true-particle branches for the leading-particle truth sets: the Geant4
+# end process and the momentum at the end of the trajectory
+TRUE_END_VARS = ["end_process", "endp.x", "endp.y", "endp.z"]
+mcprimendbranches = ["rec.mc.nu.prim." + v for v in TRUE_END_VARS]
+slc_mcprimendbranches = ["rec.slc.truth.prim." + v for v in TRUE_END_VARS]
+trktrueendpbranches = [trkbranch + "truth.p.endp." + c for c in ["x", "y", "z"]]
+
+def _endp_mag(endp):
+    # |end momentum|; the CAF fills endp with -9999 for particles with no
+    # in-volume trajectory end (same as the end position) -> NaN
+    unset = (endp.x <= -9999) | (endp.y <= -9999) | (endp.z <= -9999)
+    return magdf(endp).where(~unset)
 
 # PFPID enum from the helper header
 PID_UNKNOWN, PID_PROTON, PID_PION, PID_SHOWER, PID_OTHER = 0, 1, 2, 3, 4
@@ -451,7 +465,7 @@ def fetch_info(f):
     # ------------------------------------------------------------------
     # slice frame
     # ------------------------------------------------------------------
-    slcdf = make_slcdf(f)
+    slcdf = make_slcdf(f, slc_mcbranches, slc_mcprimbranches + slc_mcprimendbranches)
     S = pd.DataFrame({
         "slc_vtx_x": slcdf.slc.vertex.x,
         "slc_vtx_y": slcdf.slc.vertex.y,
@@ -493,6 +507,13 @@ def fetch_info(f):
         "true_p2_end_x": slcdf.slc.truth.p2.end.x,
         "true_p2_end_y": slcdf.slc.truth.p2.end.y,
         "true_p2_end_z": slcdf.slc.truth.p2.end.z,
+        "true_p3_p": slcdf.slc.truth.p3.totp,
+        "true_p3_dir_x": slcdf.slc.truth.p3.dir.x,
+        "true_p3_dir_y": slcdf.slc.truth.p3.dir.y,
+        "true_p3_dir_z": slcdf.slc.truth.p3.dir.z,
+        "true_p3_end_x": slcdf.slc.truth.p3.end.x,
+        "true_p3_end_y": slcdf.slc.truth.p3.end.y,
+        "true_p3_end_z": slcdf.slc.truth.p3.end.z,
         # slice-level true leading charged pion / photon / neutral pion
         "true_cpi_p": slcdf.slc.truth.cpi.totp,
         "true_cpi_dir_x": slcdf.slc.truth.cpi.dir.x,
@@ -517,7 +538,7 @@ def fetch_info(f):
         "true_pi0_end_z": slcdf.slc.truth.pi0.end.z,
         # neutrino flux ancestry (parent that decayed to the nu) -- needed by the
         # reBruce flux calculators (flux_horn_current, flux_hadron_production)
-        "true_parent_pdg": slcdf.slc.truth.parent_pdg,
+        "true_parent_dcy_pdg": slcdf.slc.truth.parent_pdg,
         "true_parent_dcy_mom_x": slcdf.slc.truth.parent_dcy_mom.x,
         "true_parent_dcy_mom_y": slcdf.slc.truth.parent_dcy_mom.y,
         "true_parent_dcy_mom_z": slcdf.slc.truth.parent_dcy_mom.z,
@@ -525,6 +546,15 @@ def fetch_info(f):
         "true_cpi_pdg": slcdf.slc.truth.cpi.pdg,
         "ismc" : ismc,
     })
+    # Geant4 end process and end-momentum magnitude of each slice-level true
+    # particle set
+    for sp in ["mu", "p", "p2", "p3", "cpi", "g", "pi0"]:
+        S["true_%s_end_process" % sp] = slcdf.slc.truth[sp].end_process
+        S["true_%s_end_p" % sp] = _endp_mag(slcdf.slc.truth[sp].endp)
+    # parent momentum magnitude and angle to the beam (parent_dcy_mom is in
+    # beam coordinates, so z is the beam axis)
+    S["true_parent_dcy_p"] = magdf(slcdf.slc.truth.parent_dcy_mom)
+    S["true_parent_dcy_costh"] = slcdf.slc.truth.parent_dcy_mom.z / S.true_parent_dcy_p
     S["slice_index"] = S.index.get_level_values(1)
     S["detector"] = DETECTOR
     S["Run"] = RUN
@@ -537,6 +567,8 @@ def fetch_info(f):
     keys = set(f["recTree"].keys())
     shwdf = loadbranches(f["recTree"], [b for b in shwbranches if b in keys]).rec.slc.reco.pfp.shw
     shwdf.index.names = trkdf.index.names
+    trkendp = loadbranches(f["recTree"], trktrueendpbranches).rec.slc.reco.pfp.trk.truth.p.endp
+    trkendp.index.names = trkdf.index.names
 
     P = pd.DataFrame({
         "start_x": trkdf.pfp.trk.start.x,
@@ -560,6 +592,9 @@ def fetch_info(f):
         "true_end_x": trkdf.pfp.trk.truth.p.end.x,
         "true_end_y": trkdf.pfp.trk.truth.p.end.y,
         "true_end_z": trkdf.pfp.trk.truth.p.end.z,
+        # NaN (not the CAF default) for pfps with no matched true particle
+        "true_end_process": trkdf.pfp.trk.truth.p.end_process.where(trkdf.pfp.trk.truth.p.genp.x.notna()),
+        "true_end_p": _endp_mag(trkendp),
         "shw_energy2": shwdf.plane.I2.energy,
     })
 
@@ -860,7 +895,7 @@ def fetch_candidates(S, P, do_calo_syst, use_chi2=True, do_alt_chi2=False,
     # candidate variables (muon + leading candidate proton)
     # ------------------------------------------------------------------
     truthcols = ["true_pdg", "true_genp_x", "true_genp_y", "true_genp_z",
-                 "true_end_x", "true_end_y", "true_end_z"]
+                 "true_end_x", "true_end_y", "true_end_z", "true_end_process", "true_end_p"]
     mucols = ["len", "start_x", "start_y", "start_z", "end_x", "end_y", "end_z", "dir_x", "dir_y", "dir_z",
               "p_muon", "trackScore", "dist_start", "prim_pfp", "contained10"] + truthcols + \
         ["chi2u_%s" % fl for fl in chi2_suffixes.values()] + \
@@ -1001,6 +1036,8 @@ def fetch_candidates(S, P, do_calo_syst, use_chi2=True, do_alt_chi2=False,
     S["true_mucand_end_x"] = mu.true_end_x
     S["true_mucand_end_y"] = mu.true_end_y
     S["true_mucand_end_z"] = mu.true_end_z
+    S["true_mucand_end_process"] = mu.true_end_process
+    S["true_mucand_end_p"] = mu.true_end_p
 
     S["p_len"] = pro.len
     S["p_ke"] = pro.ke_proton  # GeV, range-based
@@ -1037,6 +1074,8 @@ def fetch_candidates(S, P, do_calo_syst, use_chi2=True, do_alt_chi2=False,
     S["true_pcand_end_x"] = pro.true_end_x
     S["true_pcand_end_y"] = pro.true_end_y
     S["true_pcand_end_z"] = pro.true_end_z
+    S["true_pcand_end_process"] = pro.true_end_process
+    S["true_pcand_end_p"] = pro.true_end_p
 
     # sub-leading proton length: 2nd-longest proton candidate (same is_prot_cand
     # set as the leading proton -> no track-score gate). Sort ascending by len,
@@ -1254,11 +1293,15 @@ def make_maple_nudf(f):
         "true_visible_Enu": cls.true_visible_Enu,
         # neutrino flux ancestry (parent that decayed to the nu) -- needed by the
         # reBruce flux calculators (flux_horn_current, flux_hadron_production)
-        "parent_pdg": mc.parent_pdg,
+        "parent_dcy_pdg": mc.parent_pdg,
         "parent_dcy_mom_x": mc.parent_dcy_mom_x,
         "parent_dcy_mom_y": mc.parent_dcy_mom_y,
         "parent_dcy_mom_z": mc.parent_dcy_mom_z,
     })
+    # parent momentum magnitude and angle to the beam (beam coordinates: z is
+    # the beam axis)
+    nudf["parent_dcy_p"] = np.sqrt(mc.parent_dcy_mom_x**2 + mc.parent_dcy_mom_y**2 + mc.parent_dcy_mom_z**2)
+    nudf["parent_dcy_costh"] = mc.parent_dcy_mom_z / nudf.parent_dcy_p
     nudf["is_sig"] = (cls.maple_class == CLS_1MU1P) | (cls.maple_class == CLS_1MUNP)
     nudf["is_other_numucc"] = cls.maple_class == CLS_1MUNP
     nudf["is_fv"] = gmpl.prefix_fv_cut(nudf, "pos")
@@ -1270,12 +1313,13 @@ def make_maple_nudf(f):
     # Standard per-particle truth kinematics for the leading muon and proton.
     # Reuse make_mcdf, which already reduces rec.mc.nu.prim to the leading
     # particle of each species with the momentum (totp), unit direction (dir),
-    # generated energy (genE) and endpoint (end); it shares the (entry, inu)
+    # generated energy (genE), endpoint (end), Geant4 end process and end
+    # momentum (endp); it shares the (entry, inu)
     # index with nudf. All new columns are gathered in `extra` and appended in
     # a single pd.concat below to avoid DataFrame fragmentation.
     # -------------------------------------------------------------------------
     idx = nudf.index
-    mcdf = make_mcdf(f)
+    mcdf = make_mcdf(f, mcbranches, mcprimbranches + mcprimendbranches)
     extra = {}
     for sp in ["mu", "p"]:
         extra[sp + "_p"] = mcdf[(sp, "totp", "")].reindex(idx)
@@ -1286,6 +1330,8 @@ def make_maple_nudf(f):
         extra[sp + "_end_x"] = mcdf[(sp, "end", "x")].reindex(idx)
         extra[sp + "_end_y"] = mcdf[(sp, "end", "y")].reindex(idx)
         extra[sp + "_end_z"] = mcdf[(sp, "end", "z")].reindex(idx)
+        extra[sp + "_end_process"] = mcdf[(sp, "end_process", "")].reindex(idx)
+        extra[sp + "_end_p"] = _endp_mag(mcdf[sp].endp).reindex(idx)
 
     # -------------------------------------------------------------------------
     # Truth calorimetric energy (Ecalo) and TKI variables, summed over ALL

@@ -430,10 +430,10 @@ def make_trktruehitdf(f, plane=2):
 
     return df
 
-def make_slcdf(f):
+def make_slcdf(f, mcbranches=slc_mcbranches, mcprimbranches=slc_mcprimbranches):
     slcdf = loadbranches(f["recTree"], slcbranches)
     slcdf = slcdf.rec
-    slc_mcdf = make_mcdf(f, slc_mcbranches, slc_mcprimbranches)
+    slc_mcdf = make_mcdf(f, mcbranches, mcprimbranches)
     slc_mcdf.columns = pd.MultiIndex.from_tuples([tuple(["slc", "truth"] + list(c)) for c in slc_mcdf.columns])
     slcdf = multicol_merge(slcdf, slc_mcdf, left_index=True, right_index=True, how="left", validate="one_to_one")
 
@@ -495,7 +495,13 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     # sub-leading proton
     p2df = mcprimdf[mcprimdf.pdg==2212].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).tail(2).groupby(level=[0,1]).first()
     p2df.columns = pd.MultiIndex.from_tuples([tuple(["p2"] + list(c)) for c in p2df.columns])
+    p2df_all = p2df
     p2df = p2df[p2df.p2.length != pdf.p.length] # remove single-proton slices
+
+    # third-leading proton
+    p3df = mcprimdf[mcprimdf.pdg==2212].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).tail(3).groupby(level=[0,1]).first()
+    p3df.columns = pd.MultiIndex.from_tuples([tuple(["p3"] + list(c)) for c in p3df.columns])
+    p3df = p3df[p3df.p3.length != p2df_all.p2.length] # remove one- and two-proton slices
 
     # electron info
     edf = mcprimdf[np.abs(mcprimdf.pdg)==11].sort_values(mcprimdf.index.names[:2] + [("genE", "")]).groupby(level=[0,1]).last()
@@ -507,6 +513,7 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     mcdf = multicol_merge(mcdf, gdf, left_index=True, right_index=True, how="left", validate="one_to_one")
     mcdf = multicol_merge(mcdf, pdf, left_index=True, right_index=True, how="left", validate="one_to_one")
     mcdf = multicol_merge(mcdf, p2df, left_index=True, right_index=True, how="left", validate="one_to_one")
+    mcdf = multicol_merge(mcdf, p3df, left_index=True, right_index=True, how="left", validate="one_to_one")
     mcdf = multicol_merge(mcdf, edf, left_index=True, right_index=True, how="left", validate="one_to_one")
 
     # primary track variables
@@ -517,6 +524,7 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     mcdf.loc[:, ('g','totp','')] = np.sqrt(mcdf.g.genp.x**2 + mcdf.g.genp.y**2 + mcdf.g.genp.z**2)
     mcdf.loc[:, ('p','totp','')] = np.sqrt(mcdf.p.genp.x**2 + mcdf.p.genp.y**2 + mcdf.p.genp.z**2)
     mcdf.loc[:, ('p2','totp','')] = np.sqrt(mcdf.p2.genp.x**2 + mcdf.p2.genp.y**2 + mcdf.p2.genp.z**2)
+    mcdf.loc[:, ('p3','totp','')] = np.sqrt(mcdf.p3.genp.x**2 + mcdf.p3.genp.y**2 + mcdf.p3.genp.z**2)
 
     # opening angles
     mcdf.loc[:, ('mu','dir','x')] = mcdf.mu.genp.x/mcdf.mu.totp
@@ -540,6 +548,9 @@ def make_mcdf(f, branches=mcbranches, primbranches=mcprimbranches):
     mcdf.loc[:, ('p2','dir','x')] = mcdf.p2.genp.x/mcdf.p2.totp
     mcdf.loc[:, ('p2','dir','y')] = mcdf.p2.genp.y/mcdf.p2.totp
     mcdf.loc[:, ('p2','dir','z')] = mcdf.p2.genp.z/mcdf.p2.totp
+    mcdf.loc[:, ('p3','dir','x')] = mcdf.p3.genp.x/mcdf.p3.totp
+    mcdf.loc[:, ('p3','dir','y')] = mcdf.p3.genp.y/mcdf.p3.totp
+    mcdf.loc[:, ('p3','dir','z')] = mcdf.p3.genp.z/mcdf.p3.totp
 
     # endpoints
     mcdf.loc[:, ('mu','end','x')] = mcdf.mu.end.x
