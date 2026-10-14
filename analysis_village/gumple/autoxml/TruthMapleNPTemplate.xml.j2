@@ -1,0 +1,154 @@
+<?xml version="1.0" ?>
+
+<!-- TRUTH np template: a muon and any number of protons, nothing else (Reco_class 1 or 2).
+     Derived from MapleNPTemplate.xml.j2 for the output of analysis_village/gumple/run_all_truth_pipelines.sh
+     (selection gmpl.all_truth_maplenp_cuts, WEIGHTS=0).  MC only: no off-beam, no dirt, no fake-data trees, and no
+     weights, so no systematics except MC stats and the Corsika norm and no DetVarFiles.  The inclusive MAPLENP
+     channel / subchannel structure is kept; with an np-only selection the NC / other subchannels are expected to
+     be empty. -->
+
+<mode name="nu" />
+
+<detector name="SBND" pot="1e20"/>
+<detector name="ICARUS" pot="5e20"/>
+
+<channel name="numu1p" unit="Reconstructed Neutrino Energy [GeV]">
+    <bins2D unit="RecoE;del_p" edgesx="0.3 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0 1.5" edgesy="0.0 0.3 0.6"/>
+    <bins unit = "True L/E" min="0" max="2.5" nbins="200" plot="false"/>
+    <subchannel name="cvcc" plotname="#nu_{#mu}CC" color="#1e3f54"/>
+    <subchannel name="cvnumunc" plotname="NuMuNC" color="#95af8b"/>
+    <subchannel name="cvothernc" plotname="OtherNC" color="#A4459F"/>
+    <subchannel name="cvbkgcosmic" plotname="Out of Time Cosmics" color="#c89648"/>
+    <subchannel name="cvbkgnotcosmic" plotname="Other (Non-Cosmic)" color="#c89654"/>
+    <subchannel name="cvbkg" plotname="Other" color="#c89648"/>
+</channel>
+
+<model tag="numudis">
+    <rule index="0" name="No Osc"/>
+    <rule index="1" name="Numu Disapp"/>
+    <parameter variable_index = "1" name="L/E"/>
+</model>
+
+<variation_list>
+    <systematic type="mcstat" plotname="MC Stats" >mcstats</systematic>
+
+    <systematic type="norm" tag="SBND Det" plotname="Corsika Unc">nu_SBND_numu.*_cvbkgcosmic:0.1</systematic>
+
+                                        
+</variation_list>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/TRUTHMAPLENP/SBNDMCCV_*_sbruce.root" scale = "1.0" pot="{{ sbnd_mc_pot }}">
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_cvcc"
+        model_rule            = "1"
+        additional_weight     = "(!true_isnc)*(true_pdg == 14 || true_pdg == -14)*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+        <variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_cvnumunc"
+        model_rule            = "1"
+        additional_weight     = "(true_isnc == 1)*(true_pdg == 14 || true_pdg == -14)*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_cvothernc"
+        model_rule            = "0"
+        additional_weight     = "(true_isnc == 1)*(true_pdg != 14 & true_pdg != -14)*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_cvbkgcosmic"
+        model_rule            = "0"
+        additional_weight     = "(!((true_isnc != 1)*(true_pdg == 14 || true_pdg == -14)) & !(true_isnc == 1) & (true_iscosmic == 1))*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_cvbkgnotcosmic"
+        model_rule            = "0"
+        additional_weight     = "(!((true_isnc != 1)*(true_pdg == 14 || true_pdg == -14)) & !(true_isnc == 1) & !(true_iscosmic == 1))*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/TRUTHMAPLENP/ICARUSRun2_SpringMCOverlay_rewgt_*_sbruce.root" scale = "0.4" pot = "{{ icarus_r2_mc_pot }}" >
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvcc"
+        model_rule            = "1"
+        additional_weight     = "(!true_isnc)*(true_pdg == 14 || true_pdg == -14)*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+        <variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvnumunc"
+        model_rule            = "1"
+        additional_weight     = "(true_isnc == 1)*(true_pdg == 14 || true_pdg == -14)*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvothernc"
+        model_rule            = "0"
+        additional_weight     = "(true_isnc == 1)*(true_pdg != 14 & true_pdg != -14)*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvbkg"
+        model_rule            = "0"
+        additional_weight     = "(!((true_isnc != 1)*(true_pdg == 14 || true_pdg == -14)) & !(true_isnc == 1))*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/TRUTHMAPLENP/ICARUSRun4_SpringMCOverlay_rewgt_*_sbruce.root" scale = "0.6" pot = "{{ icarus_r4_mc_pot }}" >
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvcc"
+        model_rule            = "1"
+        additional_weight     = "(!true_isnc)*(true_pdg == 14 || true_pdg == -14)*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+        <variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvnumunc"
+        model_rule            = "1"
+        additional_weight     = "(true_isnc == 1)*(true_pdg == 14 || true_pdg == -14)*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvothernc"
+        model_rule            = "0"
+        additional_weight     = "(true_isnc == 1)*(true_pdg != 14 & true_pdg != -14)*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvbkg"
+        model_rule            = "0"
+        additional_weight     = "(!((true_isnc != 1)*(true_pdg == 14 || true_pdg == -14)) & !(true_isnc == 1))*cvwgt"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+

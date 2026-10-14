@@ -1,0 +1,258 @@
+<?xml version="1.0" ?>
+
+<mode name="nu" />
+
+<detector name="SBND" pot="1e20"/>
+<detector name="ICARUS" pot="3e20"/>
+
+<channel name="numu1p" unit="Reconstructed Neutrino Energy [GeV]">
+    <bins2D unit="RecoE;del_p" edgesx="0.3 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0 1.5" edgesy="0.0 0.2 0.4 0.6"/>
+    <bins unit = "True L/E" min="0" max="3" nbins="250" plot="false"/>
+    <bins unit = "True E [GeV]" min="0.3" max="3.0" nbins="20"  plot="false"/>
+
+    <subchannel name="data" plotname="Data" color="#99CCFF"/>
+
+</channel>
+
+<channel name="numuMP" unit="Reconstructed Neutrino Energy [GeV]">
+    <bins unit="RecoE" edges="0.3 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0 1.05 1.10 1.25 1.5"/>
+    <bins unit = "True L/E" min="0" max="3" nbins="250" plot="false"/>
+    <bins unit = "True E [GeV]" min="0.3" max="3.0" nbins="20"  plot="false"/>
+
+    <subchannel name="data" plotname="Data" color="#99CCFF"/>
+
+</channel>
+ 
+
+ <!-- 1p SBND -->
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/SBNDAr25_sbruce.root" scale = "1" pot="{{ sbnd_ar25_pot }}">  
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_data"
+        incl_systematics      = "false"
+        additional_weight      = "(AVnu == 1)"
+        model_rule            = "0"
+    >
+    <variable2D>nu_E_calo;del_p</variable2D>
+    <!--variable2D>nu_E_calo</variable2D-->
+	    <variable>0.0</variable>
+	    <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/SBNDMCCV_*_sbruce.root" scale = "1" pot="{{ sbnd_mc_pot }}">
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_data"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        additional_weight      = "(AVnu == 0)"
+        >
+
+        <variable2D>nu_E_calo;del_p</variable2D>
+        <!--variable2D>nu_E_calo</variable2D-->
+        <variable>0.0</variable>
+        <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/SBND_SpringBNBOffData_sbruce.root" scale = "1" pot="{{ sbnd_offbeam_pot }}">
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_data"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+        <!--variable2D>nu_E_calo</variable2D-->
+        <variable>0.0</variable>
+        <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/SBND_SpringLowEMC_sbruce.root" scale = "1" pot="{{ sbnd_dirt_pot }}">
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_data"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        additional_weight      = "(AVnu == 0)"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+        <!--variable2D>nu_E_calo</variable2D-->
+        <variable>0.0</variable>
+        <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+
+ <!-- 1p ICARUS -->
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/ICARUSRun4_AR25_sbruce.root" scale = "1" pot="{{ icarus_r4_ar25_pot }}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_data"
+        incl_systematics      = "false"
+        additional_weight      = "(AVnu == 1)"
+        model_rule            = "0"
+    >
+    <variable2D>nu_E_calo;del_p</variable2D>
+    <!--variable>nu_E_calo</variable-->
+	    <variable>0.0</variable>
+	    <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/ICARUSRun4_SpringMCOverlay_rewgt_*_sbruce.root" scale = "1" pot="{{ icarus_r4_mc_pot }}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_data"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        additional_weight      = "(AVnu == 0)"
+        >
+
+        <variable2D>nu_E_calo;del_p</variable2D>
+        <!--variable>nu_E_calo</variable-->
+        <variable>0.0</variable>
+        <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/ICARUS_SpringRun4BNBOff_unblind_sbruce.root" scale = "1" pot="{{ icarus_r4_offbeam_pot }}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_data"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+        <!--variable>nu_E_calo</variable-->
+        <variable>0.0</variable>
+        <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/ICARUSRun4_Spring_Overlay_Dirt_sbruce.root" scale = "1" pot="{{ icarus_r4_dirt_pot }}"> 
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_data"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        additional_weight      = "(AVnu == 0)"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+        <!--variable>nu_E_calo</variable-->
+        <variable>0.0</variable>
+        <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+
+ <!-- MP SBND -->
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/SBNDAr25_sbruce.root" scale = "1" pot="{{ sbnd_ar25_pot }}">  
+    <branch
+        associated_subchannel = "nu_SBND_numuMP_data"
+        incl_systematics      = "false"
+        additional_weight      = "(AVnu == 1)"
+        model_rule            = "0"
+    >
+    <!--variable2D>nu_E_calo;del_p</variable2D-->
+    <variable>nu_E_calo</variable>
+	    <variable>0.0</variable>
+	    <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/SBNDMCCV_*_sbruce.root" scale = "1" pot="{{ sbnd_mc_pot }}">
+    <branch
+        associated_subchannel = "nu_SBND_numuMP_data"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        additional_weight      = "(AVnu == 0)"
+        >
+
+        <!--variable2D>nu_E_calo;del_p</variable2D-->
+        <variable>nu_E_calo</variable>
+        <variable>0.0</variable>
+        <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/SBND_SpringBNBOffData_sbruce.root" scale = "1" pot="{{ sbnd_offbeam_pot }}">
+    <branch
+        associated_subchannel = "nu_SBND_numuMP_data"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <!--variable2D>nu_E_calo;del_p</variable2D-->
+        <variable>nu_E_calo</variable>
+        <variable>0.0</variable>
+        <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/SBND_SpringLowEMC_sbruce.root" scale = "1" pot="{{ sbnd_dirt_pot }}">
+    <branch
+        associated_subchannel = "nu_SBND_numuMP_data"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        additional_weight      = "(AVnu == 0)"
+        >
+        <!--variable2D>nu_E_calo;del_p</variable2D-->
+        <variable>nu_E_calo</variable>
+        <variable>0.0</variable>
+        <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+
+ <!-- MP ICARUS -->
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/ICARUSRun4_AR25_sbruce.root" scale = "1" pot="{{ icarus_r4_ar25_pot }}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_data"
+        incl_systematics      = "false"
+        additional_weight      = "(AVnu == 1)"
+        model_rule            = "0"
+    >
+    <!--variable2D>nu_E_calo;del_p</variable2D-->
+    <variable>nu_E_calo</variable>
+	    <variable>0.0</variable>
+	    <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/ICARUSRun4_SpringMCOverlay_rewgt_*_sbruce.root" scale = "1" pot="{{ icarus_r4_mc_pot }}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_data"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        additional_weight      = "(AVnu == 0)"
+        >
+
+        <!--variable2D>nu_E_calo;del_p</variable2D-->
+        <variable>nu_E_calo</variable>
+        <variable>0.0</variable>
+        <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/ICARUS_SpringRun4BNBOff_unblind_sbruce.root" scale = "1" pot="{{ icarus_r4_offbeam_pot }}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_data"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <!--variable2D>nu_E_calo;del_p</variable2D-->
+        <variable>nu_E_calo</variable>
+        <variable>0.0</variable>
+        <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/ICARUSRun4_Spring_Overlay_Dirt_sbruce.root" scale = "1" pot="{{ icarus_r4_dirt_pot }}"> 
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_data"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        additional_weight      = "(AVnu == 0)"
+        >
+        <!--variable2D>nu_E_calo;del_p</variable2D-->
+        <variable>nu_E_calo</variable>
+        <variable>0.0</variable>
+        <variable>0.0</variable>
+    </branch>
+</MCFile>
