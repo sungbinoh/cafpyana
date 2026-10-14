@@ -32,6 +32,9 @@ regen_systematics = [
     # "GENIEReWeight_SBN_v1_multisim_NCRESVariationResponse",
     'GENIEReWeight_SBN_v1_multisim_RDecBR1gamma',
     'GENIEReWeight_SBN_v1_multisim_RDecBR1eta',
+    'GENIEReWeight_SBN_v1_multisigma_RDecBR1gamma',
+    'GENIEReWeight_SBN_v1_multisigma_RDecBR1eta',
+
     "GENIEReWeight_SBN_v1_multisigma_Theta_Delta2Npi",
     "GENIEReWeight_SBN_v1_multisigma_ThetaDelta2NRad",
 
@@ -152,4 +155,5 @@ def geniesyst(f, nuind, multisim_nuniv=100, slim=False, systematics=None):
         genie_cols = [c for c in geniewgtdf.columns if c[0] == "GENIE"]
         geniewgtdf = geniewgtdf[genie_cols]
         
+
     return geniewgtdf

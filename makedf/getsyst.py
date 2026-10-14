@@ -29,7 +29,7 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
     isyst.index.name = "iwgt"
     nuniv = wgt_nuniv.sum()
 
-    wgts = ak.to_dataframe(f["recTree"]['rec.mc.nu.wgt.univ'].arrays(library="ak"), how=None)[0]
+    wgts = ak.to_dataframe(f["recTree"]['rec.mc.nu.wgt.univ'].arrays(library="ak"), how=None)[0].astype(np.float32)
     wgts["inu"] = wgts.index.get_level_values(1) // nuniv
     wgts["iwgt"] = wgts.index.get_level_values(1) % nuniv
     wgts = wgts.reset_index().set_index(["entry", "inu", "iwgt"]).drop(columns="subentry")
@@ -108,11 +108,15 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
         for syst in this_systs:
             systs.append(syst)
 
+    # Downcast weights to float32: they are ~O(1) reweighting factors and the
+    # analysis loaders read them as float32 anyway. pivot_table / reindex above
+    # silently upcast the float32 raw weights (line 32) back to float64, so cast
+    # once here -- this also halves the peak RAM of the ~1 GB/split wgt table.
     if slim:
         s_idx = systs_slim.index.get_indexer(nuidx)
         systs_slim.loc[s_idx < 0, :] = 1.
         systs_slim.index = nuind.index
-        return systs_slim
+        return systs_slim.astype(np.float32)
 
     else:
         systs = pd.DataFrame(systs).T
@@ -120,5 +124,5 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
         systs_match = systs.iloc[s_idx]
         systs_match.loc[s_idx < 0, :] = 1.
         systs_match.index = nuind.index
-        return systs_match
+        return systs_match.astype(np.float32)
 
