@@ -30,6 +30,11 @@
 {%# Binning for the xsec / G4 reweights, e.g. "var2" to bin in true energy. Empty = fit variable. #%}
 {% set syst_xsec_binning              = syst_xsec_binning              | default("") %}
 {% set _xsec_binning = (' binning="' ~ syst_xsec_binning ~ '"') if syst_xsec_binning else "" %}
+{%# Smoothing (PROfit smooth=, Gaussian kernel width in reco bins) applied to every
+    DetVar-derived spline: BIND and all detector variations. "0" turns it off;
+    empty omits the attribute entirely (needed for PROfit builds without smooth=). #%}
+{% set syst_detvar_smooth             = syst_detvar_smooth             | default("1") %}
+{% set _detvar_smooth = (' smooth="' ~ syst_detvar_smooth ~ '"') if syst_detvar_smooth != "" else "" %}
 
 {%# ===================== All detectors / runs ===================== #%}
 {% set common_systematics %}
@@ -92,7 +97,7 @@
     <systematic type="spline" tag="RES" apply_to_subchannel="{{ syst_xsec_subchannels }}"{{ _xsec_binning }} plotname="RDecBR1eta">GENIEReWeight_SBN_v1_multisigma_RDecBR1eta</systematic>
     <systematic type="spline" tag="RES" apply_to_subchannel="{{ syst_xsec_subchannels }}"{{ _xsec_binning }} plotname="RDecBR1gamma">GENIEReWeight_SBN_v1_multisigma_RDecBR1gamma</systematic>
 
-    <systematic name="BIND" smooth="1" apply_to_subchannel="{{ syst_xsec_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="Bind" tag="OtherXSec" />
+    <systematic name="BIND"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_xsec_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="Bind" tag="OtherXSec" />
     <systematic type="spline" tag="OtherXSec" apply_to_subchannel="{{ syst_xsec_subchannels }}"{{ _xsec_binning }} plotname="AhtBY">GENIEReWeight_SBN_v1_multisigma_AhtBY</systematic>
     <systematic type="spline" tag="OtherXSec" apply_to_subchannel="{{ syst_xsec_subchannels }}"{{ _xsec_binning }} plotname="BhtBY">GENIEReWeight_SBN_v1_multisigma_BhtBY</systematic>
     <systematic type="spline" tag="OtherXSec" apply_to_subchannel="{{ syst_xsec_subchannels }}"{{ _xsec_binning }} plotname="CV1uBY">GENIEReWeight_SBN_v1_multisigma_CV1uBY</systematic>
@@ -155,48 +160,48 @@
 
 {%# ===================== SBND ===================== #%}
 {% set sbnd_systematics %}
-    <systematic smooth="1" type="norm" tag="SBND Det" plotname="Corsika Unc">{{ syst_sbnd_cosmic_subchannel }}:0.1</systematic>
-    <systematic smooth="1" type="norm" tag="SBND Det" plotname="SBND Dirt">{{ syst_sbnd_dirt_subchannel }}:1.0</systematic>
-    <systematic smooth="1" name="Gain_sbnd" apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDGain" tag="SBND Det" />
-    <systematic smooth="1" name="Smear_sbnd" apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" inflate="2" plotname="SBNDSmear" tag="SBND Det" />
-    <systematic smooth="1" name="Trigger_sbnd" apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBND Trig Eff" tag="SBND Det" />
-    <systematic smooth="1" name="Alpha_sbnd" apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDAlpha" tag="SBND Det" />
-    <systematic smooth="1" name="Beta_sbnd" apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDBeta" tag="SBND Det" />
-    <systematic smooth="1" name="R_sbnd" apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDR" tag="SBND Det" />
-    <systematic smooth="1" name="WM-Xtheta_xw_sbnd" apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="SBND XThetaXW" tag="SBND Det" />
-    <systematic smooth="1" name="WM-YZ_sbnd" apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="SBND YZ" tag="SBND Det" />
-    <systematic smooth="1" name="Dent_sbnd" apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="DENT" tag="SBND Det" />
+    <systematic type="norm" tag="SBND Det" plotname="Corsika Unc">{{ syst_sbnd_cosmic_subchannel }}:0.1</systematic>
+    <systematic type="norm" tag="SBND Det" plotname="SBND Dirt">{{ syst_sbnd_dirt_subchannel }}:1.0</systematic>
+    <systematic name="Gain_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDGain" tag="SBND Det" />
+    <systematic name="Smear_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" inflate="2" plotname="SBNDSmear" tag="SBND Det" />
+    <systematic name="Trigger_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBND Trig Eff" tag="SBND Det" />
+    <systematic name="Alpha_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDAlpha" tag="SBND Det" />
+    <systematic name="Beta_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDBeta" tag="SBND Det" />
+    <systematic name="R_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDR" tag="SBND Det" />
+    <systematic name="WM-Xtheta_xw_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="SBND XThetaXW" tag="SBND Det" />
+    <systematic name="WM-YZ_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="SBND YZ" tag="SBND Det" />
+    <systematic name="Dent_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="DENT" tag="SBND Det" />
     <systematic type="spline" tag="POT" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="POT SBND">multisigma_SBND_POT</systematic>
 {%- endset %}
 
 {%# ===================== ICARUS Run 2 ===================== #%}
 {% set icarus_r2_systematics %}
     <systematic type="norm" tag="ICARUS Run 2 Det" plotname="ICARUSRun2 Dirt">{{ syst_icarus_r2_dirt_subchannel }}:1.0</systematic>
-    <systematic smooth="1" name="SCE_icarus2" apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 SCE" tag="ICARUS Run 2 Det" />
-    <systematic smooth="1" name="Smear_icarus2" apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun2Smear" tag="ICARUS Run 2 Det" />
-    <systematic smooth="1" name="BiasdEdx_icarus2" apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun2Bias" tag="ICARUS Run 2 Det" />
-    <systematic smooth="1" name="Gain_icarus2" apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun2Gain" tag="ICARUS Run 2 Det" />
-    <systematic smooth="1" name="Trigger_icarus2" apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun2 Trig Eff" tag="ICARUS Run 2 Det" />
-    <systematic smooth="1" name="WM-Xtheta_xw_icarus2" apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 XThetaXW" tag="ICARUS Run 2 Det" />
-    <systematic smooth="1" name="WM-YZ_icarus2" apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run2 YZ" tag="ICARUS Run 2 Det" />
-    <systematic smooth="1" name="z0_icarus2" apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 Trk Split Z=0" tag="ICARUS Run 2 Det" />
-    <systematic smooth="1" name="ECathode_icarus2" apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 Trk Split East Cathode" tag="ICARUS Run 2 Det" />
-    <systematic smooth="1" name="WCathode_icarus2" apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 Trk Split West Cathode" tag="ICARUS Run 2 Det" />
+    <systematic name="SCE_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 SCE" tag="ICARUS Run 2 Det" />
+    <systematic name="Smear_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun2Smear" tag="ICARUS Run 2 Det" />
+    <systematic name="BiasdEdx_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun2Bias" tag="ICARUS Run 2 Det" />
+    <systematic name="Gain_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun2Gain" tag="ICARUS Run 2 Det" />
+    <systematic name="Trigger_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun2 Trig Eff" tag="ICARUS Run 2 Det" />
+    <systematic name="WM-Xtheta_xw_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 XThetaXW" tag="ICARUS Run 2 Det" />
+    <systematic name="WM-YZ_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run2 YZ" tag="ICARUS Run 2 Det" />
+    <systematic name="z0_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 Trk Split Z=0" tag="ICARUS Run 2 Det" />
+    <systematic name="ECathode_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 Trk Split East Cathode" tag="ICARUS Run 2 Det" />
+    <systematic name="WCathode_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 Trk Split West Cathode" tag="ICARUS Run 2 Det" />
     <systematic type="spline" tag="POT" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="POT ICARUS Run2">multisigma_ICARUSRun2_POT</systematic>
 {%- endset %}
 
 {%# ===================== ICARUS Run 4 ===================== #%}
 {% set icarus_r4_systematics %}
     <systematic type="norm" tag="ICARUS Run 4 Det" plotname="ICARUSRun4 Dirt">{{ syst_icarus_r4_dirt_subchannel }}:1.0</systematic>
-    <systematic smooth="1" name="SCE_icarus4" apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 SCE" tag="ICARUS Run 4 Det" />
-    <systematic smooth="1" name="Smear_icarus4" apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun4Smear" tag="ICARUS Run 4 Det" />
-    <systematic smooth="1" name="BiasdEdx_icarus4" apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun4Bias" tag="ICARUS Run 4 Det" />
-    <systematic smooth="1" name="Gain_icarus4" apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun4Gain" tag="ICARUS Run 4 Det" />
-    <systematic smooth="1" name="Trigger_icarus4" apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun4 Trig Eff" tag="ICARUS Run 4 Det" />
-    <systematic smooth="1" name="WM-Xtheta_xw_icarus4" apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 XThetaXW" tag="ICARUS Run 4 Det" />
-    <systematic smooth="1" name="WM-YZ_icarus4" apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run4 YZ" tag="ICARUS Run 4 Det" />
-    <systematic smooth="1" name="z0_icarus4" apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 Trk Split Z=0" tag="ICARUS Run 4 Det" />
-    <systematic smooth="1" name="ECathode_icarus4" apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 Trk Split East Cathode" tag="ICARUS Run 4 Det" />
-    <systematic smooth="1" name="WCathode_icarus4" apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 Trk Split West Cathode" tag="ICARUS Run 4 Det" />
+    <systematic name="SCE_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 SCE" tag="ICARUS Run 4 Det" />
+    <systematic name="Smear_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun4Smear" tag="ICARUS Run 4 Det" />
+    <systematic name="BiasdEdx_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun4Bias" tag="ICARUS Run 4 Det" />
+    <systematic name="Gain_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun4Gain" tag="ICARUS Run 4 Det" />
+    <systematic name="Trigger_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun4 Trig Eff" tag="ICARUS Run 4 Det" />
+    <systematic name="WM-Xtheta_xw_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 XThetaXW" tag="ICARUS Run 4 Det" />
+    <systematic name="WM-YZ_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run4 YZ" tag="ICARUS Run 4 Det" />
+    <systematic name="z0_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 Trk Split Z=0" tag="ICARUS Run 4 Det" />
+    <systematic name="ECathode_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 Trk Split East Cathode" tag="ICARUS Run 4 Det" />
+    <systematic name="WCathode_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 Trk Split West Cathode" tag="ICARUS Run 4 Det" />
     <systematic type="spline" tag="POT" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="POT ICARUS Run4">multisigma_ICARUSRun4_POT</systematic>
 {%- endset %}

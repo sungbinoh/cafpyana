@@ -20,22 +20,22 @@ python3 render_config.py --hdf-dir $HDF \
        GumpleR4Only_mc.xml.j2 \
        GumpleAr25_data.xml.j2 \
        GumpleNoCVWgtTemplate.xml.j2 \
-       DataMC/sbnd_bash_rwt24_GUMP.xml.j2 \
+       DataMC/sbnd_bash_rwt_GUMP.xml.j2 \
        DataMC/sbnd_data_bash_GUMP.xml.j2 \
-       DataMC/icarus2_bash_rwt24_GUMP.xml.j2 \
-       DataMC/icarus4_bash_rwt24_GUMP.xml.j2 \
+       DataMC/icarus2_bash_rwt_GUMP.xml.j2 \
+       DataMC/icarus4_bash_rwt_GUMP.xml.j2 \
        DataMC/icarus_data2_bash_GUMP.xml.j2 \
        DataMC/icarus4_data_bash_GUMP.xml.j2 \
-       DataMC/sbnd_bash_rwt24_MAPLEMP.xml.j2 \
+       DataMC/sbnd_bash_rwt_MAPLEMP.xml.j2 \
        DataMC/sbnd_data_bash_MAPLEMP.xml.j2 \
-       DataMC/icarus2_bash_rwt24_MAPLEMP.xml.j2 \
-       DataMC/icarus4_bash_rwt24_MAPLEMP.xml.j2 \
+       DataMC/icarus2_bash_rwt_MAPLEMP.xml.j2 \
+       DataMC/icarus4_bash_rwt_MAPLEMP.xml.j2 \
        DataMC/icarus_data2_bash_MAPLEMP.xml.j2 \
        DataMC/icarus4_data_bash_MAPLEMP.xml.j2 \
-       DataMC/sbnd_bash_rwt24_MAPLENP.xml.j2 \
+       DataMC/sbnd_bash_rwt_MAPLENP.xml.j2 \
        DataMC/sbnd_data_bash_MAPLENP.xml.j2 \
-       DataMC/icarus2_bash_rwt24_MAPLENP.xml.j2 \
-       DataMC/icarus4_bash_rwt24_MAPLENP.xml.j2 \
+       DataMC/icarus2_bash_rwt_MAPLENP.xml.j2 \
+       DataMC/icarus4_bash_rwt_MAPLENP.xml.j2 \
        DataMC/icarus_data2_bash_MAPLENP.xml.j2 \
        DataMC/icarus4_data_bash_MAPLENP.xml.j2 \
     -d $EXP \
@@ -80,21 +80,21 @@ python3 render_config.py --hdf-dir $HDF \
        $OUT/MAPLEMP/GumpleANLR4OnlyOct13.xml \
        $OUT/MAPLEMP/GumpleANLAr25Oct13.xml \
        $OUT/MAPLEMP/GumpleANLNoCVWgtOct13.xml \
-       $OUT/GUMP/sbnd_bash_rwt24_GUMP.xml \
+       $OUT/GUMP/sbnd_bash_rwt_GUMP.xml \
        $OUT/GUMP/sbnd_data_bash_GUMP.xml \
-       $OUT/GUMP/icarus2_bash_rwt24_GUMP.xml \
-       $OUT/GUMP/icarus4_bash_rwt24_GUMP.xml \
+       $OUT/GUMP/icarus2_bash_rwt_GUMP.xml \
+       $OUT/GUMP/icarus4_bash_rwt_GUMP.xml \
        $OUT/GUMP/icarus_data2_bash_GUMP.xml \
        $OUT/GUMP/icarus4_data_bash_GUMP.xml \
-       $OUT/MAPLEMP/sbnd_bash_rwt24_MAPLEMP.xml \
+       $OUT/MAPLEMP/sbnd_bash_rwt_MAPLEMP.xml \
        $OUT/MAPLEMP/sbnd_data_bash_MAPLEMP.xml \
-       $OUT/MAPLEMP/icarus2_bash_rwt24_MAPLEMP.xml \
-       $OUT/MAPLEMP/icarus4_bash_rwt24_MAPLEMP.xml \
+       $OUT/MAPLEMP/icarus2_bash_rwt_MAPLEMP.xml \
+       $OUT/MAPLEMP/icarus4_bash_rwt_MAPLEMP.xml \
        $OUT/MAPLEMP/icarus_data2_bash_MAPLEMP.xml \
        $OUT/MAPLEMP/icarus4_data_bash_MAPLEMP.xml \
-       $OUT/MAPLENP/sbnd_bash_rwt24_MAPLENP.xml \
+       $OUT/MAPLENP/sbnd_bash_rwt_MAPLENP.xml \
        $OUT/MAPLENP/sbnd_data_bash_MAPLENP.xml \
-       $OUT/MAPLENP/icarus2_bash_rwt24_MAPLENP.xml \
-       $OUT/MAPLENP/icarus4_bash_rwt24_MAPLENP.xml \
+       $OUT/MAPLENP/icarus2_bash_rwt_MAPLENP.xml \
+       $OUT/MAPLENP/icarus4_bash_rwt_MAPLENP.xml \
        $OUT/MAPLENP/icarus_data2_bash_MAPLENP.xml \
        $OUT/MAPLENP/icarus4_data_bash_MAPLENP.xml

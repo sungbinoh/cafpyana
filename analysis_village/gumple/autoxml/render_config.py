@@ -6,6 +6,9 @@ import argparse
 from jinja2 import Environment, FileSystemLoader
 
 
+# Directory holding this script and the shared systematics.xml.j2
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
 workspace_root = os.getcwd()
 repo_root = os.path.abspath(os.path.join(workspace_root, "../../.."))
 gump_dir  = os.path.abspath(os.path.join(workspace_root, "../../gump"))
