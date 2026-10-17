@@ -1,0 +1,4 @@
+,NC Delta->Ngamma,NC 1pi0 coherent,NC 1pi0 non-coherent,CC numu 1pi0,CC nue/nuebar,BNB other,Dirt (outside TPC),Cosmic,total
+dataframe,805.0,64.0,2640.0,4524.0,370.0,45879.0,25924.0,191766.0,271972.0
+preselection,55.0,15.0,279.0,151.0,38.0,367.0,355.0,6656.0,7916.0
+selection,14.0,7.0,53.0,18.0,1.0,34.0,26.0,1.0,154.0
