@@ -1,0 +1,6 @@
+# Standalone NCDelta selection/plotting (Python >= 3.10). Versions match
+# cafpyana's envs/pip_requirements.txt where it pins them.
+numpy==1.26.4
+pandas==2.2.2
+tables==3.9.2
+matplotlib==3.8.4

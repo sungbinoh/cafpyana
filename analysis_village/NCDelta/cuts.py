@@ -229,11 +229,59 @@ CUTBASED_1G0P = {
 CUTBASED = {"1g1p": CUTBASED_1G1P, "1g0p": CUTBASED_1G0P}
 
 
+# Fiducial volume. A verbatim copy of the FV in analysis_village/mcs_pid/cuts.py
+# (SBND high-yz exclusion, ICARUS Run 2 East-East exclusion and WW cable
+# region), vendored so this file has no dependencies outside numpy/pandas and
+# can be run outside cafpyana. Keep the two in sync if either changes.
+
+SBND_FV = {
+    "lowYZ":  {"x": (-200., 200.), "y": (-200., 200.), "z": (0., 250.)},
+    "highYZ": {"x": (-200., 200.), "y": (-200., 100.), "z": (250., 500.)},
+}
+ICARUS_RUN2_FV = {
+    "C0": {"x": (-210.22, -61.94), "y": (-181.86, 134.96), "z": (-894.950652270838, 894.950652270838)},
+    "C1": {"x": (61.94, 358.49),   "y": (-181.86, 134.96), "z": (-894.950652270838, 894.950652270838)},
+}
+ICARUS_RUN4_FV = {
+    "C0": {"x": (-358.49, -61.94), "y": (-181.86, 134.96), "z": (-894.950652270838, 894.950652270838)},
+    "C1": {"x": (61.94, 358.49),   "y": (-181.86, 134.96), "z": (-894.950652270838, 894.950652270838)},
+}
+ICARUS_WW_CABLE = {"x": (210.22, 358.49), "y_min": 70., "z_min": 0.}
+
+
+def fv_cut(x, y, z, detector, run, inx=10., iny=10., inzfront=10., inzback=50.):
+    """True inside the fiducial volume; insets in cm from the FV boundaries."""
+    x, y, z = (np.asarray(v, dtype=float) for v in (x, y, z))
+    det = np.broadcast_to(np.asarray(detector), x.shape)
+    run = np.broadcast_to(np.asarray(run), x.shape)
+
+    lo, hi = SBND_FV["lowYZ"], SBND_FV["highYZ"]
+    sbnd = (((x < lo["x"][1] - inx) & (x > lo["x"][0] + inx) &
+             (y < lo["y"][1] - iny) & (y > lo["y"][0] + iny) &
+             (z < lo["z"][1]) & (z > lo["z"][0] + inzfront)) |
+            ((x < hi["x"][1] - inx) & (x > hi["x"][0] + inx) &
+             (y < hi["y"][1] - iny) & (y > hi["y"][0] + iny) &
+             (z < hi["z"][1] - inzback) & (z > hi["z"][0])))
+
+    cable = ((x > ICARUS_WW_CABLE["x"][0]) & (x < ICARUS_WW_CABLE["x"][1]) &
+             (y > ICARUS_WW_CABLE["y_min"]) & (z > ICARUS_WW_CABLE["z_min"]))
+
+    def icarus(fv):
+        c0, c1 = fv["C0"], fv["C1"]
+        in_x = (((x < c0["x"][1] - inx) & (x > c0["x"][0] + inx)) |
+                ((x < c1["x"][1] - inx) & (x > c1["x"][0] + inx)))
+        return (in_x & (y < c0["y"][1] - iny) & (y > c0["y"][0] + iny) &
+                (z < c0["z"][1] - inzback) & (z > c0["z"][0] + inzfront) & ~cable)
+
+    is_run2 = (det == "ICARUS Run2") | ((det == "ICARUS") & (run == 2))
+    is_run4 = (det == "ICARUS Run4") | ((det == "ICARUS") & (run == 4))
+    return np.select([is_run2, is_run4, det == "SBND"],
+                     [icarus(ICARUS_RUN2_FV), icarus(ICARUS_RUN4_FV), sbnd], default=False)
+
+
 def _fv(df, prefix):
-    # The SBND/ICARUS FV of record on this branch, including SBND's high-yz
-    # exclusion. Imported lazily so cuts.py has no hard dependency on mcs_pid.
-    from analysis_village.mcs_pid.cuts import prefix_fv_cut
-    return prefix_fv_cut(df, prefix)
+    return pd.Series(fv_cut(df[prefix + "_x"], df[prefix + "_y"], df[prefix + "_z"],
+                            df.detector, df.Run), index=df.index)
 
 
 def cutbased_cuts(df, topology, cfg=None):
