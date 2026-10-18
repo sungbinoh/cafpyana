@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """Efficiency, purity and figures of merit of the NCDelta selection.
 
-For each channel (1g1p, 1g0p) and their sum:
+The two channels are reported separately and are NOT summed. They are tuned
+to different operating points (see the "Tuning" section of cuts.py): 1g1p is
+the pure channel and 1g0p the statistics channel, so a combined row is a
+signal-weighted average of two deliberately different selections. It is
+always worse than 1g1p and better than 1g0p, and is not a figure of merit
+anything should be optimized against. Sum the raw mc_signal / mc_bkg columns
+yourself if you need the total selected yield.
+
+For each channel (1g1p, 1g0p):
   signal, background   selected slices, scaled to --pot
   mc_signal, mc_bkg    raw (unweighted) MC slice counts, for MC stat errors
   efficiency           selected signal slices / true signal neutrinos (mcnu)
@@ -57,7 +65,9 @@ def split_mask(index, split):
 
 
 def evaluate(slc, nu, scale=1.0, overrides=None):
-    """DataFrame of selection metrics, one row per channel plus their sum.
+    """DataFrame of selection metrics, one row per channel.
+
+    The channels are kept separate on purpose; see the module docstring.
 
     `slc` and `nu` are the slice and true-neutrino frames from dfio.load;
     `scale` multiplies every slice and neutrino (e.g. target POT / MC POT).
@@ -66,14 +76,12 @@ def evaluate(slc, nu, scale=1.0, overrides=None):
     is_sig = (cat == 0).values
     n_true = scale * cuts.is_signal(nu).sum()
 
-    rows, total = {}, None
+    rows = {}
     for topo in cuts.TOPOLOGIES:
         sel = cuts.selection(slc, topo, cutbased=channel_config(overrides, topo) or True).values
         mc_s = int((sel & is_sig).sum())
         mc_b = int((sel & ~is_sig).sum())
         rows[topo] = {"mc_signal": mc_s, "mc_bkg": mc_b}
-        total = rows[topo] if total is None else {k: total[k] + rows[topo][k] for k in total}
-    rows["combined"] = total
 
     out = {}
     for name, r in rows.items():

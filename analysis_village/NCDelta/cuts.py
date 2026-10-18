@@ -1,4 +1,4 @@
-"""Pandora NC Delta -> N gamma selection, adapted from MicroBooNE.
+"""Pandora NC Delta -> N gamma selection for SBND, adapted from MicroBooNE.
 
 References
 ----------
@@ -9,15 +9,56 @@ References
       1g1p_xmls/hive2.5/1g1p_CinnabarWorldOrder_v33.3_15_04_30_Combined_Run123_v1_updatedBDTfiles.xml
       1g0p_xmls/hive2.5/1g0p_CinnabarWorldOrder_v33.3_4_29_20_CombinedRuns13_updatedBDTfiles.xml
 
-Stages in [2]:
-  1. Topological: one shower and one (1g1p) or zero (1g0p) tracks among the
-     slice's primary PFPs.
-  2. Pre-selection (PRESEL_*). Stages 1+2 are applied at dataframe creation.
-  3. Background rejection. Here: rectangular cuts on CAF features
-     (CUTBASED_*), one group per background class.
+Stages:
+  1. Topology: one shower and one (1g1p) or zero (1g0p) primary tracks.
+  2. Pre-selection (PRESEL_*): the fiducial volume only. Stages 1+2 are what
+     the dataframe maker applies, so keeping stage 2 minimal means the
+     dataframes do not bake in a tuning choice.
+  3. Background rejection: rectangular cuts on CAF features (CUTBASED_*).
   4. Signal window in reconstructed shower energy (ENERGY_WINDOW).
 
 Energies are MeV, lengths cm.
+
+Tuning
+------
+CUTBASED_* was tuned on 500 nopresel dataframes (1.8e20 POT). Every change had
+to hold up on the even and the odd file split separately and on a true
+holdout. Signal is is_signal(): true vertex in the *active* volume, so
+efficiencies here and from evaluate.py are AV-based; [1] uses the FV, which is
+a factor ~1.33 larger (15519 true signal neutrinos instead of 21450).
+
+Two working points, quoted separately rather than summed (see SELECTIONS).
+FV-based efficiency / purity, against [1] Table I:
+
+                this file              [1] Pandora
+  1g1p   2.24% / 11.3% (balanced)   4.24% / 14.8%
+         0.71% / 20.9% (high_purity)
+  1g0p   3.20% /  8.1% (balanced)   5.52% /  4.0%
+         1.97% / 10.5% (high_purity)
+
+Kept despite the figures of merit preferring otherwise, because an MC-only
+figure of merit cannot see what they cost: the fiducial volume (keeps badly
+modelled regions out) and trk_proton_like (dropping it inflates the 1g1p
+CC numu 1pi0 background 8x).
+
+Where the ceiling is
+--------------------
+Topology plus the FV caps efficiency at 10.7% (1g1p) and 6.9% (1g0p) at ~0.5%
+purity, so everything happens in stage 3 -- and that is where the limit bites.
+It is the input variables, not the cut shape:
+
+  - the best single variable rejects only ~20% of background at 90% signal
+    efficiency;
+  - a 17-variable naive-Bayes likelihood ratio, trained on one split and
+    evaluated on the other, lands on the same efficiency-purity frontier;
+  - against NC pi0 (80% of the 1g1p background, 39% of the 1g0p one) the best
+    variable rejects 18% -- correctly, since a pi0 that loses one photon
+    really is a single photon in the detector.
+
+Closing that needs a second-shower / unassociated-hit variable, which [2] used
+and these CAFs lack (n_nonprim_shw is identically 0 for 1g0p and counts only
+the leading track's daughters for 1g1p). That is a make_ncdelta.py change plus
+a dataframe remake.
 """
 
 from collections import OrderedDict
@@ -33,93 +74,80 @@ import pandas as pd
 # as "unclassified", not as tracks or showers.
 TRK_SCORE_CUT = 0.5
 
-# MicroBooNE cut on distance to the space-charge boundary (SCB); here it is
-# the distance to the active-volume boundary (dist_to_active_boundary()).
+# Pre-selection. Applied at dataframe creation, so it is deliberately only
+# the fiducial volume: anything tighter bakes a tuning choice into the
+# dataframes and cannot be loosened afterwards. Every other cut lives in
+# CUTBASED_* below, where it can be re-tuned without remaking the dataframes.
 PRESEL_1G1P = {
-    "shw_energy_min":      40.0,  # #GE# > 40 MeV (collection-plane energy)
-    "vtx_dist_min":         2.0,  # reco_vertex_dist_to_SCB > 2
-    "trk_dist_min":         2.0,  # min(track start, end dist to SCB) > 2
-    "trk_dedx_min":         2.0,  # truncated-mean dE/dx > 2 MeV/cm
-    "abs_cos_trk_shw_max":  0.99, # |cos(track, implied shower dir)| < 0.99
-    "shw_start_dist_min":   7.0,  # reco_shower_start_dist_to_SCB > 7
-    "trk_ke_max":         500.0,  # proton KE from range < 0.5 GeV
-    "trk_calo_E_max":     400.0,  # track calorimetric energy < 0.4 GeV
+    "vtx_fv": True,   # FV on the slice vertex (the track fixes it)
 }
 
 PRESEL_1G0P = {
-    "shw_energy_max_min": 30.0,   # reco_shower_energy_max > 30 MeV
-    "shw_start_dist_min":  2.0,   # reco_shower_start_dist_to_SCB > 2
+    "shw_fv": True,   # FV on the shower start (no track defines the vertex)
 }
 
 ENERGY_WINDOW = {
     "1g1p": (0.0, 600.0),
-    "1g0p": (100.0, 700.0),
+    "1g0p": (50.0, 800.0),   # tuned, was (100., 700.)
 }
 
 TOPOLOGIES = ("1g1p", "1g0p")
 
 # ---------------------------------------------------------------------------
-# Geometry
+# Geometry (SBND only)
 # ---------------------------------------------------------------------------
 
-# Outer active-volume boxes, as in analysis_village/mcs_pid/cuts.py without
-# the FV insets. ICARUS has one box per cryostat.
-ACTIVE_VOLUMES = {
-    "SBND": [
-        {"x": (-200.0, 200.0), "y": (-200.0, 200.0), "z": (0.0, 500.0)},
-    ],
-    "ICARUS": [
-        {"x": (-358.49, -61.94), "y": (-181.86, 134.96), "z": (-894.950652270838, 894.950652270838)},
-        {"x": (61.94, 358.49),   "y": (-181.86, 134.96), "z": (-894.950652270838, 894.950652270838)},
-    ],
+# Active volume: the TPC box, no insets.
+ACTIVE_VOLUME = {"x": (-200.0, 200.0), "y": (-200.0, 200.0), "z": (0.0, 500.0)}
+
+# Fiducial volume: the SBND part of the FV in analysis_village/mcs_pid/cuts.py,
+# i.e. the active volume with insets and the high-yz region excluded.
+SBND_FV = {
+    "lowYZ":  {"x": (-200., 200.), "y": (-200., 200.), "z": (0., 250.)},
+    "highYZ": {"x": (-200., 200.), "y": (-200., 100.), "z": (250., 500.)},
 }
 
 
-def _detector_key(detector):
-    det = str(detector)
-    if det.startswith("ICARUS"):
-        return "ICARUS"
-    if det == "SBND":
-        return "SBND"
-    raise ValueError("Unknown detector %r; expected 'SBND' or 'ICARUS[ RunN]'." % det)
+def _check_sbnd(detector):
+    """This analysis is SBND-only; fail loudly on anything else."""
+    det = np.unique(np.asarray(detector))
+    if not all(str(d) == "SBND" for d in det):
+        raise ValueError("NCDelta is SBND-only; got detector = %s" % det)
 
 
-def _dist_to_boxes(x, y, z, boxes):
-    """Signed distance to the nearest face of the containing box.
+def dist_to_active_boundary(x, y, z, detector="SBND"):
+    """Signed distance [cm] to the active-volume boundary, positive inside.
 
-    Positive inside (exact). Negative outside every box, with magnitude equal
-    to the largest face violation (a lower bound). NaN coordinates give NaN.
+    NaN coordinates give NaN.
     """
-    best = np.full(len(x), -np.inf)
-    for b in boxes:
-        d = np.minimum.reduce([
-            x - b["x"][0], b["x"][1] - x,
-            y - b["y"][0], b["y"][1] - y,
-            z - b["z"][0], b["z"][1] - z,
-        ])
-        best = np.maximum(best, d)
-    best[~(np.isfinite(x) & np.isfinite(y) & np.isfinite(z))] = np.nan
-    return best
+    _check_sbnd(detector)
+    x, y, z = (np.asarray(v, dtype=float) for v in (x, y, z))
+    b = ACTIVE_VOLUME
+    d = np.minimum.reduce([
+        x - b["x"][0], b["x"][1] - x,
+        y - b["y"][0], b["y"][1] - y,
+        z - b["z"][0], b["z"][1] - z,
+    ])
+    d[~(np.isfinite(x) & np.isfinite(y) & np.isfinite(z))] = np.nan
+    return d
 
 
-def dist_to_active_boundary(x, y, z, detector):
-    """Signed distance [cm] to the active-volume boundary.
+def fv_cut(x, y, z, detector="SBND", inx=10., iny=10., inzfront=10., inzback=50.):
+    """True inside the fiducial volume; insets in cm from the FV boundaries."""
+    _check_sbnd(detector)
+    x, y, z = (np.asarray(v, dtype=float) for v in (x, y, z))
+    lo, hi = SBND_FV["lowYZ"], SBND_FV["highYZ"]
+    return (((x < lo["x"][1] - inx) & (x > lo["x"][0] + inx) &
+             (y < lo["y"][1] - iny) & (y > lo["y"][0] + iny) &
+             (z < lo["z"][1]) & (z > lo["z"][0] + inzfront)) |
+            ((x < hi["x"][1] - inx) & (x > hi["x"][0] + inx) &
+             (y < hi["y"][1] - iny) & (y > hi["y"][0] + iny) &
+             (z < hi["z"][1] - inzback) & (z > hi["z"][0])))
 
-    `detector` is a scalar or array-like aligned with the coordinates.
-    """
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    z = np.asarray(z, dtype=float)
 
-    if np.ndim(detector) == 0:
-        return _dist_to_boxes(x, y, z, ACTIVE_VOLUMES[_detector_key(detector)])
-
-    det = np.asarray(detector)
-    out = np.full(len(x), np.nan)
-    for d in pd.unique(det):
-        m = det == d
-        out[m] = _dist_to_boxes(x[m], y[m], z[m], ACTIVE_VOLUMES[_detector_key(d)])
-    return out
+def _fv(df, prefix):
+    return pd.Series(fv_cut(df[prefix + "_x"], df[prefix + "_y"], df[prefix + "_z"],
+                            df.detector), index=df.index)
 
 
 # ---------------------------------------------------------------------------
@@ -146,26 +174,18 @@ TOPOLOGY_CUTS = {"1g1p": topology_1g1p, "1g0p": topology_1g0p}
 
 def presel_1g1p_cuts(df, cfg=PRESEL_1G1P):
     """Ordered dict of the individual 1g1p pre-cuts (topology excluded)."""
-    c = cfg
-    return OrderedDict([
-        ("shw_energy",    df.shw_energy > c["shw_energy_min"]),
-        ("vtx_contained", df.vtx_dist_to_wall > c["vtx_dist_min"]),
-        ("trk_contained", np.minimum(df.trk_start_dist_to_wall, df.trk_end_dist_to_wall) > c["trk_dist_min"]),
-        ("trk_dedx",      df.trk_dedx_trunc > c["trk_dedx_min"]),
-        ("trk_shw_angle", df.cos_trk_shw_implied.abs() < c["abs_cos_trk_shw_max"]),
-        ("shw_contained", df.shw_start_dist_to_wall > c["shw_start_dist_min"]),
-        ("trk_ke",        df.trk_ke_p < c["trk_ke_max"]),
-        ("trk_calo_E",    df.trk_calo_E < c["trk_calo_E_max"]),
-    ])
+    out = OrderedDict()
+    if cfg.get("vtx_fv"):
+        out["vtx_fv"] = _fv(df, "slc_vtx")
+    return out
 
 
 def presel_1g0p_cuts(df, cfg=PRESEL_1G0P):
     """Ordered dict of the individual 1g0p pre-cuts (topology excluded)."""
-    c = cfg
-    return OrderedDict([
-        ("shw_energy",    df.shw_energy_max > c["shw_energy_max_min"]),
-        ("shw_contained", df.shw_start_dist_to_wall > c["shw_start_dist_min"]),
-    ])
+    out = OrderedDict()
+    if cfg.get("shw_fv"):
+        out["shw_fv"] = _fv(df, "shw_start")
+    return out
 
 
 PRESEL_CUTS = {"1g1p": presel_1g1p_cuts, "1g0p": presel_1g0p_cuts}
@@ -201,93 +221,98 @@ PRESELECTION = {"1g1p": preselection_1g1p, "1g0p": preselection_1g0p}
 # with nminus1_masks(). Set a value to None to disable.
 
 CUTBASED_1G1P = {
-    # Cosmics
-    "nu_score_min":            0.5,
-    "bary_score_min":          1e-6,   # as mcs_pid baryscore_cut; SBND only
-    "vtx_fv":                  True,   # mcs_pid FV on the slice vertex
-    # CC nue: a photon shower starts at ~2 MIP (~4 MeV/cm), an electron at ~1
-    "shw_dedx_min":            3.0,
-    "shw_conv_dist_min":       1.0,    # MicroBooNE 2g1p pre-cut [2, suppl.]
-    # NC pi0: veto a second (non-primary) shower in the slice
-    "n_nonprim_shw_max":       0,
-    # Proton + photon invariant mass window [MeV]. Off by default: it depends
-    # on the shower energy scale, so locate the signal peak before using it.
-    "delta_mass_range":        None,   # e.g. (1000., 1450.)
-    # CC numu: track more proton-like than muon-like, and attached to vertex
+    "nu_score_min":            0.35,
+    "bary_score_min":          1e-6,   # mcs_pid baryscore_cut
+    "shw_dedx_min":            3.5,    # photon ~2 MIP (peak 4.2), electron ~1
+    "shw_conv_dist_max":       80.0,   # X0 = 14 cm, so 80 cm is misreco
+    "shw_energy_min":          20.0,   # #GE#, collection plane
     "trk_proton_like":         True,   # chi2_proton < chi2_muon
-    "trk_start_dist_to_vtx_max": 10.0, # MicroBooNE 2g1p pre-cut [2, suppl.]
+    "energy_window":           None,   # None = ENERGY_WINDOW[topology]
+
+    # Switched off: a leave-one-out test showed each was worth <0.3 points of
+    # purity once the cuts above are applied (several removed nothing at all).
+    # Kept as None to document what is available. Signal/background slices
+    # each removed, out of 350/2734 selected:
+    "vtx_dist_min":            None,   # 2.0:    0 / 0
+    "trk_dist_min":            None,   # 2.0:    0 / 2
+    "shw_start_dist_min":      None,   # 2.0:    0 / 6
+    "trk_ke_max":              None,   # 700:    0 / 6
+    "n_nonprim_shw_max":       None,   # 1:      0 / 3
+    "shw_nhits_min":           None,   # 150:    0 / 1
+    "trk_dedx_min":            None,   # 3.0:    0 / 1
+    "trk_start_dist_to_vtx_max": None, # 10.0:   0 / 0
+    "abs_cos_trk_shw_max":     None,   # 0.99:   1 / 7
+    # On in high_purity only:
+    "trk_calo_E_max":          None,
+    "trk_pida_max":            None,
+    "shw_len_min":             None,
+    "shw_open_angle_max":      None,
+    "shw_conv_dist_min":       None,
+    # p+gamma mass window [MeV]: the peak is at ~1143, below the PDG
+    # Delta(1232), and NC pi0 peaks at 1108, so a window buys ~0.2% purity.
+    "delta_mass_range":        None,
 }
 
 CUTBASED_1G0P = {
-    "nu_score_min":      0.5,
-    "bary_score_min":    1e-6,
-    "shw_fv":            True,   # FV on the shower start (no track defines the vertex)
-    "shw_dedx_min":      3.0,
-    "n_nonprim_shw_max": 0,
+    "nu_score_min":       0.35,
+    "bary_score_min":     0.02,
+    "opt0_score_min":     50.0,  # require a non-trivial OpT0 flash match
+    "shw_energy_max_min": 100.0, # reco_shower_energy_max
+    "shw_dedx_min":        2.0,  # looser than 1g1p: shw_dedx_best is measured
+                                 # badly enough that tighter costs more signal
+                                 # than the CC nue it removes
+    "energy_window":      None,  # None = ENERGY_WINDOW[topology]
+
+    # Switched off (see the 1g1p note); removed out of 525/5941 selected:
+    "shw_start_dist_min": None,  # 2.0:  0 / 0
+    "n_nonprim_shw_max":  None,  # 0: structurally dead, n_nonprim_shw is
+                                 # identically 0 for every 1g0p slice
+    "shw_nhits_min":      None,  # 100:  5 / 131
+    "shw_conv_dist_max":  None,  # 5.0:  1 / 65
+    "shw_len_min":        None,  # on in high_purity only
+    "shw_open_angle_max": None,  # on in high_purity only
 }
 
 CUTBASED = {"1g1p": CUTBASED_1G1P, "1g0p": CUTBASED_1G0P}
 
 
-# Fiducial volume. A verbatim copy of the FV in analysis_village/mcs_pid/cuts.py
-# (SBND high-yz exclusion, ICARUS Run 2 East-East exclusion and WW cable
-# region), vendored so this file has no dependencies outside numpy/pandas and
-# can be run outside cafpyana. Keep the two in sync if either changes.
-
-SBND_FV = {
-    "lowYZ":  {"x": (-200., 200.), "y": (-200., 200.), "z": (0., 250.)},
-    "highYZ": {"x": (-200., 200.), "y": (-200., 100.), "z": (250., 500.)},
+# The defaults above are "balanced": they maximize S/sqrt(S+B), which is the
+# same as maximizing purity x efficiency, since (S/sqrt(S+B))^2 = S * purity
+# and purity x efficiency = S * purity / N_true with N_true fixed. Verified by
+# optimizing each separately and getting identical cuts in both channels.
+# "high_purity" maximizes purity, equivalently S/B, since
+# purity = (S/B) / (1 + S/B).
+#
+# Use selection_config(name, topo), dump one to JSON for evaluate.py --config,
+# or pass --selection to plot_composition.py.
+SELECTIONS = {
+    "balanced": {"1g1p": {}, "1g0p": {}},
+    "high_purity": {
+        "1g1p": {"nu_score_min": 0.50, "bary_score_min": 0.02,
+                 "shw_energy_min": None, "shw_conv_dist_min": 4.0,
+                 "shw_conv_dist_max": 50.0, "shw_len_min": 25.0,
+                 "shw_open_angle_max": 0.25, "trk_pida_max": 20.0,
+                 "trk_calo_E_max": 300.0, "energy_window": (50., 600.)},
+        "1g0p": {"nu_score_min": 0.50, "shw_energy_max_min": None,
+                 "shw_dedx_min": 2.5, "shw_open_angle_max": 0.30,
+                 "energy_window": (150., 700.)},
+    },
 }
-ICARUS_RUN2_FV = {
-    "C0": {"x": (-210.22, -61.94), "y": (-181.86, 134.96), "z": (-894.950652270838, 894.950652270838)},
-    "C1": {"x": (61.94, 358.49),   "y": (-181.86, 134.96), "z": (-894.950652270838, 894.950652270838)},
-}
-ICARUS_RUN4_FV = {
-    "C0": {"x": (-358.49, -61.94), "y": (-181.86, 134.96), "z": (-894.950652270838, 894.950652270838)},
-    "C1": {"x": (61.94, 358.49),   "y": (-181.86, 134.96), "z": (-894.950652270838, 894.950652270838)},
-}
-ICARUS_WW_CABLE = {"x": (210.22, 358.49), "y_min": 70., "z_min": 0.}
 
 
-def fv_cut(x, y, z, detector, run, inx=10., iny=10., inzfront=10., inzback=50.):
-    """True inside the fiducial volume; insets in cm from the FV boundaries."""
-    x, y, z = (np.asarray(v, dtype=float) for v in (x, y, z))
-    det = np.broadcast_to(np.asarray(detector), x.shape)
-    run = np.broadcast_to(np.asarray(run), x.shape)
-
-    lo, hi = SBND_FV["lowYZ"], SBND_FV["highYZ"]
-    sbnd = (((x < lo["x"][1] - inx) & (x > lo["x"][0] + inx) &
-             (y < lo["y"][1] - iny) & (y > lo["y"][0] + iny) &
-             (z < lo["z"][1]) & (z > lo["z"][0] + inzfront)) |
-            ((x < hi["x"][1] - inx) & (x > hi["x"][0] + inx) &
-             (y < hi["y"][1] - iny) & (y > hi["y"][0] + iny) &
-             (z < hi["z"][1] - inzback) & (z > hi["z"][0])))
-
-    cable = ((x > ICARUS_WW_CABLE["x"][0]) & (x < ICARUS_WW_CABLE["x"][1]) &
-             (y > ICARUS_WW_CABLE["y_min"]) & (z > ICARUS_WW_CABLE["z_min"]))
-
-    def icarus(fv):
-        c0, c1 = fv["C0"], fv["C1"]
-        in_x = (((x < c0["x"][1] - inx) & (x > c0["x"][0] + inx)) |
-                ((x < c1["x"][1] - inx) & (x > c1["x"][0] + inx)))
-        return (in_x & (y < c0["y"][1] - iny) & (y > c0["y"][0] + iny) &
-                (z < c0["z"][1] - inzback) & (z > c0["z"][0] + inzfront) & ~cable)
-
-    is_run2 = (det == "ICARUS Run2") | ((det == "ICARUS") & (run == 2))
-    is_run4 = (det == "ICARUS Run4") | ((det == "ICARUS") & (run == 4))
-    return np.select([is_run2, is_run4, det == "SBND"],
-                     [icarus(ICARUS_RUN2_FV), icarus(ICARUS_RUN4_FV), sbnd], default=False)
-
-
-def _fv(df, prefix):
-    return pd.Series(fv_cut(df[prefix + "_x"], df[prefix + "_y"], df[prefix + "_z"],
-                            df.detector, df.Run), index=df.index)
+def selection_config(name, topology):
+    """CUTBASED[topology] with the named working point's overrides applied."""
+    if name not in SELECTIONS:
+        raise KeyError("Unknown selection %r; have %s" % (name, sorted(SELECTIONS)))
+    cfg = dict(CUTBASED[topology])
+    cfg.update(SELECTIONS[name][topology])
+    return cfg
 
 
 def cutbased_cuts(df, topology, cfg=None):
     """Ordered dict of the cut-based stage masks for one channel.
 
-    The flash-match cut is skipped when `bary_score` is absent (ICARUS CAFs).
+    The flash-match cut is skipped when `bary_score` is absent.
     """
     c = dict(CUTBASED[topology]) if cfg is None else cfg
     on = lambda k: c.get(k) is not None and c.get(k) is not False
@@ -298,16 +323,48 @@ def cutbased_cuts(df, topology, cfg=None):
         out["nu_score"] = df.nu_score > c["nu_score_min"]
     if on("bary_score_min") and "bary_score" in df.columns:
         out["flash_match"] = df.bary_score > c["bary_score_min"]
-    if on("vtx_fv"):
-        out["vtx_fv"] = _fv(df, "slc_vtx")
-    if on("shw_fv"):
-        out["shw_fv"] = _fv(df, "shw_start")
+    if on("opt0_score_min"):
+        out["opt0_score"] = df.opt0_score > c["opt0_score_min"]
+
+    # containment (distances to the active-volume boundary)
+    if on("vtx_dist_min"):
+        out["vtx_contained"] = df.vtx_dist_to_wall > c["vtx_dist_min"]
+    if on("trk_dist_min"):
+        out["trk_contained"] = np.minimum(df.trk_start_dist_to_wall,
+                                          df.trk_end_dist_to_wall) > c["trk_dist_min"]
+    if on("shw_start_dist_min"):
+        out["shw_contained"] = df.shw_start_dist_to_wall > c["shw_start_dist_min"]
+
+    # shower / track energy thresholds
+    if on("shw_energy_min"):
+        out["shw_energy"] = df.shw_energy > c["shw_energy_min"]
+    if on("shw_energy_max_min"):
+        out["shw_energy"] = df.shw_energy_max > c["shw_energy_max_min"]
+    if on("trk_dedx_min"):
+        out["trk_dedx"] = df.trk_dedx_trunc > c["trk_dedx_min"]
+    if on("abs_cos_trk_shw_max"):
+        out["trk_shw_angle"] = df.cos_trk_shw_implied.abs() < c["abs_cos_trk_shw_max"]
+    if on("trk_ke_max"):
+        out["trk_ke"] = df.trk_ke_p < c["trk_ke_max"]
+    if on("trk_calo_E_max"):
+        out["trk_calo_E"] = df.trk_calo_E < c["trk_calo_E_max"]
 
     # CC nue
     if on("shw_dedx_min"):
         out["shw_dedx"] = df.shw_dedx_best > c["shw_dedx_min"]
     if on("shw_conv_dist_min"):
         out["shw_conv_dist"] = df.shw_conv_dist > c["shw_conv_dist_min"]
+
+    # shower quality
+    if on("shw_conv_dist_max"):
+        out["shw_conv_dist_max"] = df.shw_conv_dist < c["shw_conv_dist_max"]
+    if on("shw_len_min"):
+        out["shw_len"] = df.shw_len > c["shw_len_min"]
+    if on("shw_nhits_min"):
+        out["shw_nhits"] = (df.shw_nhits_I0 + df.shw_nhits_I1
+                            + df.shw_nhits_I2) > c["shw_nhits_min"]
+    if on("shw_open_angle_max"):
+        out["shw_open_angle"] = df.shw_open_angle < c["shw_open_angle_max"]
 
     # NC pi0
     if on("n_nonprim_shw_max"):
@@ -321,12 +378,21 @@ def cutbased_cuts(df, topology, cfg=None):
         out["trk_proton_like"] = df.trk_chi2_proton < df.trk_chi2_muon
     if on("trk_start_dist_to_vtx_max"):
         out["trk_attached"] = df.trk_start_dist_to_vtx < c["trk_start_dist_to_vtx_max"]
+    if on("trk_pida_max"):
+        out["trk_pida"] = df.trk_pida < c["trk_pida_max"]
 
     return out
 
 
-def energy_window_cut(df, topology):
-    lo, hi = ENERGY_WINDOW[topology]
+def energy_window(topology, cfg=None):
+    """(lo, hi) for a channel: the CUTBASED override if set, else the default."""
+    if cfg is not None and cfg.get("energy_window") is not None:
+        return tuple(cfg["energy_window"])
+    return ENERGY_WINDOW[topology]
+
+
+def energy_window_cut(df, topology, cfg=None):
+    lo, hi = energy_window(topology, cfg)
     return (df.shw_energy >= lo) & (df.shw_energy < hi)
 
 
@@ -334,14 +400,17 @@ def stage_cuts(df, topology, cutbased=True, energy_window=True):
     """Ordered dict of every selection stage mask for one channel.
 
     cutbased: True for the defaults, a dict to override CUTBASED[topology]
-    (copy and edit it), or False to skip the stage.
+    (copy and edit it), or False to skip the stage. An "energy_window" key in
+    that dict overrides ENERGY_WINDOW[topology], so a whole configuration --
+    signal window included -- can be given as one dict or one --config JSON.
     """
+    cfg = None if cutbased in (True, False) else cutbased
     stages = OrderedDict([("topology", TOPOLOGY_CUTS[topology](df))])
     stages.update(PRESEL_CUTS[topology](df))
     if cutbased is not False:
-        stages.update(cutbased_cuts(df, topology, None if cutbased is True else cutbased))
+        stages.update(cutbased_cuts(df, topology, cfg))
     if energy_window:
-        stages["energy_window"] = energy_window_cut(df, topology)
+        stages["energy_window"] = energy_window_cut(df, topology, cfg)
     return stages
 
 
@@ -410,7 +479,7 @@ GENIE_MODE_COH = 3
 
 def true_in_active(df):
     return pd.Series(
-        dist_to_active_boundary(df.true_vtx_x, df.true_vtx_y, df.true_vtx_z, df.detector) > 0,
+        dist_to_active_boundary(df.true_vtx_x, df.true_vtx_y, df.true_vtx_z) > 0,
         index=df.index)
 
 
