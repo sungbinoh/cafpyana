@@ -91,7 +91,7 @@ STAGE_TITLES = {
 
 def visible_energy(df):
     """Shower energy plus proton KE from range [MeV]; shower only without a track."""
-    return df.shw_energy + df.trk_ke_p.where(df.n_trk > 0, 0.).fillna(0.)
+    return df.shw_energy_best + df.trk_ke_p.where(df.n_trk > 0, 0.).fillna(0.)
 
 
 # ---------------------------------------------------------------------------
@@ -110,10 +110,6 @@ def cut_var_specs(topo, C=None):
     # the fiducial volume, which depends on all three coordinates and is not
     # drawn (see the module docstring).
     if topo == "1g1p":
-        if C.get("shw_energy_min") is not None:
-            s["shw_energy"] = dict(var=lambda d: d.shw_energy, range=(0, 1000),
-                                   label="Shower energy, collection plane [MeV]",
-                                   cuts=[C["shw_energy_min"]], keep="above")
         if C.get("vtx_dist_min") is not None:
             s["vtx_contained"] = dict(var=lambda d: d.vtx_dist_to_wall, range=(-10, 100),
                                       label="Vertex distance to wall [cm]",
@@ -144,10 +140,6 @@ def cut_var_specs(topo, C=None):
                                    label="Track calorimetric energy [MeV]",
                                    cuts=[C["trk_calo_E_max"]], keep="below")
     else:
-        if C.get("shw_energy_max_min") is not None:
-            s["shw_energy"] = dict(var=lambda d: d.shw_energy_max, range=(0, 1000),
-                                   label="Shower energy, max plane [MeV]",
-                                   cuts=[C["shw_energy_max_min"]], keep="above")
         if C.get("shw_start_dist_min") is not None:
             s["shw_contained"] = dict(var=lambda d: d.shw_start_dist_to_wall, range=(-10, 100),
                                       label="Shower start distance to wall [cm]",
@@ -214,8 +206,8 @@ def cut_var_specs(topo, C=None):
                              label="Track PIDA [MeV/cm$^{1.42}$]",
                              cuts=[C["trk_pida_max"]], keep="below")
 
-    s["energy_window"] = dict(var=lambda d: d.shw_energy, range=(0, 1000),
-                              label="Shower energy (signal window) [MeV]",
+    s["energy_window"] = dict(var=lambda d: d.shw_energy_best, range=(0, 1000),
+                              label="Shower energy, best plane (signal window) [MeV]",
                               cuts=[lo_E, hi_E], keep="between",
                               cut_labels=[r"$\geq$ %g MeV" % lo_E, "< %g MeV" % hi_E])
     return s

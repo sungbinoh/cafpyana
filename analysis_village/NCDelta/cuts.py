@@ -17,7 +17,12 @@ Stages:
   3. Background rejection: rectangular cuts on CAF features (CUTBASED_*).
   4. Signal window in reconstructed shower energy (ENERGY_WINDOW).
 
-Energies are MeV, lengths cm.
+Energies are MeV, lengths cm. Shower energy is always
+shw_energy_best (CAF bestplane_energy; for SBND the best plane is the one
+with the most hits, sbncode FillReco.cxx). The MicroBooNE "#GE#"
+convention -- collection plane with a max-plane fallback -- is not used:
+SBND's wire planes are not MicroBooNE's, and post-selection it resolves
+the photon energy slightly worse (see ncdelta_plots/energy_resolution.png).
 
 Tuning
 ------
@@ -31,10 +36,10 @@ Two working points, quoted separately rather than summed (see SELECTIONS).
 FV-based efficiency / purity, against [1] Table I:
 
                 this file              [1] Pandora
-  1g1p   2.24% / 11.3% (balanced)   4.24% / 14.8%
-         0.71% / 20.9% (high_purity)
-  1g0p   3.20% /  8.1% (balanced)   5.52% /  4.0%
-         1.97% / 10.5% (high_purity)
+  1g1p   2.26% / 11.2% (balanced)   4.24% / 14.8%
+         0.69% / 21.1% (high_purity)
+  1g0p   3.22% /  8.3% (balanced)   5.52% /  4.0%
+         1.57% / 12.9% (high_purity)
 
 Kept despite the figures of merit preferring otherwise, because an MC-only
 figure of merit cannot see what they cost: the fiducial volume (keeps badly
@@ -86,9 +91,13 @@ PRESEL_1G0P = {
     "shw_fv": True,   # FV on the shower start (no track defines the vertex)
 }
 
+# Signal window in shw_energy_best. Common to both working points in
+# SELECTIONS: the window defines the signal region of the measurement, so
+# narrowing it per selection would inflate purity by discarding signal phase
+# space rather than by rejecting background.
 ENERGY_WINDOW = {
-    "1g1p": (0.0, 600.0),
-    "1g0p": (50.0, 800.0),   # tuned, was (100., 700.)
+    "1g1p": (20.0, 600.0),
+    "1g0p": (100.0, 800.0),
 }
 
 TOPOLOGIES = ("1g1p", "1g0p")
@@ -225,7 +234,6 @@ CUTBASED_1G1P = {
     "bary_score_min":          1e-6,   # mcs_pid baryscore_cut
     "shw_dedx_min":            3.5,    # photon ~2 MIP (peak 4.2), electron ~1
     "shw_conv_dist_max":       80.0,   # X0 = 14 cm, so 80 cm is misreco
-    "shw_energy_min":          20.0,   # #GE#, collection plane
     "trk_proton_like":         True,   # chi2_proton < chi2_muon
     "energy_window":           None,   # None = ENERGY_WINDOW[topology]
 
@@ -257,7 +265,6 @@ CUTBASED_1G0P = {
     "nu_score_min":       0.35,
     "bary_score_min":     0.02,
     "opt0_score_min":     50.0,  # require a non-trivial OpT0 flash match
-    "shw_energy_max_min": 100.0, # reco_shower_energy_max
     "shw_dedx_min":        2.0,  # looser than 1g1p: shw_dedx_best is measured
                                  # badly enough that tighter costs more signal
                                  # than the CC nue it removes
@@ -288,14 +295,20 @@ CUTBASED = {"1g1p": CUTBASED_1G1P, "1g0p": CUTBASED_1G0P}
 SELECTIONS = {
     "balanced": {"1g1p": {}, "1g0p": {}},
     "high_purity": {
+        # The shower-shape cuts now appear in both channels: an earlier
+        # leave-one-out audit had dropped them from 1g0p, but re-running it
+        # after the switch to shw_energy_best shows shw_len_min and
+        # shw_nhits_min each worth >10% of purity there, on both file splits.
         "1g1p": {"nu_score_min": 0.50, "bary_score_min": 0.02,
-                 "shw_energy_min": None, "shw_conv_dist_min": 4.0,
-                 "shw_conv_dist_max": 50.0, "shw_len_min": 25.0,
-                 "shw_open_angle_max": 0.25, "trk_pida_max": 20.0,
-                 "trk_calo_E_max": 300.0, "energy_window": (50., 600.)},
-        "1g0p": {"nu_score_min": 0.50, "shw_energy_max_min": None,
-                 "shw_dedx_min": 2.5, "shw_open_angle_max": 0.30,
-                 "energy_window": (150., 700.)},
+                 "opt0_score_min": 50.0, "shw_conv_dist_min": 4.0,
+                 "shw_conv_dist_max": 50.0, "shw_len_min": 30.0,
+                 "shw_open_angle_max": 0.25, "shw_nhits_min": 150,
+                 "n_nonprim_shw_max": 1, "trk_calo_E_max": 300.0,
+                 "trk_start_dist_to_vtx_max": 10.0},
+        "1g0p": {"nu_score_min": 0.50, "opt0_score_min": 100.0,
+                 "shw_dedx_min": 2.5, "shw_conv_dist_max": 3.0,
+                 "shw_len_min": 40.0, "shw_open_angle_max": 0.20,
+                 "shw_nhits_min": 300, "shw_start_dist_min": 20.0},
     },
 }
 
@@ -335,11 +348,7 @@ def cutbased_cuts(df, topology, cfg=None):
     if on("shw_start_dist_min"):
         out["shw_contained"] = df.shw_start_dist_to_wall > c["shw_start_dist_min"]
 
-    # shower / track energy thresholds
-    if on("shw_energy_min"):
-        out["shw_energy"] = df.shw_energy > c["shw_energy_min"]
-    if on("shw_energy_max_min"):
-        out["shw_energy"] = df.shw_energy_max > c["shw_energy_max_min"]
+    # track energy / PID thresholds
     if on("trk_dedx_min"):
         out["trk_dedx"] = df.trk_dedx_trunc > c["trk_dedx_min"]
     if on("abs_cos_trk_shw_max"):
@@ -393,7 +402,7 @@ def energy_window(topology, cfg=None):
 
 def energy_window_cut(df, topology, cfg=None):
     lo, hi = energy_window(topology, cfg)
-    return (df.shw_energy >= lo) & (df.shw_energy < hi)
+    return (df.shw_energy_best >= lo) & (df.shw_energy_best < hi)
 
 
 def stage_cuts(df, topology, cutbased=True, energy_window=True):
