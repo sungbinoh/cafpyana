@@ -764,7 +764,6 @@ def load_one(fname, idf,
     offbeampot=False, # POT handling
     data_quality=False, beam_quality=False,# POT handling
     preselection=None, # apply preselection cut
-    beam_quality=True, data_quality=True, # data-only cuts: per-spill beam quality (on-beam) and good-run list (on- and off-beam), see dataquality.py
     shift_binding_E=False, split_tracks=None, # variations applied to the output df (see _apply_variations)
     shift_fraction=None, split_fraction=None, # fraction of events each variation is applied to (None -> BE_FRACTION / SPLIT_FRAC)
     cache_dir=CACHE_WITH_INPUT, # directory to cache output; default is alongside the input .df, None disables caching
