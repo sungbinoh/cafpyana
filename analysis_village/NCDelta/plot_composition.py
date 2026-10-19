@@ -91,7 +91,7 @@ STAGE_TITLES = {
 
 def visible_energy(df):
     """Shower energy plus proton KE from range [MeV]; shower only without a track."""
-    return df.shw_energy_best + df.trk_ke_p.where(df.n_trk > 0, 0.).fillna(0.)
+    return cuts.shw_energy_corrected(df) + df.trk_ke_p.where(df.n_trk > 0, 0.).fillna(0.)
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +170,14 @@ def cut_var_specs(topo, C=None):
         s["shw_len"] = dict(var=lambda d: d.shw_len, range=(0, 200),
                             label="Shower length [cm]",
                             cuts=[C["shw_len_min"]], keep="above")
+    if C.get("shw_trackScore_max") is not None:
+        s["shw_trackScore"] = dict(var=lambda d: d.shw_trackScore, range=(0, 0.5),
+                                   label="Shower track/shower score",
+                                   cuts=[C["shw_trackScore_max"]], keep="below")
+    if C.get("extrap_det_path_min") is not None:
+        s["extrap_det_path"] = dict(var=lambda d: cuts.extrap_det_path(d), range=(0, 600),
+                                    label="Extrapolated detector path length [cm]",
+                                    cuts=[C["extrap_det_path_min"]], keep="above")
     if C.get("shw_nhits_min") is not None:
         s["shw_nhits"] = dict(var=lambda d: d.shw_nhits_I0 + d.shw_nhits_I1 + d.shw_nhits_I2,
                               range=(0, 1000), label="Shower hits, all planes",
@@ -206,8 +214,8 @@ def cut_var_specs(topo, C=None):
                              label="Track PIDA [MeV/cm$^{1.42}$]",
                              cuts=[C["trk_pida_max"]], keep="below")
 
-    s["energy_window"] = dict(var=lambda d: d.shw_energy_best, range=(0, 1000),
-                              label="Shower energy, best plane (signal window) [MeV]",
+    s["energy_window"] = dict(var=lambda d: cuts.shw_energy_corrected(d), range=(0, 1200),
+                              label="Shower energy, scaled best plane (signal window) [MeV]",
                               cuts=[lo_E, hi_E], keep="between",
                               cut_labels=[r"$\geq$ %g MeV" % lo_E, "< %g MeV" % hi_E])
     return s

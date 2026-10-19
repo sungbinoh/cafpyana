@@ -17,12 +17,12 @@ Stages:
   3. Background rejection: rectangular cuts on CAF features (CUTBASED_*).
   4. Signal window in reconstructed shower energy (ENERGY_WINDOW).
 
-Energies are MeV, lengths cm. Shower energy is always
-shw_energy_best (CAF bestplane_energy; for SBND the best plane is the one
-with the most hits, sbncode FillReco.cxx). The MicroBooNE "#GE#"
-convention -- collection plane with a max-plane fallback -- is not used:
-SBND's wire planes are not MicroBooNE's, and post-selection it resolves
-the photon energy slightly worse (see ncdelta_plots/energy_resolution.png).
+Energies are MeV, lengths cm. Shower energy is shw_energy_corrected(): the
+best plane's energy (best = most hits, as sbncode FillReco.cxx defines it for
+SBND) with the per-plane scale SHW_ENERGY_SCALE applied. The MicroBooNE
+"#GE#" convention -- collection plane with a max-plane fallback -- is not
+used: SBND's wire planes are not MicroBooNE's, and post-selection it resolves
+the photon energy slightly worse.
 
 Tuning
 ------
@@ -36,15 +36,17 @@ Two working points, quoted separately rather than summed (see SELECTIONS).
 FV-based efficiency / purity, against [1] Table I:
 
                 this file              [1] Pandora
-  1g1p   2.26% / 11.2% (balanced)   4.24% / 14.8%
-         0.69% / 21.1% (high_purity)
-  1g0p   3.22% /  8.3% (balanced)   5.52% /  4.0%
-         1.57% / 12.9% (high_purity)
+  1g1p   2.27% / 11.1% (balanced)   4.24% / 14.8%
+         0.69% / 20.9% (high_purity)
+  1g0p   3.24% /  8.2% (balanced)   5.52% /  4.0%
+         2.07% / 10.5% (high_purity)
 
 Kept despite the figures of merit preferring otherwise, because an MC-only
 figure of merit cannot see what they cost: the fiducial volume (keeps badly
 modelled regions out) and trk_proton_like (dropping it inflates the 1g1p
-CC numu 1pi0 background 8x).
+CC numu 1pi0 background 8x). Conversely opt0_score_min was dropped despite
+being worth ~0.2 points of purity, for the same reason in reverse -- the score
+is not well validated and costs real MC/data comparison work.
 
 Where the ceiling is
 --------------------
@@ -91,13 +93,13 @@ PRESEL_1G0P = {
     "shw_fv": True,   # FV on the shower start (no track defines the vertex)
 }
 
-# Signal window in shw_energy_best. Common to both working points in
+# Signal window in shw_energy_corrected(). Common to both working points in
 # SELECTIONS: the window defines the signal region of the measurement, so
 # narrowing it per selection would inflate purity by discarding signal phase
 # space rather than by rejecting background.
 ENERGY_WINDOW = {
-    "1g1p": (20.0, 600.0),
-    "1g0p": (100.0, 800.0),
+    "1g1p": (20.0, 700.0),
+    "1g0p": (120.0, 950.0),
 }
 
 TOPOLOGIES = ("1g1p", "1g0p")
@@ -157,6 +159,81 @@ def fv_cut(x, y, z, detector="SBND", inx=10., iny=10., inzfront=10., inzback=50.
 def _fv(df, prefix):
     return pd.Series(fv_cut(df[prefix + "_x"], df[prefix + "_y"], df[prefix + "_z"],
                             df.detector), index=df.index)
+
+
+# ---------------------------------------------------------------------------
+# Shower energy
+# ---------------------------------------------------------------------------
+
+# Per-plane energy scale, applied to the best plane's energy. SBND's best
+# plane for energy is the one with the most hits (sbncode FillReco.cxx), and
+# which plane that is varies event to event, so all three factors are in play.
+#
+# Derived from selected signal showers truth-matched to a photon, as
+# 1 / median(E_plane / E_true_photon) over the events where that plane is the
+# best plane. Stable to +-0.01 across both working points and both file
+# splits. Applying them centres the energy scale within 0.5% of truth
+# out-of-sample; the fractional resolution (~13%) is unchanged, since a
+# multiplicative factor cannot change it.
+#
+# Caveat: the factors are derived on selected events, which is also where they
+# are applied, so there is mild circularity -- the inclusive bias is larger
+# (median 0.74 rather than 0.85), the selection keeping better-reconstructed
+# showers. Re-derive if the selection changes substantially.
+SHW_ENERGY_SCALE = (1.20, 1.20, 1.15)   # (I0 induction-1, I1 induction-2, I2 collection)
+
+
+def shw_best_plane(df):
+    """Index of the best plane for energy: the one with the most hits."""
+    nh = np.vstack([np.nan_to_num(df.shw_nhits_I0.to_numpy(dtype=float), nan=-1.),
+                    np.nan_to_num(df.shw_nhits_I1.to_numpy(dtype=float), nan=-1.),
+                    np.nan_to_num(df.shw_nhits_I2.to_numpy(dtype=float), nan=-1.)])
+    return np.argmax(nh, axis=0)
+
+
+def shw_energy_corrected(df, scale=SHW_ENERGY_SCALE):
+    """Best-plane shower energy [MeV] with the per-plane scale applied.
+
+    Reproduces the CAF's shw_energy_best to 99.97% of showers before scaling,
+    so it can be used on dataframes that predate this correction.
+    """
+    ep = np.vstack([df.shw_energy_I0.to_numpy(dtype=float),
+                    df.shw_energy_I1.to_numpy(dtype=float),
+                    df.shw_energy_I2.to_numpy(dtype=float)])
+    bp = shw_best_plane(df)
+    idx = np.arange(len(df))
+    return pd.Series(np.asarray(scale)[bp] * ep[bp, idx], index=df.index)
+
+
+def extrap_det_path(df):
+    """Extrapolated detector path length [cm].
+
+    Distance from the shower start, projected *backwards* along the shower
+    direction, to where it leaves the active volume: how far the photon could
+    have travelled inside the detector before converting.
+
+    Small for dirt -- a neutrino interacting in the surrounding rock sends its
+    photon in through a nearby wall, so there is little detector behind the
+    conversion point. Large for a genuine in-detector interaction. This is the
+    handle the fiducial-volume cut cannot provide, because with no track the
+    FV is applied to the shower start, which for dirt is legitimately inside
+    (median 23 cm in from the wall, while the true vertex is ~29 cm outside).
+    """
+    b = ACTIVE_VOLUME
+    start = (df.shw_start_x.to_numpy(dtype=float),
+             df.shw_start_y.to_numpy(dtype=float),
+             df.shw_start_z.to_numpy(dtype=float))
+    back = (-df.shw_dir_x.to_numpy(dtype=float),
+            -df.shw_dir_y.to_numpy(dtype=float),
+            -df.shw_dir_z.to_numpy(dtype=float))
+    t = np.full(len(df), np.inf)
+    for c, dc, (lo, hi) in zip(start, back, (b["x"], b["y"], b["z"])):
+        with np.errstate(divide="ignore", invalid="ignore"):
+            for edge in (lo, hi):
+                ti = (edge - c) / dc
+                t = np.minimum(t, np.where(ti > 0, ti, np.inf))
+    t[~np.isfinite(t)] = np.nan        # direction parallel to every face
+    return pd.Series(t, index=df.index)
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +309,15 @@ PRESELECTION = {"1g1p": preselection_1g1p, "1g0p": preselection_1g0p}
 CUTBASED_1G1P = {
     "nu_score_min":            0.35,
     "bary_score_min":          1e-6,   # mcs_pid baryscore_cut
+    # OpT0 flash match. Dropped from every working point despite being worth
+    # ~0.2 points of purity on both splits: the OpT0 score is not well
+    # validated and carries a real MC/data comparison burden, which an MC-only
+    # figure of merit cannot see. It was also doing different things per
+    # channel -- in 1g0p it removed cosmics and dirt (75 of 124 slices, no
+    # signal), in 1g1p only 4 NC pi0 slices and no cosmics at all. For the
+    # record, higher score = better match: at 1g0p topology level cosmics have
+    # median score 10.6 with 35% having no match, signal median 656 with 3%.
+    "opt0_score_min":          None,
     "shw_dedx_min":            3.5,    # photon ~2 MIP (peak 4.2), electron ~1
     "shw_conv_dist_max":       80.0,   # X0 = 14 cm, so 80 cm is misreco
     "trk_proton_like":         True,   # chi2_proton < chi2_muon
@@ -256,6 +342,14 @@ CUTBASED_1G1P = {
     "shw_len_min":             None,
     "shw_open_angle_max":      None,
     "shw_conv_dist_min":       None,
+    # Pandora's track/shower score for the leading shower. TRK_SCORE_CUT = 0.5
+    # already bounds it from above by construction, but genuine photon showers
+    # sit near 0.39 while CC numu events whose muon was filed as shower-like
+    # pile up at ~0.47 -- just under the boundary, which is how they reach
+    # 1g0p with no track to cut on. Tightening it targets that background.
+    "shw_trackScore_max":      None,
+    "extrap_det_path_min":     None,   # 1g0p only: dirt is just 1-3% of this
+                                       # channel, the track already vetoes it
     # p+gamma mass window [MeV]: the peak is at ~1143, below the PDG
     # Delta(1232), and NC pi0 peaks at 1108, so a window buys ~0.2% purity.
     "delta_mass_range":        None,
@@ -264,7 +358,15 @@ CUTBASED_1G1P = {
 CUTBASED_1G0P = {
     "nu_score_min":       0.35,
     "bary_score_min":     0.02,
-    "opt0_score_min":     50.0,  # require a non-trivial OpT0 flash match
+    # OpT0 flash match. Dropped from every working point despite being worth
+    # ~0.2 points of purity on both splits: the OpT0 score is not well
+    # validated and carries a real MC/data comparison burden, which an MC-only
+    # figure of merit cannot see. It was also doing different things per
+    # channel -- in 1g0p it removed cosmics and dirt (75 of 124 slices, no
+    # signal), in 1g1p only 4 NC pi0 slices and no cosmics at all. For the
+    # record, higher score = better match: at 1g0p topology level cosmics have
+    # median score 10.6 with 35% having no match, signal median 656 with 3%.
+    "opt0_score_min":     None,
     "shw_dedx_min":        2.0,  # looser than 1g1p: shw_dedx_best is measured
                                  # badly enough that tighter costs more signal
                                  # than the CC nue it removes
@@ -278,6 +380,18 @@ CUTBASED_1G0P = {
     "shw_conv_dist_max":  None,  # 5.0:  1 / 65
     "shw_len_min":        None,  # on in high_purity only
     "shw_open_angle_max": None,  # on in high_purity only
+    # Dirt rejection, 1g0p only. With no track the FV is applied to the shower
+    # start, which for a dirt event is legitimately inside the detector (median
+    # 23 cm in) even though the true vertex is ~29 cm outside -- the photon
+    # travels in and converts. This cut asks how much detector lies behind the
+    # conversion point instead, and roughly halves the dirt background.
+    # Pandora's track/shower score for the leading shower. TRK_SCORE_CUT = 0.5
+    # already bounds it from above by construction, but genuine photon showers
+    # sit near 0.39 while CC numu events whose muon was filed as shower-like
+    # pile up at ~0.47 -- just under the boundary, which is how they reach
+    # 1g0p with no track to cut on. Tightening it targets that background.
+    "shw_trackScore_max": 0.48,
+    "extrap_det_path_min": 40.0,
 }
 
 CUTBASED = {"1g1p": CUTBASED_1G1P, "1g0p": CUTBASED_1G0P}
@@ -295,20 +409,19 @@ CUTBASED = {"1g1p": CUTBASED_1G1P, "1g0p": CUTBASED_1G0P}
 SELECTIONS = {
     "balanced": {"1g1p": {}, "1g0p": {}},
     "high_purity": {
-        # The shower-shape cuts now appear in both channels: an earlier
-        # leave-one-out audit had dropped them from 1g0p, but re-running it
-        # after the switch to shw_energy_best shows shw_len_min and
-        # shw_nhits_min each worth >10% of purity there, on both file splits.
+        # Same variables as the original tuning -- the re-convergence after the
+        # energy change had added shw_nhits_min / n_nonprim_shw_max /
+        # trk_start_dist_to_vtx_max here and shw_conv_dist_max / shw_len_min /
+        # shw_nhits_min / shw_start_dist_min to 1g0p, which is a change of
+        # variables rather than of values. Reverted: it costs 0.12 points of
+        # purity in 1g1p, and in 1g0p trades 2.3 points for 29% more signal.
         "1g1p": {"nu_score_min": 0.50, "bary_score_min": 0.02,
-                 "opt0_score_min": 50.0, "shw_conv_dist_min": 4.0,
-                 "shw_conv_dist_max": 50.0, "shw_len_min": 30.0,
-                 "shw_open_angle_max": 0.25, "shw_nhits_min": 150,
-                 "n_nonprim_shw_max": 1, "trk_calo_E_max": 300.0,
-                 "trk_start_dist_to_vtx_max": 10.0},
-        "1g0p": {"nu_score_min": 0.50, "opt0_score_min": 100.0,
-                 "shw_dedx_min": 2.5, "shw_conv_dist_max": 3.0,
-                 "shw_len_min": 40.0, "shw_open_angle_max": 0.20,
-                 "shw_nhits_min": 300, "shw_start_dist_min": 20.0},
+                 "shw_conv_dist_min": 4.0, "shw_conv_dist_max": 50.0,
+                 "shw_len_min": 30.0, "shw_open_angle_max": 0.25,
+                 "shw_trackScore_max": 0.42, "trk_calo_E_max": 300.0},
+        "1g0p": {"nu_score_min": 0.50, "shw_dedx_min": 2.5,
+                 "shw_open_angle_max": 0.20, "shw_trackScore_max": 0.44,
+                 "extrap_det_path_min": 80.0},
     },
 }
 
@@ -369,6 +482,10 @@ def cutbased_cuts(df, topology, cfg=None):
         out["shw_conv_dist_max"] = df.shw_conv_dist < c["shw_conv_dist_max"]
     if on("shw_len_min"):
         out["shw_len"] = df.shw_len > c["shw_len_min"]
+    if on("shw_trackScore_max"):
+        out["shw_trackScore"] = df.shw_trackScore < c["shw_trackScore_max"]
+    if on("extrap_det_path_min"):
+        out["extrap_det_path"] = extrap_det_path(df) > c["extrap_det_path_min"]
     if on("shw_nhits_min"):
         out["shw_nhits"] = (df.shw_nhits_I0 + df.shw_nhits_I1
                             + df.shw_nhits_I2) > c["shw_nhits_min"]
@@ -402,7 +519,8 @@ def energy_window(topology, cfg=None):
 
 def energy_window_cut(df, topology, cfg=None):
     lo, hi = energy_window(topology, cfg)
-    return (df.shw_energy_best >= lo) & (df.shw_energy_best < hi)
+    e = shw_energy_corrected(df)
+    return (e >= lo) & (e < hi)
 
 
 def stage_cuts(df, topology, cutbased=True, energy_window=True):
