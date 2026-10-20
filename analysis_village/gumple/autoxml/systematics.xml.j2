@@ -1,0 +1,204 @@
+{%#
+    Shared systematics list for every template in autoxml/.
+
+    Each template pulls this in just above its <variation_list> with
+
+        {% import "systematics.xml.j2" as syst with context %}
+
+    and then pastes in the blocks it needs:
+
+        {{ syst.common_systematics }}      all detectors / runs (xsec, G4, flux, BIND)
+        {{ syst.sbnd_systematics }}        SBND only (detector, dirt, cosmics, POT)
+        {{ syst.icarus_r2_systematics }}   ICARUS Run 2 only (detector, dirt, POT)
+        {{ syst.icarus_r4_systematics }}   ICARUS Run 4 only (detector, dirt, POT)
+
+    Subchannel naming is not the same in every template, so the patterns the
+    systematics attach to are variables. The defaults below match the joint
+    templates (GumpleTemplate, GumpTemplate, MapleNPTemplate). A template
+    with different subchannel names overrides them with {% set %} *before*
+    the import, e.g. the DataMC/ templates.
+#%}
+{%# -- Patterns: override any of these with {% set %} before importing -- #%}
+{% set syst_xsec_subchannels          = syst_xsec_subchannels          | default("numu.*_cv.*") %}
+{% set syst_sbnd_det_subchannels      = syst_sbnd_det_subchannels      | default("nu_SBND_numu.*_cv.*") %}
+{% set syst_icarus_r2_det_subchannels = syst_icarus_r2_det_subchannels | default("nu_ICARUS_numu.*_cv.*") %}
+{% set syst_icarus_r4_det_subchannels = syst_icarus_r4_det_subchannels | default("nu_ICARUS_numu.*_cv.*") %}
+{% set syst_sbnd_cosmic_subchannel    = syst_sbnd_cosmic_subchannel    | default("nu_SBND_numu.*_cvbkgcosmic") %}
+{% set syst_sbnd_dirt_subchannel      = syst_sbnd_dirt_subchannel      | default("nu_SBND_numu.*_dirt") %}
+{% set syst_icarus_r2_dirt_subchannel = syst_icarus_r2_dirt_subchannel | default("nu_ICARUS_numu.*_Run2dirt") %}
+{% set syst_icarus_r4_dirt_subchannel = syst_icarus_r4_dirt_subchannel | default("nu_ICARUS_numu.*_Run4dirt") %}
+{%# Smoothing (PROfit smooth=, Gaussian kernel width in reco bins) applied to every
+    DetVar-derived spline: BIND and all detector variations. "0" turns it off;
+    empty omits the attribute entirely (needed for PROfit builds without smooth=). #%}
+{% set syst_detvar_smooth             = syst_detvar_smooth             | default("1") %}
+{% set _detvar_smooth = (' smooth="' ~ syst_detvar_smooth ~ '"') if syst_detvar_smooth != "" else "" %}
+
+{%# ===================== All detectors / runs ===================== #%}
+{% set common_systematics %}
+    <systematic type="spline" tag="SF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="Spectral Function Bin 0">multisigma_CCQETemplateReweight_SBN_v3_LFGToSF_q0bin0</systematic>
+    <systematic type="spline" tag="SF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="Spectral Function Bin 1">multisigma_CCQETemplateReweight_SBN_v3_LFGToSF_q0bin1</systematic>
+    <systematic type="spline" tag="SF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="Spectral Function Bin 2">multisigma_CCQETemplateReweight_SBN_v3_LFGToSF_q0bin2</systematic>
+    <systematic type="spline" tag="SF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="Spectral Function Bin 3">multisigma_CCQETemplateReweight_SBN_v3_LFGToSF_q0bin3</systematic>
+    <systematic type="spline" tag="SF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="Spectral Function Bin 4">multisigma_CCQETemplateReweight_SBN_v3_LFGToSF_q0bin4</systematic>
+
+    <systematic type="spline" tag="HF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="Hartree Fock Bin 0">multisigma_CCQETemplateReweight_SBN_v3_LFGToHF_q0bin0</systematic>
+    <systematic type="spline" tag="HF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="Hartree Fock Bin 1">multisigma_CCQETemplateReweight_SBN_v3_LFGToHF_q0bin1</systematic>
+    <systematic type="spline" tag="HF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="Hartree Fock Bin 2">multisigma_CCQETemplateReweight_SBN_v3_LFGToHF_q0bin2</systematic>
+    <systematic type="spline" tag="HF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="Hartree Fock Bin 3">multisigma_CCQETemplateReweight_SBN_v3_LFGToHF_q0bin3</systematic>
+    <systematic type="spline" tag="HF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="Hartree Fock Bin 4">multisigma_CCQETemplateReweight_SBN_v3_LFGToHF_q0bin4</systematic>
+
+    <systematic type="spline" tag="CRPA" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="CRPA Bin 0">multisigma_CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin0</systematic>
+    <systematic type="spline" tag="CRPA" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="CRPA Bin 1">multisigma_CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin1</systematic>
+    <systematic type="spline" tag="CRPA" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="CRPA Bin 2">multisigma_CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin2</systematic>
+    <systematic type="spline" tag="CRPA" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="CRPA Bin 3">multisigma_CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin3</systematic>
+    <systematic type="spline" tag="CRPA" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="CRPA Bin 4">multisigma_CCQETemplateReweight_SBN_v3_HFToCRPA_q0bin4</systematic>
+
+    <systematic type="spline" tag="QE" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="QEInterference Bin 0">multisigma_QEInterference_SBN_v3_QEIntf_dial_0</systematic>
+    <systematic type="spline" tag="QE" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="QEInterference Bin 1">multisigma_QEInterference_SBN_v3_QEIntf_dial_1</systematic>
+    <systematic type="spline" tag="QE" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="QEInterference Bin 2">multisigma_QEInterference_SBN_v3_QEIntf_dial_2</systematic>
+    <systematic type="spline" tag="QE" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="QEInterference Bin 3">multisigma_QEInterference_SBN_v3_QEIntf_dial_3</systematic>
+    <systematic type="spline" tag="QE" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="QEInterference Bin 4">multisigma_QEInterference_SBN_v3_QEIntf_dial_4</systematic>
+    <systematic type="spline" tag="QE" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="QEInterference Bin 5">multisigma_QEInterference_SBN_v3_QEIntf_dial_5</systematic>
+    <systematic type="spline" tag="QE" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="CoulombCCQE">GENIEReWeight_SBN_v1_multisigma_CoulombCCQE</systematic>
+    <systematic type="spline" tag="QE" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="VecFFCCQEshape">GENIEReWeight_SBN_v1_multisigma_VecFFCCQEshape</systematic>
+
+    <systematic type="spline" tag="Nucleon FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="FrG4LoE_N">multisigma_GENIEReWeight_SBN_v3_FrG4LoE_N</systematic>
+    <systematic type="spline" tag="Nucleon FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="FrG4M1E_N">multisigma_GENIEReWeight_SBN_v3_FrG4M1E_N</systematic>
+    <systematic type="spline" tag="Nucleon FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="FrG4M2E_N">multisigma_GENIEReWeight_SBN_v3_FrG4M2E_N</systematic>
+    <systematic type="spline" tag="Nucleon FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="FrG4HiE_N">multisigma_GENIEReWeight_SBN_v3_FrG4HiE_N</systematic>
+    <systematic type="spline" tag="Nucleon FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="FrINCLLoE_N">multisigma_GENIEReWeight_SBN_v3_FrINCLLoE_N</systematic>
+    <systematic type="spline" tag="Nucleon FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="FrINCLM1_N">multisigma_GENIEReWeight_SBN_v3_FrINCLM1E_N</systematic>
+    <systematic type="spline" tag="Nucleon FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="FrINCLM2_N">multisigma_GENIEReWeight_SBN_v3_FrINCLM2E_N</systematic>
+    <systematic type="spline" tag="Nucleon FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="FrINCLHi_N">multisigma_GENIEReWeight_SBN_v3_FrINCLHiE_N</systematic>
+    <systematic type="spline" tag="Nucleon FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MFPLoE_N">multisigma_GENIEReWeight_SBN_v3_MFPLoE_N</systematic>
+    <systematic type="spline" tag="Nucleon FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MFPM1E_N">multisigma_GENIEReWeight_SBN_v3_MFPM1E_N</systematic>
+    <systematic type="spline" tag="Nucleon FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MFPM2E_N">multisigma_GENIEReWeight_SBN_v3_MFPM2E_N</systematic>
+    <systematic type="spline" tag="Nucleon FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MFPHiE_N">multisigma_GENIEReWeight_SBN_v3_MFPHiE_N</systematic>
+    <systematic type="spline" tag="Pion FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MFP_pi">GENIEReWeight_SBN_v1_multisigma_MFP_pi</systematic>
+    <systematic type="spline" tag="Pion FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="FrAbs_pi">GENIEReWeight_SBN_v1_multisigma_FrAbs_pi</systematic>
+    <systematic type="spline" tag="Pion FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="FrInel_pi">GENIEReWeight_SBN_v1_multisigma_FrInel_pi</systematic>
+    <systematic type="spline" tag="Pion FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="FrCEx_pi">GENIEReWeight_SBN_v1_multisigma_FrCEx_pi</systematic>
+    <systematic type="spline" tag="Pion FSI" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="FrPiProd_pi">GENIEReWeight_SBN_v1_multisigma_FrPiProd_pi</systematic>
+
+    <systematic type="spline" tag="AxialFF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="ZExpPCA_b1">multisigma_ZExpPCAWeighter_SBN_v3_MvA_b1</systematic>
+    <systematic type="spline" tag="AxialFF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="ZExpPCA_b2">multisigma_ZExpPCAWeighter_SBN_v3_MvA_b2</systematic>
+    <systematic type="spline" tag="AxialFF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="ZExpPCA_b3">multisigma_ZExpPCAWeighter_SBN_v3_MvA_b3</systematic>
+    <systematic type="spline" tag="AxialFF" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="ZExpPCA_b4">multisigma_ZExpPCAWeighter_SBN_v3_MvA_b4</systematic>
+
+    <systematic type="spline" tag="RES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MaNCRES">GENIEReWeight_SBN_v1_multisigma_MaNCRES</systematic>
+    <systematic type="spline" tag="RES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MaCCRES">GENIEReWeight_SBN_v1_multisigma_MaCCRES</systematic>
+    <systematic type="spline" tag="RES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MvCCRES">GENIEReWeight_SBN_v1_multisigma_MvCCRES</systematic>
+    <systematic type="spline" tag="RES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MvNCRES">GENIEReWeight_SBN_v1_multisigma_MvNCRES</systematic>
+    <systematic type="spline" tag="RES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="ThetaDelta2NRad">GENIEReWeight_SBN_v1_multisigma_ThetaDelta2NRad</systematic>
+    <systematic type="spline" tag="RES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="ThetaDelta2Npi">GENIEReWeight_SBN_v1_multisigma_Theta_Delta2Npi</systematic>
+    <systematic type="spline" tag="RES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="RDecBR1eta">GENIEReWeight_SBN_v1_multisigma_RDecBR1eta</systematic>
+    <systematic type="spline" tag="RES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="RDecBR1gamma">GENIEReWeight_SBN_v1_multisigma_RDecBR1gamma</systematic>
+
+    <systematic name="BIND"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_xsec_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="Bind" tag="OtherXSec" />
+    <systematic type="spline" tag="OtherXSec" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="AhtBY">GENIEReWeight_SBN_v1_multisigma_AhtBY</systematic>
+    <systematic type="spline" tag="OtherXSec" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="BhtBY">GENIEReWeight_SBN_v1_multisigma_BhtBY</systematic>
+    <systematic type="spline" tag="OtherXSec" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="CV1uBY">GENIEReWeight_SBN_v1_multisigma_CV1uBY</systematic>
+    <systematic type="spline" tag="OtherXSec" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="CV2uBY">GENIEReWeight_SBN_v1_multisigma_CV2uBY</systematic>
+
+    <systematic type="spline" tag="OtherXSec" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="CCCOH">GENIEReWeight_SBN_v1_multisigma_NormCCCOH</systematic>
+    <systematic type="spline" tag="OtherXSec" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NCCOH">GENIEReWeight_SBN_v1_multisigma_NormNCCOH</systematic>
+
+    <systematic type="spline" tag="OtherXSec" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MaNCEL">GENIEReWeight_SBN_v1_multisigma_MaNCEL</systematic>
+    <systematic type="spline" tag="OtherXSec" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="EtaNCEL">GENIEReWeight_SBN_v1_multisigma_EtaNCEL</systematic>
+
+    <systematic type="spline" tag="MEC" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NormCCMEC">GENIEReWeight_SBN_v1_multisigma_NormCCMEC</systematic>
+    <systematic type="spline" tag="MEC" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NormNCMEC">GENIEReWeight_SBN_v1_multisigma_NormNCMEC</systematic>
+    <systematic type="spline" tag="MEC" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="DecayAngMEC">GENIEReWeight_SBN_v1_multisigma_DecayAngMEC</systematic>
+
+    <systematic type="spline" tag="MEC" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MEC Valencia Bin 0">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin0</systematic>
+    <systematic type="spline" tag="MEC" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MEC Valencia Bin 1">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin1</systematic>
+    <systematic type="spline" tag="MEC" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MEC Valencia Bin 2">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin2</systematic>
+    <systematic type="spline" tag="MEC" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MEC Valencia Bin 3">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToVal_MECResponse_q0bin3</systematic>
+    <systematic type="spline" tag="MEC" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MEC Martini Bin 0">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin0</systematic>
+    <systematic type="spline" tag="MEC" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MEC Martini Bin 1">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin1</systematic>
+    <systematic type="spline" tag="MEC" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MEC Martini Bin 2">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin2</systematic>
+    <systematic type="spline" tag="MEC" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="MEC Martini Bin 3">multisigma_MECq0q3InterpWeighting_SBN_v3_SuSAToMar_MECResponse_q0bin3</systematic>
+
+    <systematic type="covariance" tag="G4" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="G4piminus">multisim_reinteractions_piminus_Geant4</systematic>
+    <systematic type="covariance" tag="G4" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="G4piplus">multisim_reinteractions_piplus_Geant4</systematic>
+    <systematic type="covariance" tag="G4" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="G4proton">multisim_reinteractions_proton_Geant4</systematic>
+
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvpCC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvpCC1pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvpCC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvpCC2pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvpNC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvpNC1pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvpNC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvpNC2pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvnCC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvnCC1pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvnCC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvnCC2pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvnNC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvnNC1pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvnNC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvnNC2pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvbarpCC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpCC1pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvbarpCC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpCC2pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvbarpNC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpNC1pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvbarpNC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarpNC2pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvbarnCC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnCC1pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvbarnCC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnCC2pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvbarnNC1pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnNC1pi</systematic>
+    <systematic type="covariance" tag="NonRES" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="NonRESBGvbarnNC2pi">GENIEReWeight_SBN_v1_multisim_NonRESBGvbarnNC2pi</systematic>
+
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="nucleoninexsec">multisim_nucleoninexsec_Flux</systematic>
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="kminus">multisim_kminus_Flux</systematic>
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="kzero">multisim_kzero_Flux</systematic>
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="piontotxsec">multisim_piontotxsec_Flux</systematic>
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="horncurrent">multisim_horncurrent_Flux</systematic>
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="piplus">multisim_piplus_Flux</systematic>
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="piminus">multisim_piminus_Flux</systematic>
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="pioninexsec">multisim_pioninexsec_Flux</systematic>
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="pionqexsec">multisim_pionqexsec_Flux</systematic>
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="kplus">multisim_kplus_Flux</systematic>
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="nucleontotxsec">multisim_nucleontotxsec_Flux</systematic>
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="nucleonqexsec">multisim_nucleonqexsec_Flux</systematic>
+    <systematic type="covariance" tag="Flux" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="expskin">multisim_expskin_Flux</systematic>
+{%- endset %}
+
+{%# ===================== SBND ===================== #%}
+{% set sbnd_systematics %}
+    <systematic type="norm" tag="SBND Det" plotname="Corsika Unc">{{ syst_sbnd_cosmic_subchannel }}:0.1</systematic>
+    <systematic type="norm" tag="SBND Det" plotname="SBND Dirt">{{ syst_sbnd_dirt_subchannel }}:1.0</systematic>
+    <systematic name="Gain_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDGain" tag="SBND Det" />
+    <systematic name="Smear_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" inflate="2" plotname="SBNDSmear" tag="SBND Det" />
+    <systematic name="Trigger_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBND Trig Eff" tag="SBND Det" />
+    <systematic name="Alpha_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDAlpha" tag="SBND Det" />
+    <systematic name="Beta_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDBeta" tag="SBND Det" />
+    <systematic name="R_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="SBNDR" tag="SBND Det" />
+    <systematic name="WM-Xtheta_xw_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="SBND XThetaXW" tag="SBND Det" />
+    <systematic name="WM-YZ_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="SBND YZ" tag="SBND Det" />
+    <systematic name="Dent_sbnd"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_sbnd_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="DENT" tag="SBND Det" />
+    <systematic type="spline" tag="POT" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="POT SBND">multisigma_SBND_POT</systematic>
+{%- endset %}
+
+{%# ===================== ICARUS Run 2 ===================== #%}
+{% set icarus_r2_systematics %}
+    <systematic type="norm" tag="ICARUS Run 2 Det" plotname="ICARUSRun2 Dirt">{{ syst_icarus_r2_dirt_subchannel }}:1.0</systematic>
+    <systematic name="SCE_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 SCE" tag="ICARUS Run 2 Det" />
+    <systematic name="Smear_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun2Smear" tag="ICARUS Run 2 Det" />
+    <systematic name="BiasdEdx_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun2Bias" tag="ICARUS Run 2 Det" />
+    <systematic name="Gain_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun2Gain" tag="ICARUS Run 2 Det" />
+    <systematic name="Trigger_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun2 Trig Eff" tag="ICARUS Run 2 Det" />
+    <systematic name="WM-Xtheta_xw_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 XThetaXW" tag="ICARUS Run 2 Det" />
+    <systematic name="WM-YZ_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run2 YZ" tag="ICARUS Run 2 Det" />
+    <systematic name="z0_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 Trk Split Z=0" tag="ICARUS Run 2 Det" />
+    <systematic name="ECathode_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 Trk Split East Cathode" tag="ICARUS Run 2 Det" />
+    <systematic name="WCathode_icarus2"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r2_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 2 Trk Split West Cathode" tag="ICARUS Run 2 Det" />
+    <systematic type="spline" tag="POT" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="POT ICARUS Run2">multisigma_ICARUSRun2_POT</systematic>
+{%- endset %}
+
+{%# ===================== ICARUS Run 4 ===================== #%}
+{% set icarus_r4_systematics %}
+    <systematic type="norm" tag="ICARUS Run 4 Det" plotname="ICARUSRun4 Dirt">{{ syst_icarus_r4_dirt_subchannel }}:1.0</systematic>
+    <systematic name="SCE_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 SCE" tag="ICARUS Run 4 Det" />
+    <systematic name="Smear_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun4Smear" tag="ICARUS Run 4 Det" />
+    <systematic name="BiasdEdx_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUSRun4Bias" tag="ICARUS Run 4 Det" />
+    <systematic name="Gain_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun4Gain" tag="ICARUS Run 4 Det" />
+    <systematic name="Trigger_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="-1, 1" plotname="ICARUSRun4 Trig Eff" tag="ICARUS Run 4 Det" />
+    <systematic name="WM-Xtheta_xw_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 XThetaXW" tag="ICARUS Run 4 Det" />
+    <systematic name="WM-YZ_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run4 YZ" tag="ICARUS Run 4 Det" />
+    <systematic name="z0_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 Trk Split Z=0" tag="ICARUS Run 4 Det" />
+    <systematic name="ECathode_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 Trk Split East Cathode" tag="ICARUS Run 4 Det" />
+    <systematic name="WCathode_icarus4"{{ _detvar_smooth }} apply_to_subchannel="{{ syst_icarus_r4_det_subchannels }}" type="spline" xvar="var0" binning="var0" mirror="false" restrict="0, 1" plotname="ICARUS Run 4 Trk Split West Cathode" tag="ICARUS Run 4 Det" />
+    <systematic type="spline" tag="POT" apply_to_subchannel="{{ syst_xsec_subchannels }}" plotname="POT ICARUS Run4">multisigma_ICARUSRun4_POT</systematic>
+{%- endset %}

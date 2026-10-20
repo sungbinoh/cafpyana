@@ -55,6 +55,8 @@ import gumple_cuts as gmpl
 DEFAULT_OUTDIR = "rwt_outputs"
 DEFAULT_TREEOUTDIR = "rwt_outputs"
 DEFAULT_PLOTDIR = "rwt_output_plots"
+COUNTS_SUBDIR = "mc_counts"   # per-bin N_eff files, inside the map output directory
+TARGET_N = 1e4                # N_eff for 1% fractional MC stat uncertainty (1/sqrt(N))
 DEFAULT_DFDIR = "/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-22/"
 
 # [nu_E_calo edges, del_p edges].
@@ -62,10 +64,10 @@ DEFAULT_DFDIR = "/exp/sbnd/data/users/gputnam/GUMPLE/sbn-rewgted-22/"
 #          statistics of the 1p vs N>1p channels
 #   "2D" : production binning
 BINNINGS = {
-    "1D": [np.array([0.3, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.10, 1.25, 1.5]),
+    "1D": [np.array([0.3, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.10, 1.5]),
            np.array([-1000.0, 0.0, 1000.0])],
-    "2D": [np.array([0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.25, 1.5]),
-           np.array([0.0, 0.2, 0.4, 0.6])],
+    "2D": [np.array([0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.5]),
+           np.array([0.0, 0.3, 0.6])],
 }
 
 # Variations built directly from the (unmatched) CV dataframe: (name, function).
@@ -84,6 +86,9 @@ CV_DERIVED_VARIATIONS = [
     ("TrigEffMin",    lambda df: syst.v_flashscale(df, -1)),
 ]
 
+# The EMB systematics are only used for SBND (see "skip_variations" in DETECTOR_CONFIG).
+EMB_VARIATIONS = [name for name, _ in CV_DERIVED_VARIATIONS if name.startswith("EMB")]
+
 # --- sbruce tree settings ---
 SBRUCE_SUBDIR = "sbruce_trees"   # created inside the output directory
 DEFAULT_WEIGHT_COL = "cvwgt"
@@ -99,6 +104,7 @@ def _icarus_config(run, goal_pot):
         "cv": f"ICARUSRun{run}_SpringMCOverlay_rewgt_*.df",
         "trksplt_regions": ["Z=0", "East Cathode", "West Cathode"],
         "ratio_scales": {},
+        "skip_variations": EMB_VARIATIONS,  # EMB systematics are SBND-only
         "match_sets": [
             {
                 "cv": None,  # None -> use the main CV above
@@ -117,9 +123,10 @@ def _icarus_config(run, goal_pot):
 #   cv              : main CV sample
 #   trksplt_regions : track-splitting regions (ICARUS only)
 #   ratio_scales    : per-variation multiplier on (var - cv) in the maps, e.g. 2x smearing
+#   skip_variations : (optional) names from CV_DERIVED_VARIATIONS not to run for this detector
 #   match_sets      : groups of dedicated-sample variations, see module docstring.
-#                     Optional keys: "light" (lightmem load, default True) and
-#                     "binning" (override the --binning choice).
+#                     Optional key: "light" (lightmem load, default True).
+#                     All match sets use the --binning choice.
 DETECTOR_CONFIG = {
     "SBND": {
         "goal_pot": 1e20,
@@ -137,18 +144,13 @@ DETECTOR_CONFIG = {
                 ],
             },
             {
-                # The SBND SCE / DENT samples have their own nominal sample.
-                # 2xSCE / 0xSCE are the +/-1 sigma SCE variations; each is
-                # matched against Nom separately (one group each).
-                # Previously loaded with loaddf.load (no lightmem) and always
-                # binned in 2D regardless of --binning; both kept here.
-                "cv": ["SBND_SpringMC_Nom.df"],
-                "light": False,
-                "binning": "2D",
+                # The SBND DENT samples have their own nominal samples (Nom + Nom2),
+                # loaded together as one CV; the two DENT files likewise form one
+                # variation. Multi-file loads need the lightmem loader (the
+                # default), since loaddf.load takes exactly one file.
+                "cv": ["SBND_SpringMC_Nom.df", "SBND_SpringMC_Nom2.df"],
                 "groups": [
-                    {"2xSCE": ["SBND_SpringMC_2xSCE.df"]},
-                    {"0xSCE": ["SBND_SpringMC_0xSCE.df"]},
-                    {"DENT":  ["SBND_SpringMC_DENT.df"]},
+                    {"DENT": ["SBND_SpringMC_DENT.df", "SBND_SpringMC_DENT2.df"]},
                 ],
             },
         ],
@@ -255,12 +257,70 @@ def plot_del_p_slices(filename, plot_title, output_tag, plotdir=DEFAULT_PLOTDIR)
     plt.close(fig)
 
 
+def load_counts(filename):
+    """N_eff grids saved by _Outputs.compare for the map `filename`.
+    Returns (x_edges, y_edges, var_neff, cv_neff), or None if they don't exist."""
+    tag = os.path.splitext(os.path.basename(filename))[0]
+    counts_dir = os.path.join(os.path.dirname(filename), COUNTS_SUBDIR)
+    var_f = os.path.join(counts_dir, f"{tag}_var.txt")
+    cv_f = os.path.join(counts_dir, f"{tag}_cv.txt")
+    if not (os.path.exists(var_f) and os.path.exists(cv_f)):
+        return None
+    x_edges, y_edges, var_neff = read_map_file(var_f)
+    _, _, cv_neff = read_map_file(cv_f)
+    return x_edges, y_edges, var_neff, cv_neff
+
+
+def plot_del_p_slice_counts(filename, plot_title, output_tag, plotdir=DEFAULT_PLOTDIR):
+    """N_eff vs E_calo, one colour per del_p slice (solid: variation, dashed: CV)."""
+    loaded = load_counts(filename)
+    if loaded is None:
+        print(f"[{output_tag}] no saved counts found, skipping counts plot")
+        return
+    x_edges, y_edges, var_neff, cv_neff = loaded
+    x_centers = 0.5 * (x_edges[:-1] + x_edges[1:])
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for iy in range(len(y_edges) - 1):
+        label = rf"$\delta p \in [{y_edges[iy]:.1f}, {y_edges[iy+1]:.1f}]$ GeV/c"
+        (line,) = ax.plot(x_centers, var_neff[:, iy], marker="o", markersize=4, label=label)
+        ax.plot(x_centers, cv_neff[:, iy], color=line.get_color(), linestyle="--",
+                marker="s", markersize=3, alpha=0.7)
+
+    ax.axhline(TARGET_N, color="red", linestyle=":", linewidth=1,
+               label=rf"$N_{{eff}} = {TARGET_N:.0f}$ ({100/np.sqrt(TARGET_N):.1f}% MC stat)")
+    ax.set_yscale("log")
+    ax.set_xlabel(r"Reconstructed Energy $E_{calo}$ [GeV]")
+    ax.set_ylabel(r"$N_{eff}$ per bin (solid: variation, dashed: CV)")
+    ax.set_title(plot_title)
+    ax.legend()
+    ax.grid(True, alpha=0.3, which="both")
+
+    secax = ax.secondary_yaxis(
+        "right",
+        functions=(lambda n: 1.0 / np.sqrt(np.maximum(n, 1e-12)),
+                   lambda f: 1.0 / np.maximum(f, 1e-12) ** 2),
+    )
+    secax.set_ylabel(r"Fractional MC stat. uncertainty $1/\sqrt{N_{eff}}$")
+
+    os.makedirs(plotdir, exist_ok=True)
+    fig.savefig(os.path.join(plotdir, f"slice_counts_{output_tag}.png"),
+                dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    limiting = np.minimum(var_neff, cv_neff)  # the ratio is limited by the worse of the two
+    n_low = int(np.sum(limiting < TARGET_N))
+    print(f"[{output_tag}] {n_low}/{limiting.size} bins have N_eff < {TARGET_N:.0f}; "
+          f"min N_eff = {limiting.min():.0f}")
+
+
 def plot_map(filename, plotdir=DEFAULT_PLOTDIR):
-    """Make the 2D map and del_p-slice debug plots for one saved map file."""
+    """Make the 2D map, del_p-slice and N_eff debug plots for one saved map file."""
     tag = os.path.splitext(os.path.basename(filename))[0]
     title = tag.replace("_", " ")
     plot_2d_hist_from_file(filename, title, tag, plotdir)
     plot_del_p_slices(filename, title + r" -- $\delta p$ slices", tag, plotdir)
+    plot_del_p_slice_counts(filename, title + r" -- $N_{eff}$ per $\delta p$ slice", tag, plotdir)
 
 
 # ---------------------------------------------------------------------------
@@ -380,16 +440,13 @@ def load_sample(files, detector, light=True, **kwargs):
     "spill_LM875C", "spill_THCURR", "spill_FOM",
 
     # Early cuts and PFP counts
-    "cut_contained", "cut_cathode",
-    "n_pfp_no_calo", "n_shower", "n_other", "has_muon",
-    "cut_np", "cut_0shwother",
+    "n_pfp_no_calo", "n_shower", "n_other",
+    "cut_0shwother",
 
     # Momentum sum
-    "psum_p", "psum_ke", "psum_E",
-    "psum_dir_x", "psum_dir_y", "psum_dir_z",
+    "psum_p", "psum_ke"
 
     # Muon candidate (reco)
-    "mu_dist_start", "mu_prim_pfp", "mu_contained10",
     "mu_true_p", "mu_true_pdg",
     "true_mucand_p",  # NOTE: likely a typo of "true_mucand_p" below
 
@@ -431,6 +488,16 @@ def ratio_hist(var_hist, cv_hist, scale=1.0):
                      out=np.full(cv_hist.shape, np.nan), where=cv_hist > 0)
 
 
+def neff_hist(selected_df, bins):
+    """Effective event count (sum w)^2 / sum w^2 per (nu_E_calo, del_p) bin."""
+    x = selected_df.nu_E_calo.to_numpy()
+    y = selected_df.del_p.to_numpy()
+    w = selected_df.glob_scale.to_numpy()
+    sumw = np.histogram2d(x, y, bins=bins, weights=w)[0]
+    sumw2 = np.histogram2d(x, y, bins=bins, weights=w**2)[0]
+    return np.divide(sumw**2, sumw2, out=np.zeros_like(sumw), where=sumw2 > 0)
+
+
 # ---------------------------------------------------------------------------
 # Processing
 # ---------------------------------------------------------------------------
@@ -460,6 +527,7 @@ class _Outputs:
 
         cv_sel = cv_df.loc[self.selection(cv_df)]
         cv_hist = hist2d(cv_sel, bins) if self.write_maps else None
+        cv_neff = neff_hist(cv_sel, bins) if self.write_maps else None
         if self.tree_writer is not None:
             self.tree_writer(cv_sel, self._name(cv_tree_name))
         del cv_sel
@@ -469,6 +537,15 @@ class _Outputs:
             if self.write_maps:
                 path = os.path.join(self.outdir, f"{self._name(name)}.txt")
                 save_histogram(path, ratio_hist(hist2d(var_sel, bins), cv_hist, scale), bins[0], bins[1])
+
+                # N_eff of the variation and of the CV it was compared to
+                counts_dir = os.path.join(self.outdir, COUNTS_SUBDIR)
+                os.makedirs(counts_dir, exist_ok=True)
+                save_histogram(os.path.join(counts_dir, f"{self._name(name)}_var.txt"),
+                               neff_hist(var_sel, bins), bins[0], bins[1])
+                save_histogram(os.path.join(counts_dir, f"{self._name(name)}_cv.txt"),
+                               cv_neff, bins[0], bins[1])
+
                 if self.plotdir is not None:
                     plot_map(path, self.plotdir)
             if self.tree_writer is not None:
@@ -479,7 +556,6 @@ class _Outputs:
 def _run_match_set(match_set, main_cv, detector, df_dir, goal_pot, out, max_workers=None):
     """Process one match set, matching each group to its own copy of the CV."""
     light = match_set.get("light", True)
-    bins = BINNINGS[match_set["binning"]] if match_set.get("binning") else None
 
     if match_set["cv"] is None:
         cv_df, cv_match, cv_pot = main_cv
@@ -523,7 +599,7 @@ def _run_match_set(match_set, main_cv, detector, df_dir, goal_pot, out, max_work
                 loaddf.scale_pot(d, p, goal_pot)
 
             cv_tree_name = "_".join(_clean_name(n) for n in names) + "Nominal"
-            out.compare(dfs[0], [(n, d, 1.0) for n, d in zip(names, dfs[1:])], cv_tree_name, bins)
+            out.compare(dfs[0], [(n, d, 1.0) for n, d in zip(names, dfs[1:])], cv_tree_name)
             del dfs
 
 
@@ -591,7 +667,10 @@ def remake_detvar_maps(detector, df_dir, selection=gmpl.all_gump_cuts, binning="
                     future = pool.submit(disk_tasks[i + 1])
                 yield name, df, scale
 
+        skip = set(cfg.get("skip_variations", []))
         for name, make_variation in CV_DERIVED_VARIATIONS:
+            if name in skip:
+                continue
             yield name, make_variation(cv_df), cfg["ratio_scales"].get(name, 1.0)
 
     out.compare(cv_df, unmatched_variations(), UNMATCHED_CV_TREE_NAME)
