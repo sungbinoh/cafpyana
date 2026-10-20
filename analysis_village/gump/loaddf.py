@@ -766,7 +766,7 @@ def load_one(fname, idf,
     preselection=None, # apply preselection cut
     shift_binding_E=False, split_tracks=None, # variations applied to the output df (see _apply_variations)
     shift_fraction=None, split_fraction=None, # fraction of events each variation is applied to (None -> BE_FRACTION / SPLIT_FRAC)
-    cache_dir=CACHE_WITH_INPUT, # directory to cache output; default is alongside the input .df, None disables caching
+    cache_dir=None, # directory to cache output; default is alongside the input .df, None disables caching
     flashname=FLASH, hdrname=HDR, evtname=EVT, wgtname=WGT, mcname=MC, crtname=CRT, evtrecname=EVTREC, drops=None, lightmem=False): # override default table names
     assert(detector == "SBND" or detector == "ICARUS Run2" or detector == "ICARUS Run4")
 
