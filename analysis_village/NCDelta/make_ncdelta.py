@@ -52,27 +52,32 @@ def fetch_metadata(f):
 # loading, and "most hits" tracks wire angle rather than measurement quality.
 TRK_CALO_PLANE = 2
 
+def _good_hits(hitdf, dedxname="dedx"):
+    """Hits with a physical dE/dx. 1000 is a MeV/cm bound, not a conversion."""
+    return (hitdf[dedxname] > 0) & (hitdf[dedxname] < 1000.)
+
+
 def calo_energy(hitdf, dedxname="dedx"):
     """Per-track sum of dE/dx * pitch [GeV].
 
-    dE/dx stays MeV/cm (the universal convention for it), so the sum is MeV
-    and is scaled here to match the GeV energies everywhere else.
+    dE/dx stays MeV/cm (the convention for it), so the sum is MeV and is
+    scaled here to match the GeV energies everywhere else.
 
-    Every hit is summed. A previous version dropped hits with dE/dx <= 0 or
-    >= 1000 MeV/cm, which quietly produced a plausible-looking track energy
-    out of a track with unusable calorimetry; a bad hit now shows up in
-    trk_calo_E instead. Their prevalence is reported below so the filter is
-    not silently reintroduced.
+    Hits with unphysical dE/dx are dropped. Only the sum is stored, so a bad
+    hit cannot be removed afterwards -- one hit at 24 GeV/cm turns a 183 MeV
+    track into 9.96 GeV, and no post-hoc cut recovers the real value. The
+    count is printed so the filter is not silent.
     """
     dedx = hitdf[dedxname]
+    good = _good_hits(hitdf, dedxname)
     n = len(dedx)
     if n:
-        bad = int(((dedx <= 0) | (dedx >= 1000.)).sum())   # 1000 MeV/cm, a bound not a conversion
+        bad = int((~good & dedx.notna()).sum())
         nan = int(dedx.isna().sum())
         if bad or nan:
-            print("  calo hits with unphysical dE/dx: %d of %d (%.2f%%); NaN: %d"
+            print("  calo hits dropped, unphysical dE/dx: %d of %d (%.2f%%); NaN: %d"
                   % (bad, n, 100. * bad / n, nan))
-    e = dedx * hitdf.pitch
+    e = (dedx * hitdf.pitch)[good]
     # sum is MeV (MeV/cm * cm); / 1000 converts MeV -> GeV
     return e.groupby(level=list(range(e.index.nlevels - 1))).sum() / 1000.
 
@@ -174,9 +179,37 @@ def _truth_columns(t):
 # GeV values, MeV column labels (true_ngamma_20MeV reads better than _0.02GeV).
 GAMMA_THRESHOLDS = (0.020, 0.100)   # GeV
 
-PHOTON_TRUTH_COLS = (["true_leading_gamma_E"]
-                     + ["true_ngamma_%dMeV" % (1000. * t)        # GeV -> MeV, label only
-                        for t in GAMMA_THRESHOLDS])
+# GeV -> MeV in the names, label only
+PHOTON_COUNT_COLS = ["true_ngamma_%dMeV" % (1000. * t) for t in GAMMA_THRESHOLDS]
+PHOTON_TRUTH_COLS = ["true_leading_gamma_E"] + PHOTON_COUNT_COLS
+
+# Counters that mean zero, not "unknown", when the interaction exists.
+# true_npi0 comes from the CAF already zero-filled, so it is a no-op today;
+# listed so a future CAF change cannot reintroduce the NaN quietly.
+COUNT_COLS = PHOTON_COUNT_COLS + ["true_pi0_ngamma", "true_npi0"]
+
+
+def _branch(f, prefix, leaf):
+    """loadbranches(prefix.leaf) with the prefix levels walked off."""
+    b = loadbranches(f["recTree"], [prefix + "." + leaf])
+    for lvl in prefix.split("."):
+        b = b[lvl]
+    return b
+
+
+def _counts_to_zero(T, cols=None):
+    """NaN -> 0 in count columns, but only where the interaction exists.
+
+    The photon and pi0 summaries group a filtered series, so an interaction
+    with nothing to count gets no row at all and reindexes to NaN. Zero is the
+    right answer there. Rows with no interaction (cosmic slices) keep NaN,
+    matching the CAF's own counters. Columns absent from `T` are skipped.
+    """
+    exists = T.true_E.notna()
+    for c in (COUNT_COLS if cols is None else cols):
+        if c in T.columns:
+            T.loc[exists, c] = T.loc[exists, c].fillna(0.)
+    return T
 
 
 def _primary_photon_truth(f, prefix):
@@ -198,19 +231,10 @@ def _primary_photon_truth(f, prefix):
 def _resnum(f, prefix):
     """GENIE resonance number per interaction; 0 is the Delta(1232).
 
-    See GENIE BaryonResonance.h (kP33_1232 = 0) and sbnanaobj
-    SRTrueInteraction.h ("resnum: Resonance number, straight from GENIE").
     genie_mode == kRes alone does not pick out the Delta: it is any resonance.
+    Ref: GENIE BaryonResonance.h, sbnanaobj SRTrueInteraction.h.
     """
-    try:
-        r = loadbranches(f["recTree"], [prefix + ".resnum"])
-        for lvl in prefix.split("."):
-            r = r[lvl]
-        return r.resnum.groupby(level=SLC_LEVELS).first().rename("true_resnum")
-    except Exception as e:
-        print("Warning: no %s.resnum (%s); true_resnum will be NaN."
-              % (prefix, type(e).__name__))
-        return None
+    return _branch(f, prefix, "resnum").resnum.rename("true_resnum")
 
 
 # ---------------------------------------------------------------------------
@@ -286,16 +310,10 @@ def _pi0_photon_summary(flat, entry):
 def _pi0_photon_truth(f, index):
     """Per-slice summary of the pi0 decay photons in the matched interaction.
 
-    Returns a DataFrame reindexed onto `index`; all-NaN if the CAF does not
-    carry the needed collections.
+    Returns a DataFrame reindexed onto `index`, all-NaN if the file holds no
+    pi0 at all.
     """
-    empty = pd.DataFrame(np.nan, index=index, columns=PI0_TRUTH_COLS)
-    try:
-        tp = loadbranches(f["recTree"], trueparticlebranches).rec.true_particles
-    except Exception as e:
-        print("Warning: could not load true_particles (%s); pi0 photon truth "
-              "columns will be NaN." % type(e).__name__)
-        return empty
+    tp = loadbranches(f["recTree"], trueparticlebranches).rec.true_particles
 
     flat = pd.DataFrame({
         "pdg": tp.pdg, "G4ID": tp.G4ID, "parent": tp.parent,
@@ -313,19 +331,12 @@ def _pi0_photon_truth(f, index):
     entry = flat.columns[0]
 
     out = _pi0_photon_summary(flat, entry)
-    if out is None:
-        return empty
+    if out is None:                      # no pi0 in this file
+        return pd.DataFrame(np.nan, index=index, columns=PI0_TRUTH_COLS)
 
-    try:
-        sid = loadbranches(f["recTree"], ["rec.slc.truth.prim.interaction_id"])
-        sid = sid.rec.slc.truth.prim.interaction_id
-        sid = sid.groupby(level=SLC_LEVELS).first().rename("iid")
-    except Exception as e:
-        print("Warning: no rec.slc.truth.prim.interaction_id (%s); pi0 photon "
-              "truth cannot be matched to slices." % type(e).__name__)
-        return empty
-
-    sid = sid.reset_index()
+    sid = loadbranches(f["recTree"], ["rec.slc.truth.prim.interaction_id"])
+    sid = sid.rec.slc.truth.prim.interaction_id
+    sid = sid.groupby(level=SLC_LEVELS).first().rename("iid").reset_index()
     idx_names = list(sid.columns[:2])
     joined = sid.merge(out.reset_index().rename(columns={"pi0_iid": "iid"}),
                        left_on=[sid.columns[0], "iid"], right_on=[entry, "iid"],
@@ -456,11 +467,11 @@ def make_ncdelta_slcdf(f, apply_preselection=True, include_truth=None):
     if include_truth:
         T = _truth_columns(slcdf.slc.truth).reindex(D.index)
         T = T.join(_primary_photon_truth(f, "rec.slc.truth").reindex(D.index))
-        rn = _resnum(f, "rec.slc.truth")
-        T["true_resnum"] = np.nan if rn is None else rn.reindex(D.index)
+        T["true_resnum"] = _resnum(f, "rec.slc.truth").reindex(D.index)
         D = D.join(T)
         # pi0 decay-photon truth, for studying the missed second shower
         D = D.join(_pi0_photon_truth(f, D.index))
+        D = _counts_to_zero(D)
     else:
         D = D.drop(columns=[c for c in D.columns if "true_" in c])
 
@@ -490,9 +501,8 @@ def make_ncdelta_slcdf_data_nopresel(f):
 def make_ncdelta_nudf(f):
     DETECTOR, RUN, ismc = fetch_metadata(f)
     N = _truth_columns(make_mcdf(f))
-    N = N.join(_primary_photon_truth(f, "rec.mc.nu").reindex(N.index))
-    rn = _resnum(f, "rec.mc.nu")
-    N["true_resnum"] = np.nan if rn is None else rn.reindex(N.index)
+    N = _counts_to_zero(N.join(_primary_photon_truth(f, "rec.mc.nu").reindex(N.index)))
+    N["true_resnum"] = _resnum(f, "rec.mc.nu").reindex(N.index)
     N["detector"] = DETECTOR
     N["Run"] = RUN
     return N

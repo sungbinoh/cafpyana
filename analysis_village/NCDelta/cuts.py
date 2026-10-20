@@ -635,7 +635,8 @@ GENIE_MODE_COH = 3
 RESNUM_NO_RESONANCE = -1
 RESNUM_DELTA_1232 = 0      # kP33_1232
 RESNUM = {
-    -1: "none",
+    -999: "no res (unmatched slice)",   # CAF sentinel: no truth interaction
+    -1: "none",                         # kNoResonance: not resonant production
     0:  "P33(1232)",   1:  "S11(1535)",   2:  "D13(1520)",   3:  "S11(1650)",
     4:  "D13(1700)",   5:  "D15(1675)",   6:  "S31(1620)",   7:  "D33(1700)",
     8:  "P11(1440)",   9:  "P33(1600)",   10: "P13(1720)",   11: "F15(1680)",
