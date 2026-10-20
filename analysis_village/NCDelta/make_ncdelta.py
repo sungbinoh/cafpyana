@@ -12,6 +12,7 @@ from makedf.makedf import (
     loadbranches, make_slcdf, make_pfpdf, make_trkhitdf, make_mcdf,
     make_hdrdf, make_potdf_bnb, barycenterFMbranches,
 )
+from makedf.branches import trueparticlebranches
 from makedf.util import mag
 
 from analysis_village.NCDelta import cuts
@@ -167,6 +168,144 @@ def _leading_photon_E(f, prefix):
 
 
 # ---------------------------------------------------------------------------
+# pi0 decay-photon truth
+# ---------------------------------------------------------------------------
+# The dominant background is NC 1pi0 in which only one of the two decay photons
+# is reconstructed. Those photons are GEANT4 secondaries, so they appear in
+# neither true_ngamma nor true_leading_gamma_E (both count GENIE primaries, and
+# the pi0 is itself the primary). The columns below describe them, so the
+# failure mode can be identified per event:
+#
+#   escaped        gamma2_contained == 0, or conv_dist running out of the TPC
+#   too soft       gamma2_E below the clustering threshold
+#   merged         small opening_angle and small gamma_sep
+#   not reco'd     real gamma2_visE inside the TPC but no second shower PFP
+#
+# Only the last two are addressable by reconstruction work; the first two are
+# physics. All energies MeV, lengths cm, angles rad.
+
+PI0_PDG = 111
+PHOTON_PDG = 22
+
+
+def _tp_visE(tp):
+    """Collection-plane visible energy per true particle [MeV], or NaN.
+
+    The branch is rec.true_particles.plane.<cryo>.2.visE; the sub-level naming
+    differs between uproot/awkward versions, so fall back rather than fail.
+    """
+    for cryo in ("0", 0):
+        try:
+            return tp.plane[cryo][2].visE * 1000.
+        except Exception:
+            pass
+    try:
+        cols = [c for c in tp.columns if "visE" in [str(x) for x in c]]
+        if cols:
+            return tp[cols[0]] * 1000.
+    except Exception:
+        pass
+    return None
+
+
+PI0_TRUTH_COLS = ["true_pi0_ngamma", "true_pi0_gamma1_E", "true_pi0_gamma2_E",
+                  "true_pi0_gamma2_visE", "true_pi0_gamma2_contained",
+                  "true_pi0_gamma2_conv_dist", "true_pi0_gamma_sep",
+                  "true_pi0_opening_angle"]
+
+
+def _pi0_photon_summary(flat, entry):
+    """Per-(entry, interaction) pi0 photon summary from a flat particle table.
+
+    `flat` has one row per true particle with columns pdg, G4ID, parent, genE,
+    cont_tpc, visE, s{x,y,z} (production), e{x,y,z} (conversion/stop),
+    p{x,y,z} (momentum) and iid (interaction id). Split out from the CAF
+    loading so it can be unit-tested without a CAF.
+    """
+    pi0 = flat[flat.pdg == PI0_PDG][[entry, "G4ID", "iid", "genE"]]
+    gam = flat[flat.pdg == PHOTON_PDG]
+    if pi0.empty or gam.empty:
+        return None
+
+    g = gam.merge(pi0.rename(columns={"G4ID": "parent", "iid": "pi0_iid",
+                                      "genE": "pi0_E"}),
+                  on=[entry, "parent"], how="inner")
+    if g.empty:
+        return None
+
+    key = [entry, "pi0_iid"]
+    # most energetic pi0 per interaction, then its photons by energy
+    g = g.sort_values(key + ["pi0_E", "genE"], ascending=[True, True, False, False])
+    g = g[g.parent == g.groupby(key).parent.transform("first")]
+    g["rank"] = g.groupby(key + ["parent"]).cumcount()
+
+    g1 = g[g["rank"] == 0].set_index(key)
+    g2 = g[g["rank"] == 1].set_index(key)
+
+    out = pd.DataFrame({"true_pi0_ngamma": g.groupby(key).size()})
+    out["true_pi0_gamma1_E"] = g1.genE
+    out["true_pi0_gamma2_E"] = g2.genE
+    out["true_pi0_gamma2_visE"] = g2.visE
+    out["true_pi0_gamma2_contained"] = g2.cont_tpc
+    out["true_pi0_gamma2_conv_dist"] = mag(g2.ex - g2.sx, g2.ey - g2.sy, g2.ez - g2.sz)
+    out["true_pi0_gamma_sep"] = mag(g1.ex - g2.ex, g1.ey - g2.ey, g1.ez - g2.ez)
+    d1 = mag(g1.px, g1.py, g1.pz)
+    d2 = mag(g2.px, g2.py, g2.pz)
+    cosang = (g1.px * g2.px + g1.py * g2.py + g1.pz * g2.pz) / (d1 * d2)
+    out["true_pi0_opening_angle"] = np.arccos(np.clip(cosang, -1., 1.))
+    return out
+
+
+def _pi0_photon_truth(f, index):
+    """Per-slice summary of the pi0 decay photons in the matched interaction.
+
+    Returns a DataFrame reindexed onto `index`; all-NaN if the CAF does not
+    carry the needed collections.
+    """
+    empty = pd.DataFrame(np.nan, index=index, columns=PI0_TRUTH_COLS)
+    try:
+        tp = loadbranches(f["recTree"], trueparticlebranches).rec.true_particles
+    except Exception as e:
+        print("Warning: could not load true_particles (%s); pi0 photon truth "
+              "columns will be NaN." % type(e).__name__)
+        return empty
+
+    visE = _tp_visE(tp)
+    flat = pd.DataFrame({
+        "pdg": tp.pdg, "G4ID": tp.G4ID, "parent": tp.parent,
+        "genE": tp.genE * 1000.,
+        "cont_tpc": tp.cont_tpc,
+        "sx": tp.start.x, "sy": tp.start.y, "sz": tp.start.z,
+        "ex": tp.end.x, "ey": tp.end.y, "ez": tp.end.z,
+        "px": tp.genp.x, "py": tp.genp.y, "pz": tp.genp.z,
+        "iid": tp.interaction_id,
+    })
+    flat["visE"] = np.nan if visE is None else visE
+    flat = flat.reset_index()
+    entry = flat.columns[0]
+
+    out = _pi0_photon_summary(flat, entry)
+    if out is None:
+        return empty
+
+    try:
+        sid = loadbranches(f["recTree"], ["rec.slc.truth.prim.interaction_id"])
+        sid = sid.rec.slc.truth.prim.interaction_id
+        sid = sid.groupby(level=SLC_LEVELS).first().rename("iid")
+    except Exception as e:
+        print("Warning: no rec.slc.truth.prim.interaction_id (%s); pi0 photon "
+              "truth cannot be matched to slices." % type(e).__name__)
+        return empty
+
+    sid = sid.reset_index()
+    idx_names = list(sid.columns[:2])
+    joined = sid.merge(out.reset_index().rename(columns={"pi0_iid": "iid"}),
+                       left_on=[sid.columns[0], "iid"], right_on=[entry, "iid"],
+                       how="left").set_index(idx_names)
+    return joined.reindex(index)[PI0_TRUTH_COLS]
+
+
+# ---------------------------------------------------------------------------
 # Slice dataframe
 # ---------------------------------------------------------------------------
 
@@ -291,6 +430,8 @@ def make_ncdelta_slcdf(f, apply_preselection=True, include_truth=None):
         T = _truth_columns(slcdf.slc.truth).reindex(D.index)
         T["true_leading_gamma_E"] = _leading_photon_E(f, "rec.slc.truth").reindex(D.index)
         D = D.join(T)
+        # pi0 decay-photon truth, for studying the missed second shower
+        D = D.join(_pi0_photon_truth(f, D.index))
     else:
         D = D.drop(columns=[c for c in D.columns if "true_" in c])
 
