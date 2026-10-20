@@ -16,7 +16,7 @@ The energy and mass plots have three stages:
   dataframe     every slice in the .df (already topology + pre-selection
                 for ncdelta_mc.py; all non-clear-cosmic slices for
                 ncdelta_mc_nopresel.py)
-  preselection  topology + the fiducial volume, which is all the
+  preselection  topology + the fiducial volume and clear-cosmic veto, all the
                 pre-selection now is (see cuts.py)
   selection     full selection
 
@@ -65,7 +65,7 @@ from dfio import expand_inputs, load   # noqa: E402
 
 DEFAULT_INPUT = "/pnfs/sbnd/scratch/users/nrowe/cafpyana_out/dfs/2026_10_17_164529__ncdelta.df/"
 
-DELTA_MASS = 1232.0  # MeV, PDG Delta(1232)
+DELTA_MASS = 1.232  # GeV, PDG Delta(1232)
 COSMIC = 7
 SIGNAL = 0
 COLORS = {
@@ -90,7 +90,7 @@ STAGE_TITLES = {
 # ---------------------------------------------------------------------------
 
 def visible_energy(df):
-    """Shower energy plus proton KE from range [MeV]; shower only without a track."""
+    """Shower energy plus proton KE from range [GeV]; shower only without a track."""
     return cuts.shw_energy_corrected(df) + df.trk_ke_p.where(df.n_trk > 0, 0.).fillna(0.)
 
 
@@ -119,10 +119,6 @@ def cut_var_specs(topo, C=None):
                                       range=(-10, 100), label="Track min distance to wall [cm]",
                                       cuts=[C["trk_dist_min"]], keep="above")
         if C.get("trk_dedx_min") is not None:
-            s["trk_dedx"] = dict(var=lambda d: d.trk_dedx_trunc, range=(0, 15),
-                                 label="Track truncated-mean dE/dx [MeV/cm]",
-                                 cuts=[C["trk_dedx_min"]], keep="above")
-        if C.get("abs_cos_trk_shw_max") is not None:
             s["trk_shw_angle"] = dict(var=lambda d: d.cos_trk_shw_implied, range=(-1, 1),
                                       label=r"cos$\theta$(track, vertex$\to$shower)",
                                       cuts=[-C["abs_cos_trk_shw_max"], C["abs_cos_trk_shw_max"]],
@@ -132,12 +128,12 @@ def cut_var_specs(topo, C=None):
                                       label="Shower start distance to wall [cm]",
                                       cuts=[C["shw_start_dist_min"]], keep="above")
         if C.get("trk_ke_max") is not None:
-            s["trk_ke"] = dict(var=lambda d: d.trk_ke_p, range=(0, 1000),
-                               label="Proton KE from range [MeV]",
+            s["trk_ke"] = dict(var=lambda d: d.trk_ke_p, range=(0, 1.0),
+                               label="Proton KE from range [GeV]",
                                cuts=[C["trk_ke_max"]], keep="below")
         if C.get("trk_calo_E_max") is not None:
-            s["trk_calo_E"] = dict(var=lambda d: d.trk_calo_E, range=(0, 1000),
-                                   label="Track calorimetric energy [MeV]",
+            s["trk_calo_E"] = dict(var=lambda d: d.trk_calo_E, range=(0, 1.0),
+                                   label="Track calorimetric energy [GeV]",
                                    cuts=[C["trk_calo_E_max"]], keep="below")
     else:
         if C.get("shw_start_dist_min") is not None:
@@ -199,8 +195,8 @@ def cut_var_specs(topo, C=None):
                                   cuts=[C["n_nonprim_shw_max"] + 0.5], keep="below",
                                   cut_labels=[r"$\leq$ %d" % C["n_nonprim_shw_max"]])
     if C.get("delta_mass_range") is not None:
-        s["delta_mass"] = dict(var=lambda d: d.delta_mass, range=(900, 2000),
-                               label="Proton + photon invariant mass [MeV]",
+        s["delta_mass"] = dict(var=lambda d: d.delta_mass, range=(0.9, 2.0),
+                               label="Proton + photon invariant mass [GeV]",
                                cuts=list(C["delta_mass_range"]), keep="between")
     if C.get("trk_proton_like"):
         s["trk_proton_like"] = dict(var=lambda d: d.trk_chi2_proton - d.trk_chi2_muon, range=(-100, 100),
@@ -214,10 +210,10 @@ def cut_var_specs(topo, C=None):
                              label="Track PIDA [MeV/cm$^{1.42}$]",
                              cuts=[C["trk_pida_max"]], keep="below")
 
-    s["energy_window"] = dict(var=lambda d: cuts.shw_energy_corrected(d), range=(0, 1200),
-                              label="Shower energy, scaled best plane (signal window) [MeV]",
+    s["energy_window"] = dict(var=lambda d: cuts.shw_energy_corrected(d), range=(0, 1.2),
+                              label="Shower energy, scaled best plane (signal window) [GeV]",
                               cuts=[lo_E, hi_E], keep="between",
-                              cut_labels=[r"$\geq$ %g MeV" % lo_E, "< %g MeV" % hi_E])
+                              cut_labels=[r"$\geq$ %g GeV" % lo_E, "< %g GeV" % hi_E])
     return s
 
 
@@ -423,7 +419,7 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
     true_bins = np.linspace(0., args.emax, args.nbins + 1)
     reco_bins = np.linspace(0., args.recoemax, args.nbins + 1)
-    mass_bins = np.arange(900., 2000. + 1e-6, 25.)
+    mass_bins = np.arange(0.900, 2.000 + 1e-9, 0.025)   # GeV
 
     for topo in cuts.TOPOLOGIES:
         cfg = cuts.selection_config(args.selection, topo)
@@ -434,14 +430,14 @@ def main():
             d = df[m]
             stages[name] = (d, w[m], cuts.truth_category(d))
 
-        three_stage_figure(stages, topo, lambda d: d.true_E / 1000., true_bins,
+        three_stage_figure(stages, topo, lambda d: d.true_E, true_bins,
                            "True neutrino energy [GeV]", ylabel,
                            os.path.join(args.outdir, "composition_trueE_%s.png" % topo),
                            include_cosmic=False, logy=args.logy)
 
         reco_label = (r"Reconstructed visible energy $E_\gamma + T_p$ [GeV]" if topo == "1g1p"
                       else r"Reconstructed visible energy $E_\gamma$ [GeV]")
-        three_stage_figure(stages, topo, lambda d: visible_energy(d) / 1000., reco_bins,
+        three_stage_figure(stages, topo, lambda d: visible_energy(d), reco_bins,
                            reco_label, ylabel,
                            os.path.join(args.outdir, "composition_recoE_%s.png" % topo),
                            logy=args.logy)
@@ -450,7 +446,7 @@ def main():
             # Needs a proton candidate, so only the 1g1p stages are drawn.
             mass_stages = {k: v for k, v in stages.items() if k != "dataframe"}
             three_stage_figure(mass_stages, topo, lambda d: d.delta_mass, mass_bins,
-                               r"Proton + photon invariant mass $M_{p\gamma}$ [MeV]", ylabel,
+                               r"Proton + photon invariant mass $M_{p\gamma}$ [GeV]", ylabel,
                                os.path.join(args.outdir, "invmass_%s.png" % topo),
                                logy=args.logy, vline=(DELTA_MASS, r"$\Delta(1232)$"))
 

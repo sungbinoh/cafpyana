@@ -40,7 +40,10 @@ directly from Python instead of the CLI: loading the data is the slow part.
   one shower and no tracks. Each slice is in at most one channel.
 - **Dominant background:** NC π⁰ where only one photon is reconstructed.
   The other photon escapes, is too soft, merges with the first, or converts in a dead region.
-- **Units:** energies in MeV, lengths in cm.
+- **Units:** reconstructed energies in MeV, lengths in cm. GENIE truth
+  kinematics (`true_E`, `true_w`) are **GeV**, as in the CAF; per-particle
+  truth energies (`*_true_startE`, `true_leading_gamma_E`, `true_pi0_*`) are
+  MeV. See the units note in `make_ncdelta.py`.
 - One row per slice. `shw_*` columns describe the leading primary shower and
   `trk_*` the leading primary track; NaN means none. `n_shw`, `n_trk` count
   primary showers and tracks; `n_nonprim_shw` counts non-primary showers.

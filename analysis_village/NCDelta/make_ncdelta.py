@@ -17,7 +17,7 @@ from makedf.util import mag
 
 from analysis_village.NCDelta import cuts
 
-PROTON_MASS = 938.272  # MeV
+PROTON_MASS = 0.938272  # GeV
 SLC_LEVELS = [0, 1]    # (entry, rec.slc..index)
 
 
@@ -45,32 +45,36 @@ def fetch_metadata(f):
 
 
 # ---------------------------------------------------------------------------
-# Track calorimetry from collection-plane hits
+# Track calorimetry from collection-plane (I2) hits
 # ---------------------------------------------------------------------------
-
-def _good_hits(hitdf, dedxname="dedx"):
-    return (hitdf[dedxname] > 0) & (hitdf[dedxname] < 1000.)
-
-
-def truncated_mean_dedx(hitdf, nsigma=1.0, dedxname="dedx"):
-    """Mean dE/dx of hits within nsigma RMS of the track median.
-
-    Single-pass version of LArSoft's TruncMean (MicroBooNE iterates).
-    """
-    d = hitdf.loc[_good_hits(hitdf, dedxname), dedxname]
-    lv = list(range(d.index.nlevels - 1))
-    g = d.groupby(level=lv)
-    med = g.transform("median")
-    rms = g.transform("std").fillna(0.)  # one-hit tracks keep their hit
-    keep = (d - med).abs() <= nsigma * rms
-    return d[keep].groupby(level=lv).mean()
-
+# I2 deliberately, not make_trkhitdf()'s default: best S/N, and it matches the
+# chi2pid.I2 PID columns. Best-plane was tried and reverted -- 3x the hit
+# loading, and "most hits" tracks wire angle rather than measurement quality.
+TRK_CALO_PLANE = 2
 
 def calo_energy(hitdf, dedxname="dedx"):
-    """Per-track sum of dE/dx * pitch [MeV]."""
-    good = _good_hits(hitdf, dedxname)
-    e = (hitdf[dedxname] * hitdf.pitch)[good]
-    return e.groupby(level=list(range(e.index.nlevels - 1))).sum()
+    """Per-track sum of dE/dx * pitch [GeV].
+
+    dE/dx stays MeV/cm (the universal convention for it), so the sum is MeV
+    and is scaled here to match the GeV energies everywhere else.
+
+    Every hit is summed. A previous version dropped hits with dE/dx <= 0 or
+    >= 1000 MeV/cm, which quietly produced a plausible-looking track energy
+    out of a track with unusable calorimetry; a bad hit now shows up in
+    trk_calo_E instead. Their prevalence is reported below so the filter is
+    not silently reintroduced.
+    """
+    dedx = hitdf[dedxname]
+    n = len(dedx)
+    if n:
+        bad = int(((dedx <= 0) | (dedx >= 1000.)).sum())   # 1000 MeV/cm, a bound not a conversion
+        nan = int(dedx.isna().sum())
+        if bad or nan:
+            print("  calo hits with unphysical dE/dx: %d of %d (%.2f%%); NaN: %d"
+                  % (bad, n, 100. * bad / n, nan))
+    e = dedx * hitdf.pitch
+    # sum is MeV (MeV/cm * cm); / 1000 converts MeV -> GeV
+    return e.groupby(level=list(range(e.index.nlevels - 1))).sum() / 1000.
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +92,7 @@ def _leading(df, key, prefix):
 
 def _shower_table(pfp):
     s = pfp.pfp.shw
-    e = pd.concat([s.plane.I0.energy, s.plane.I1.energy, s.plane.I2.energy], axis=1) * 1000.
+    e = pd.concat([s.plane.I0.energy, s.plane.I1.energy, s.plane.I2.energy], axis=1)
     e_max = e.max(axis=1)
     e2 = e.iloc[:, 2]
     # MicroBooNE "#GE#": collection-plane energy, falling back to the max plane.
@@ -96,7 +100,7 @@ def _shower_table(pfp):
     return pd.DataFrame({
         "energy": ge,
         "energy_max": e_max,
-        "energy_best": s.bestplane_energy * 1000.,
+        "energy_best": s.bestplane_energy,
         "energy_I0": e.iloc[:, 0], "energy_I1": e.iloc[:, 1], "energy_I2": e2,
         "dedx_best": s.bestplane_dEdx,
         "dedx_I2": s.plane.I2.dEdx,
@@ -110,7 +114,7 @@ def _shower_table(pfp):
         "len": s.len,
         "trackScore": pfp.pfp.trackScore,
         "true_pdg": s.truth.p.pdg,
-        "true_startE": s.truth.p.startE * 1000.,
+        "true_startE": s.truth.p.startE,
     }, index=pfp.index)
 
 
@@ -121,15 +125,22 @@ def _track_table(pfp):
         "end_x": t.end.x, "end_y": t.end.y, "end_z": t.end.z,
         "dir_x": t.dir.x, "dir_y": t.dir.y, "dir_z": t.dir.z,
         "len": t.len,
-        "p_proton": t.rangeP.p_proton * 1000.,
+        "p_proton": t.rangeP.p_proton,
         "chi2_proton": t.chi2pid.I2.chi2_proton,
         "chi2_muon": t.chi2pid.I2.chi2_muon,
         "pida": t.chi2pid.I2.pida,
         "trackScore": pfp.pfp.trackScore,
         "true_pdg": t.truth.p.pdg,
-        "true_startE": t.truth.p.startE * 1000.,
+        "true_startE": t.truth.p.startE,
     }, index=pfp.index)
 
+
+# ---------------------------------------------------------------------------
+# Sentinels and units
+# ---------------------------------------------------------------------------
+# Units: GeV and cm, as in the CAF; dE/dx and PIDA keep the conventional
+# MeV/cm. The CAF's -5 / -999 / -10000 "no value" markers are left in, derived
+# columns included, so they stay visible; cuts.py masks them per cut.
 
 # ---------------------------------------------------------------------------
 # Truth
@@ -138,12 +149,12 @@ def _track_table(pfp):
 def _truth_columns(t):
     """Flat truth columns from a make_mcdf-style frame (slc.truth or mc.nu)."""
     return pd.DataFrame({
-        "true_E": t.E * 1000.,
+        "true_E": t.E,                 # GeV
         "true_pdg": t.pdg,
         "true_iscc": t.iscc,
         "true_isnc": t.isnc,
         "true_genie_mode": t.genie_mode,
-        "true_w": t.w,
+        "true_w": t.w,                 # GeV
         "true_vtx_x": t.position.x,
         "true_vtx_y": t.position.y,
         "true_vtx_z": t.position.z,
@@ -157,61 +168,72 @@ def _truth_columns(t):
     })
 
 
-def _leading_photon_E(f, prefix):
-    """Energy [MeV] of the highest-energy primary photon per interaction."""
+# true_ngamma counts GENIE primaries, which include ~3 MeV nuclear
+# de-excitation gammas. These thresholded counts separate those from a real
+# Delta -> N gamma photon (O(100) MeV).
+# GeV values, MeV column labels (true_ngamma_20MeV reads better than _0.02GeV).
+GAMMA_THRESHOLDS = (0.020, 0.100)   # GeV
+
+PHOTON_TRUTH_COLS = (["true_leading_gamma_E"]
+                     + ["true_ngamma_%dMeV" % (1000. * t)        # GeV -> MeV, label only
+                        for t in GAMMA_THRESHOLDS])
+
+
+def _primary_photon_truth(f, prefix):
+    """Leading primary-photon energy [GeV] and counts above GAMMA_THRESHOLDS."""
     prim = loadbranches(f["recTree"], [prefix + ".prim.pdg", prefix + ".prim.genE"])
     for lvl in prefix.split("."):
         prim = prim[lvl]
     prim = prim.prim
-    photons = prim.genE[prim.pdg == 22]
-    return (photons.groupby(level=SLC_LEVELS).max() * 1000.).rename("true_leading_gamma_E")
+    genE = prim.genE[prim.pdg == 22]
+    g = genE.groupby(level=SLC_LEVELS)
+    out = pd.DataFrame({"true_leading_gamma_E": g.max()})
+    for thr in GAMMA_THRESHOLDS:
+        # 1000 * thr converts the GeV threshold to MeV for the column name;
+        # the comparison itself is GeV vs GeV
+        out["true_ngamma_%dMeV" % (1000. * thr)] = (genE > thr).groupby(level=SLC_LEVELS).sum()
+    return out
+
+
+def _resnum(f, prefix):
+    """GENIE resonance number per interaction; 0 is the Delta(1232).
+
+    See GENIE BaryonResonance.h (kP33_1232 = 0) and sbnanaobj
+    SRTrueInteraction.h ("resnum: Resonance number, straight from GENIE").
+    genie_mode == kRes alone does not pick out the Delta: it is any resonance.
+    """
+    try:
+        r = loadbranches(f["recTree"], [prefix + ".resnum"])
+        for lvl in prefix.split("."):
+            r = r[lvl]
+        return r.resnum.groupby(level=SLC_LEVELS).first().rename("true_resnum")
+    except Exception as e:
+        print("Warning: no %s.resnum (%s); true_resnum will be NaN."
+              % (prefix, type(e).__name__))
+        return None
 
 
 # ---------------------------------------------------------------------------
 # pi0 decay-photon truth
 # ---------------------------------------------------------------------------
-# The dominant background is NC 1pi0 in which only one of the two decay photons
-# is reconstructed. Those photons are GEANT4 secondaries, so they appear in
-# neither true_ngamma nor true_leading_gamma_E (both count GENIE primaries, and
-# the pi0 is itself the primary). The columns below describe them, so the
-# failure mode can be identified per event:
-#
-#   escaped        gamma2_contained == 0, or conv_dist running out of the TPC
-#   too soft       gamma2_E below the clustering threshold
-#   merged         small opening_angle and small gamma_sep
-#   not reco'd     real gamma2_visE inside the TPC but no second shower PFP
-#
-# Only the last two are addressable by reconstruction work; the first two are
-# physics. All energies MeV, lengths cm, angles rad.
+# The dominant background is NC 1pi0 with only one photon reconstructed. The
+# decay photons are GEANT4 secondaries, so they are absent from true_ngamma
+# and true_leading_gamma_E, which count GENIE primaries. These columns
+# separate the failure modes: escaped (not contained), too soft (low visE),
+# merged (small opening_angle and gamma_sep), or simply not reconstructed --
+# only the last is addressable by reconstruction work.
 
 PI0_PDG = 111
 PHOTON_PDG = 22
 
 
-def _tp_visE(tp):
-    """Collection-plane visible energy per true particle [MeV], or NaN.
-
-    The branch is rec.true_particles.plane.<cryo>.2.visE; the sub-level naming
-    differs between uproot/awkward versions, so fall back rather than fail.
-    """
-    for cryo in ("0", 0):
-        try:
-            return tp.plane[cryo][2].visE * 1000.
-        except Exception:
-            pass
-    try:
-        cols = [c for c in tp.columns if "visE" in [str(x) for x in c]]
-        if cols:
-            return tp[cols[0]] * 1000.
-    except Exception:
-        pass
-    return None
-
-
-PI0_TRUTH_COLS = ["true_pi0_ngamma", "true_pi0_gamma1_E", "true_pi0_gamma2_E",
-                  "true_pi0_gamma2_visE", "true_pi0_gamma2_contained",
-                  "true_pi0_gamma2_conv_dist", "true_pi0_gamma_sep",
-                  "true_pi0_opening_angle"]
+# Both photons are described symmetrically: the reconstructed shower is not
+# always matched to the leading one, so either can be the missed photon.
+PI0_TRUTH_COLS = (["true_pi0_ngamma", "true_pi0_gamma_sep", "true_pi0_opening_angle"]
+                  + ["true_pi0_gamma%d_%s" % (i, v)
+                     for i in (1, 2)
+                     for v in ("E", "visE", "contained", "conv_dist", "cosz",
+                               "conv_x", "conv_y", "conv_z")])
 
 
 def _pi0_photon_summary(flat, entry):
@@ -243,11 +265,16 @@ def _pi0_photon_summary(flat, entry):
     g2 = g[g["rank"] == 1].set_index(key)
 
     out = pd.DataFrame({"true_pi0_ngamma": g.groupby(key).size()})
-    out["true_pi0_gamma1_E"] = g1.genE
-    out["true_pi0_gamma2_E"] = g2.genE
-    out["true_pi0_gamma2_visE"] = g2.visE
-    out["true_pi0_gamma2_contained"] = g2.cont_tpc
-    out["true_pi0_gamma2_conv_dist"] = mag(g2.ex - g2.sx, g2.ey - g2.sy, g2.ez - g2.sz)
+    for i, gi in ((1, g1), (2, g2)):
+        out["true_pi0_gamma%d_E" % i] = gi.genE
+        out["true_pi0_gamma%d_visE" % i] = gi.visE
+        out["true_pi0_gamma%d_contained" % i] = gi.cont_tpc
+        out["true_pi0_gamma%d_conv_dist" % i] = mag(gi.ex - gi.sx, gi.ey - gi.sy,
+                                                    gi.ez - gi.sz)
+        out["true_pi0_gamma%d_cosz" % i] = gi.pz / mag(gi.px, gi.py, gi.pz)
+        # conversion point, so a candidate can be located in an event display
+        for a in "xyz":
+            out["true_pi0_gamma%d_conv_%s" % (i, a)] = gi["e" + a]
     out["true_pi0_gamma_sep"] = mag(g1.ex - g2.ex, g1.ey - g2.ey, g1.ez - g2.ez)
     d1 = mag(g1.px, g1.py, g1.pz)
     d2 = mag(g2.px, g2.py, g2.pz)
@@ -270,17 +297,18 @@ def _pi0_photon_truth(f, index):
               "columns will be NaN." % type(e).__name__)
         return empty
 
-    visE = _tp_visE(tp)
     flat = pd.DataFrame({
         "pdg": tp.pdg, "G4ID": tp.G4ID, "parent": tp.parent,
-        "genE": tp.genE * 1000.,
+        "genE": tp.genE,
         "cont_tpc": tp.cont_tpc,
         "sx": tp.start.x, "sy": tp.start.y, "sz": tp.start.z,
         "ex": tp.end.x, "ey": tp.end.y, "ez": tp.end.z,
         "px": tp.genp.x, "py": tp.genp.y, "pz": tp.genp.z,
         "iid": tp.interaction_id,
+        # rec.true_particles.plane.<cryo>.<plane>.visE; loadbranches renames the
+        # numeric levels to I<n>, and SBND has a single cryostat.
+        "visE": tp.plane.I0.I2.visE,
     })
-    flat["visE"] = np.nan if visE is None else visE
     flat = flat.reset_index()
     entry = flat.columns[0]
 
@@ -340,10 +368,9 @@ def make_ncdelta_slcdf(f, apply_preselection=True, include_truth=None):
         S["bary_score"] = bary.score
         S["bary_deltaZ"] = bary.deltaZ
 
-    # MicroBooNE only considered Pandora's neutrino candidate.
-    S = S[~S.is_clear_cosmic].drop(columns="is_clear_cosmic")
 
-    # nu_score rank within the event (1 = highest), before pre-selection.
+    # nu_score rank within the event (1 = highest), over every slice including
+    # clear cosmics -- the clear-cosmic veto is a pre-selection cut now.
     S["nu_score_rank"] = S.nu_score.groupby(level=0).rank(ascending=False, method="first")
 
     S["detector"] = DETECTOR
@@ -358,12 +385,14 @@ def make_ncdelta_slcdf(f, apply_preselection=True, include_truth=None):
     score = pfp.pfp.trackScore
     is_trk = primary & (score >= cuts.TRK_SCORE_CUT)
     is_shw = primary & (score >= 0) & (score < cuts.TRK_SCORE_CUT)
-    is_unc = primary & ~(score >= 0)  # NaN / negative score
+    # The neutrino candidate PFP itself. >= 1 for every slice, so it carries no
+    # physics; counted as a sanity check and dropped before returning.
+    is_unc = primary & ~(score >= 0)
     # Shower-like PFPs deeper in the hierarchy, e.g. a pi0's second photon
     # attached to another particle. Used by the second-shower veto in cuts.py.
     is_nonprim_shw = ~primary & (score >= 0) & (score < cuts.TRK_SCORE_CUT)
 
-    for name, m in (("n_trk", is_trk), ("n_shw", is_shw), ("n_unclassified", is_unc),
+    for name, m in (("n_trk", is_trk), ("n_shw", is_shw), ("n_nu_pfp", is_unc),
                     ("n_nonprim_shw", is_nonprim_shw)):
         S[name] = m.groupby(level=SLC_LEVELS).sum().reindex(S.index, fill_value=0).astype(int)
 
@@ -380,7 +409,6 @@ def make_ncdelta_slcdf(f, apply_preselection=True, include_truth=None):
     D = S.join(shw, how="left").join(trk, how="left")
 
     # ---- track calorimetry, only for the kept leading tracks ----
-    D["trk_dedx_trunc"] = np.nan
     D["trk_calo_E"] = np.nan
     has_trk = D.trk_pfp_idx.notna()
     if has_trk.any():
@@ -390,9 +418,8 @@ def make_ncdelta_slcdf(f, apply_preselection=True, include_truth=None):
             sub.get_level_values(1),
             D.trk_pfp_idx[has_trk].astype(int).values,
         ])
-        hits = make_trkhitdf(f, plane=2)
+        hits = make_trkhitdf(f, plane=TRK_CALO_PLANE)
         hits = hits[hits.index.droplevel(-1).isin(lead_trk_idx)]
-        D.loc[has_trk, "trk_dedx_trunc"] = truncated_mean_dedx(hits).reindex(lead_trk_idx).values
         D.loc[has_trk, "trk_calo_E"] = calo_energy(hits).reindex(lead_trk_idx).values
         del hits
 
@@ -428,14 +455,16 @@ def make_ncdelta_slcdf(f, apply_preselection=True, include_truth=None):
     # ---- slice truth ----
     if include_truth:
         T = _truth_columns(slcdf.slc.truth).reindex(D.index)
-        T["true_leading_gamma_E"] = _leading_photon_E(f, "rec.slc.truth").reindex(D.index)
+        T = T.join(_primary_photon_truth(f, "rec.slc.truth").reindex(D.index))
+        rn = _resnum(f, "rec.slc.truth")
+        T["true_resnum"] = np.nan if rn is None else rn.reindex(D.index)
         D = D.join(T)
         # pi0 decay-photon truth, for studying the missed second shower
         D = D.join(_pi0_photon_truth(f, D.index))
     else:
         D = D.drop(columns=[c for c in D.columns if "true_" in c])
 
-    return D
+    return D.drop(columns=["n_nu_pfp"], errors="ignore")
 
 
 def make_ncdelta_slcdf_mc(f):
@@ -461,7 +490,9 @@ def make_ncdelta_slcdf_data_nopresel(f):
 def make_ncdelta_nudf(f):
     DETECTOR, RUN, ismc = fetch_metadata(f)
     N = _truth_columns(make_mcdf(f))
-    N["true_leading_gamma_E"] = _leading_photon_E(f, "rec.mc.nu").reindex(N.index)
+    N = N.join(_primary_photon_truth(f, "rec.mc.nu").reindex(N.index))
+    rn = _resnum(f, "rec.mc.nu")
+    N["true_resnum"] = np.nan if rn is None else rn.reindex(N.index)
     N["detector"] = DETECTOR
     N["Run"] = RUN
     return N

@@ -17,7 +17,8 @@ Stages:
   3. Background rejection: rectangular cuts on CAF features (CUTBASED_*).
   4. Signal window in reconstructed shower energy (ENERGY_WINDOW).
 
-Energies are MeV, lengths cm. Shower energy is shw_energy_corrected(): the
+Energies are GeV and lengths cm, except dE/dx and PIDA which keep the
+conventional MeV/cm. Shower energy is shw_energy_corrected(): the
 best plane's energy (best = most hits, as sbncode FillReco.cxx defines it for
 SBND) with the per-plane scale SHW_ENERGY_SCALE applied. The MicroBooNE
 "#GE#" convention -- collection plane with a max-plane fallback -- is not
@@ -81,25 +82,28 @@ import pandas as pd
 # as "unclassified", not as tracks or showers.
 TRK_SCORE_CUT = 0.5
 
-# Pre-selection. Applied at dataframe creation, so it is deliberately only
-# the fiducial volume: anything tighter bakes a tuning choice into the
-# dataframes and cannot be loosened afterwards. Every other cut lives in
-# CUTBASED_* below, where it can be re-tuned without remaking the dataframes.
+# Pre-selection. Applied at dataframe creation, so it is deliberately limited
+# to the fiducial volume and Pandora's clear-cosmic flag: anything tighter
+# bakes a tuning choice into the dataframes and cannot be loosened afterwards.
+# Every other cut lives in CUTBASED_* below, re-tunable without a remake.
 PRESEL_1G1P = {
-    "vtx_fv": True,   # FV on the slice vertex (the track fixes it)
+    "not_clear_cosmic": True,   # Pandora's neutrino candidate only, as in [3]
+    "vtx_fv": True,             # FV on the slice vertex (the track fixes it)
 }
 
 PRESEL_1G0P = {
-    "shw_fv": True,   # FV on the shower start (no track defines the vertex)
+    "not_clear_cosmic": True,
+    "shw_fv": True,             # FV on the shower start (no track defines the vertex)
 }
 
 # Signal window in shw_energy_corrected(). Common to both working points in
 # SELECTIONS: the window defines the signal region of the measurement, so
 # narrowing it per selection would inflate purity by discarding signal phase
 # space rather than by rejecting background.
+# GeV, on shw_energy_corrected().
 ENERGY_WINDOW = {
-    "1g1p": (20.0, 700.0),
-    "1g0p": (120.0, 950.0),
+    "1g1p": (0.020, 0.700),
+    "1g0p": (0.120, 0.950),
 }
 
 TOPOLOGIES = ("1g1p", "1g0p")
@@ -192,7 +196,7 @@ def shw_best_plane(df):
 
 
 def shw_energy_corrected(df, scale=SHW_ENERGY_SCALE):
-    """Best-plane shower energy [MeV] with the per-plane scale applied.
+    """Best-plane shower energy [GeV] with the per-plane scale applied.
 
     Reproduces the CAF's shw_energy_best to 99.97% of showers before scaling,
     so it can be used on dataframes that predate this correction.
@@ -220,12 +224,12 @@ def extrap_det_path(df):
     (median 23 cm in from the wall, while the true vertex is ~29 cm outside).
     """
     b = ACTIVE_VOLUME
-    start = (df.shw_start_x.to_numpy(dtype=float),
-             df.shw_start_y.to_numpy(dtype=float),
-             df.shw_start_z.to_numpy(dtype=float))
-    back = (-df.shw_dir_x.to_numpy(dtype=float),
-            -df.shw_dir_y.to_numpy(dtype=float),
-            -df.shw_dir_z.to_numpy(dtype=float))
+    start = (sv(df, "shw_start_x").to_numpy(dtype=float),
+             sv(df, "shw_start_y").to_numpy(dtype=float),
+             sv(df, "shw_start_z").to_numpy(dtype=float))
+    back = (-sv(df, "shw_dir_x").to_numpy(dtype=float),
+            -sv(df, "shw_dir_y").to_numpy(dtype=float),
+            -sv(df, "shw_dir_z").to_numpy(dtype=float))
     t = np.full(len(df), np.inf)
     for c, dc, (lo, hi) in zip(start, back, (b["x"], b["y"], b["z"])):
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -261,6 +265,8 @@ TOPOLOGY_CUTS = {"1g1p": topology_1g1p, "1g0p": topology_1g0p}
 def presel_1g1p_cuts(df, cfg=PRESEL_1G1P):
     """Ordered dict of the individual 1g1p pre-cuts (topology excluded)."""
     out = OrderedDict()
+    if cfg.get("not_clear_cosmic"):
+        out["not_clear_cosmic"] = ~df.is_clear_cosmic.astype(bool)
     if cfg.get("vtx_fv"):
         out["vtx_fv"] = _fv(df, "slc_vtx")
     return out
@@ -269,6 +275,8 @@ def presel_1g1p_cuts(df, cfg=PRESEL_1G1P):
 def presel_1g0p_cuts(df, cfg=PRESEL_1G0P):
     """Ordered dict of the individual 1g0p pre-cuts (topology excluded)."""
     out = OrderedDict()
+    if cfg.get("not_clear_cosmic"):
+        out["not_clear_cosmic"] = ~df.is_clear_cosmic.astype(bool)
     if cfg.get("shw_fv"):
         out["shw_fv"] = _fv(df, "shw_start")
     return out
@@ -318,7 +326,7 @@ CUTBASED_1G1P = {
     # record, higher score = better match: at 1g0p topology level cosmics have
     # median score 10.6 with 35% having no match, signal median 656 with 3%.
     "opt0_score_min":          None,
-    "shw_dedx_min":            3.5,    # photon ~2 MIP (peak 4.2), electron ~1
+    "shw_dedx_min":            3.5,    # MeV/cm; photon ~2 MIP (peak 4.2), electron ~1
     "shw_conv_dist_max":       80.0,   # X0 = 14 cm, so 80 cm is misreco
     "trk_proton_like":         True,   # chi2_proton < chi2_muon
     "energy_window":           None,   # None = ENERGY_WINDOW[topology]
@@ -330,14 +338,13 @@ CUTBASED_1G1P = {
     "vtx_dist_min":            None,   # 2.0:    0 / 0
     "trk_dist_min":            None,   # 2.0:    0 / 2
     "shw_start_dist_min":      None,   # 2.0:    0 / 6
-    "trk_ke_max":              None,   # 700:    0 / 6
+    "trk_ke_max":              None,   # 0.7 GeV: 0 / 6
     "n_nonprim_shw_max":       None,   # 1:      0 / 3
     "shw_nhits_min":           None,   # 150:    0 / 1
-    "trk_dedx_min":            None,   # 3.0:    0 / 1
     "trk_start_dist_to_vtx_max": None, # 10.0:   0 / 0
     "abs_cos_trk_shw_max":     None,   # 0.99:   1 / 7
     # On in high_purity only:
-    "trk_calo_E_max":          None,
+    "trk_calo_E_max":          None,   # GeV
     "trk_pida_max":            None,
     "shw_len_min":             None,
     "shw_open_angle_max":      None,
@@ -350,8 +357,8 @@ CUTBASED_1G1P = {
     "shw_trackScore_max":      None,
     "extrap_det_path_min":     None,   # 1g0p only: dirt is just 1-3% of this
                                        # channel, the track already vetoes it
-    # p+gamma mass window [MeV]: the peak is at ~1143, below the PDG
-    # Delta(1232), and NC pi0 peaks at 1108, so a window buys ~0.2% purity.
+    # p+gamma mass window [GeV]: the peak is at ~1.143, below the PDG
+    # Delta(1232), and NC pi0 peaks at 1.108, so a window buys ~0.2% purity.
     "delta_mass_range":        None,
 }
 
@@ -418,7 +425,7 @@ SELECTIONS = {
         "1g1p": {"nu_score_min": 0.50, "bary_score_min": 0.02,
                  "shw_conv_dist_min": 4.0, "shw_conv_dist_max": 50.0,
                  "shw_len_min": 30.0, "shw_open_angle_max": 0.25,
-                 "shw_trackScore_max": 0.42, "trk_calo_E_max": 300.0},
+                 "shw_trackScore_max": 0.42, "trk_calo_E_max": 0.300},
         "1g0p": {"nu_score_min": 0.50, "shw_dedx_min": 2.5,
                  "shw_open_angle_max": 0.20, "shw_trackScore_max": 0.44,
                  "extrap_det_path_min": 80.0},
@@ -448,7 +455,7 @@ def cutbased_cuts(df, topology, cfg=None):
     if on("nu_score_min"):
         out["nu_score"] = df.nu_score > c["nu_score_min"]
     if on("bary_score_min") and "bary_score" in df.columns:
-        out["flash_match"] = df.bary_score > c["bary_score_min"]
+        out["flash_match"] = sv(df, "bary_score") > c["bary_score_min"]
     if on("opt0_score_min"):
         out["opt0_score"] = df.opt0_score > c["opt0_score_min"]
 
@@ -462,8 +469,6 @@ def cutbased_cuts(df, topology, cfg=None):
         out["shw_contained"] = df.shw_start_dist_to_wall > c["shw_start_dist_min"]
 
     # track energy / PID thresholds
-    if on("trk_dedx_min"):
-        out["trk_dedx"] = df.trk_dedx_trunc > c["trk_dedx_min"]
     if on("abs_cos_trk_shw_max"):
         out["trk_shw_angle"] = df.cos_trk_shw_implied.abs() < c["abs_cos_trk_shw_max"]
     if on("trk_ke_max"):
@@ -473,7 +478,7 @@ def cutbased_cuts(df, topology, cfg=None):
 
     # CC nue
     if on("shw_dedx_min"):
-        out["shw_dedx"] = df.shw_dedx_best > c["shw_dedx_min"]
+        out["shw_dedx"] = sv(df, "shw_dedx_best") > c["shw_dedx_min"]
     if on("shw_conv_dist_min"):
         out["shw_conv_dist"] = df.shw_conv_dist > c["shw_conv_dist_min"]
 
@@ -490,7 +495,7 @@ def cutbased_cuts(df, topology, cfg=None):
         out["shw_nhits"] = (df.shw_nhits_I0 + df.shw_nhits_I1
                             + df.shw_nhits_I2) > c["shw_nhits_min"]
     if on("shw_open_angle_max"):
-        out["shw_open_angle"] = df.shw_open_angle < c["shw_open_angle_max"]
+        out["shw_open_angle"] = sv(df, "shw_open_angle") < c["shw_open_angle_max"]
 
     # NC pi0
     if on("n_nonprim_shw_max"):
@@ -600,8 +605,43 @@ CATEGORY_LABELS = OrderedDict([
     (7, "Cosmic"),
 ])
 
+# CAF "no value" markers, left in the dataframe and masked here instead. A cut
+# on NaN is False either way, which is what a missing measurement should do.
+# tmatch_idx and true_pdg are excluded: is_cosmic() reads their sentinels.
+SENTINELS = {
+    "shw_dedx_best": (-5.,), "shw_dedx_I2": (-999.,),
+    "shw_density": (-5.,), "shw_open_angle": (-5.,),
+    "shw_dir_x": (-999.,), "shw_dir_y": (-999.,), "shw_dir_z": (-999.,),
+    "shw_start_x": (-999.,), "shw_start_y": (-999.,), "shw_start_z": (-999.,),
+    "bary_score": (-10000.,), "bary_deltaZ": (-10000.,),
+    "crlongtrkdiry": (-10000.,),
+}
+
+
+def sv(df, col):
+    """Column with its CAF sentinels masked to NaN. See SENTINELS."""
+    v = df[col]
+    bad = SENTINELS.get(col)
+    return v.mask(v.isin(bad)) if bad else v
+
+
 GENIE_MODE_RES = 1
 GENIE_MODE_COH = 3
+
+# genie::EResonance, from rec.mc.nu.resnum. genie_mode == GENIE_MODE_RES is ANY
+# resonance, so resnum is what picks out the Delta(1232).
+# Ref: GENIE Framework/ParticleData/BaryonResonance.h, sbnanaobj
+# StandardRecord/SRTrueInteraction.h.
+RESNUM_NO_RESONANCE = -1
+RESNUM_DELTA_1232 = 0      # kP33_1232
+RESNUM = {
+    -1: "none",
+    0:  "P33(1232)",   1:  "S11(1535)",   2:  "D13(1520)",   3:  "S11(1650)",
+    4:  "D13(1700)",   5:  "D15(1675)",   6:  "S31(1620)",   7:  "D33(1700)",
+    8:  "P11(1440)",   9:  "P33(1600)",   10: "P13(1720)",   11: "F15(1680)",
+    12: "P31(1910)",   13: "P33(1920)",   14: "F35(1905)",   15: "F37(1950)",
+    16: "P11(1710)",   17: "F17(1970)",
+}
 
 
 def true_in_active(df):
@@ -617,15 +657,18 @@ def is_cosmic(df):
         m |= df.tmatch_idx < 0
     return m
 
-
 def is_ncdelta_rad(df):
-    """NC Delta -> N gamma from GENIE truth: NC, RES, >= 1 primary photon.
+    """NC Delta(1232) -> N gamma from GENIE truth.
 
-    CAF truth has no resonance PDG, so heavier-resonance radiative decays can
-    pass. Photons from pi0 decay are not primaries.
+    genie_mode == kRes is any resonance, so resnum pins the Delta(1232).
+    GENIE primaries include ~3 MeV de-excitation gammas, hence the hard-photon
+    requirement. npi0 == 0 drops Delta -> N pi0 with a photon from elsewhere,
+    which is indistinguishable from signal and overlaps the NC 1pi0 category.
     """
-    return ((df.true_isnc == 1) & (df.true_genie_mode == GENIE_MODE_RES)
-            & (df.true_ngamma >= 1))
+    return ((df.true_isnc == 1)
+            & (df.true_resnum == RESNUM_DELTA_1232)
+            & (df.true_ngamma_100MeV >= 1)
+            & (df.true_npi0 == 0))
 
 
 def truth_category(df):
