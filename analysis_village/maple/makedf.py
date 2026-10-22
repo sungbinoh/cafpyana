@@ -49,8 +49,18 @@ Selection option:
 """
 import numpy as np
 import pandas as pd
+import os
+import sys
 
 from pyanalib.pandas_helpers import *
+
+workspace_root = os.getcwd()
+repo_root = os.path.abspath(os.path.join(workspace_root, "../../.."))
+gump_dir  = os.path.abspath(os.path.join(workspace_root, "../../gump"))
+
+sys.path.insert(0, repo_root)
+sys.path.append(gump_dir)
+
 from makedf.util import *
 from makedf.makedf import (
     loadbranches, make_slcdf, make_trkdf, make_trkhitdf, make_crthitdf, make_opflashdf,

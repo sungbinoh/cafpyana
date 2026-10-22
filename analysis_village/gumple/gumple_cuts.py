@@ -442,9 +442,7 @@ def all_maplenp_cuts(recodf, DETECTOR=None, det_run=None, variation=None):
 
     NB semantic change: this is the multiplicity-INCLUSIVE chain.
     """
-    cut_far_shw = np.isnan(recodf.max_far_shw_len)
-    return gumple_base_cuts(recodf, DETECTOR=DETECTOR, det_run=det_run, variation=variation, do_cosmic_cut=True) & \
-        cut_far_shw
+    return all_maplemp_cuts(recodf, DETECTOR=DETECTOR, det_run=det_run, variation=variation) | all_gump_cuts(recodf, DETECTOR=DETECTOR, det_run=det_run, variation=variation)
 
 def all_maplemp_cuts(recodf, DETECTOR=None, det_run=None, variation=None):
     """MAPLE (1uN>1p): base chain + more than two candidate pfps.
