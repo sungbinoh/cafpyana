@@ -100,6 +100,14 @@ CHI2_VARIATIONS = SCALE_SMEAR_VARIATIONS + CALO_VARIATIONS + ["cafana"]
 BEAM_QUALITY_VARS = ["TOR860", "TOR875", "LM875A", "LM875B", "LM875C", "THCURR", "FOM"]
 BEAM_SPILL_ID_VARS = ["spill_time_sec", "spill_time_nsec", "event"]
 
+# Muon-candidate end-hit mode (save_mu_endhits): the collection-plane calo
+# points of the muon candidate within the last MU_ENDHIT_RR_MAX cm of residual
+# range are stashed by the evt builder and written as a separate per-hit table
+# by make_maple_mu_endhit_df (index (entry, slc, hit) -> joins onto evt).
+MU_ENDHIT_RR_MAX = 25.0
+MU_ENDHIT_COLS = ["x", "y", "z", "rr"]
+_MU_ENDHIT_CACHE = {}
+
 CHI2_CAND_COLS = [
     "mu_chi2%s_of_mu_cand",
     "prot_chi2%s_of_mu_cand",
@@ -738,7 +746,7 @@ def _write_plane_chi2(trkhitdf, P, tag, do_calo_syst, cosmic, do_cafana_chi2, rr
             P.loc[cosmic, "chi2p_%s%s" % (tag, var)] = P.loc[cosmic, "chi2p_%scafpyana" % tag]
 
 def PID_calcs(f, P, DETECTOR, ismc, do_calo_syst=True, do_alt_chi2=False,
-              do_cafana_chi2=False, do_ind_chi2=False):
+              do_cafana_chi2=False, do_ind_chi2=False, return_trkhitdf=False):
     # ------------------------------------------------------------------
     # PID on the collection plane (plane 2)
     # ------------------------------------------------------------------
@@ -810,10 +818,12 @@ def PID_calcs(f, P, DETECTOR, ismc, do_calo_syst=True, do_alt_chi2=False,
             # concat all bestplane columns at once (avoids DataFrame fragmentation)
             P = pd.concat([P, pd.DataFrame(bestcols, index=P.index)], axis=1)
 
+    if return_trkhitdf:
+        return P, trkhitdf
     return P
 
 def fetch_candidates(S, P, do_calo_syst, use_chi2=True, do_alt_chi2=False,
-                     do_cafana_chi2=False, do_ind_chi2=False):
+                     do_cafana_chi2=False, do_ind_chi2=False, return_mu_ilocs=False):
     # ------------------------------------------------------------------
     # fixed candidates; chi2 cuts are applied post-hoc (maple_sel)
     # ------------------------------------------------------------------
@@ -1114,16 +1124,33 @@ def fetch_candidates(S, P, do_calo_syst, use_chi2=True, do_alt_chi2=False,
     S["mu_E"] = mu_E
     S["p_E"] = p_E
 
+    if return_mu_ilocs:
+        return S, mu_ilocs
     return S
+
+def _mu_endhits(trkhitdf, mu_ilocs, rr_max=MU_ENDHIT_RR_MAX):
+    """Collection-plane calo points of the muon candidate with rr <= rr_max
+    (the last rr_max cm of the track). Returns columns MU_ENDHIT_COLS indexed
+    (entry, slc, hit) -- the pfp level is dropped, since there is one muon
+    candidate per slice, so the table joins directly onto the evt df."""
+    if len(mu_ilocs) == 0 or len(trkhitdf) == 0:
+        idx = pd.MultiIndex.from_arrays([[], [], []], names=[trkhitdf.index.names[i] for i in (0, 1, -1)])
+        return pd.DataFrame({c: pd.Series(dtype=float) for c in MU_ENDHIT_COLS}, index=idx)
+    is_mu = trkhitdf.index.droplevel(-1).isin(pd.Index(mu_ilocs.values))
+    hits = trkhitdf.loc[is_mu & (trkhitdf.rr <= rr_max), MU_ENDHIT_COLS].copy()
+    hits.index = hits.index.droplevel(2)
+    return hits
 
 # =====================================================================
 # Main evt builder
 # =====================================================================
 def make_maple_evt_df(f, selection="none", do_calo_syst=True, use_chi2=True, do_alt_chi2=False,
-                      do_cafana_chi2=False, do_ind_chi2=False):
+                      do_cafana_chi2=False, do_ind_chi2=False, save_mu_endhits=False):
     # use_chi2: muon-candidate selection behavior -- True (default) picks the
     # legacy-GUMP min-chi2u/chi2p-ratio track (len > 40 cm), False the
     # longest chi2-free base-mask track (see _find_candidates).
+    # save_mu_endhits: also stash the muon candidate's last-25cm hit positions
+    # for make_maple_mu_endhit_df (which must follow this builder in DFS).
     # Get a slice level df (S) a pfp level df (P) and some meta-data
     S, P, DETECTOR, RUN, ismc = fetch_info(f)
 
@@ -1147,10 +1174,15 @@ def make_maple_evt_df(f, selection="none", do_calo_syst=True, use_chi2=True, do_
     # Again, since we have limited trk info access after df prod
     # we want to grab information about candidate mu and p tracks here.
     # Start with PID calculations and then do some basic candidate ID.
-    P = PID_calcs(f, P, DETECTOR, ismc, do_calo_syst=do_calo_syst, do_alt_chi2=do_alt_chi2,
-                  do_cafana_chi2=do_cafana_chi2, do_ind_chi2=do_ind_chi2)
-    S = fetch_candidates(S, P, do_calo_syst, use_chi2=use_chi2, do_alt_chi2=do_alt_chi2,
-                         do_cafana_chi2=do_cafana_chi2, do_ind_chi2=do_ind_chi2)
+    P, trkhitdf = PID_calcs(f, P, DETECTOR, ismc, do_calo_syst=do_calo_syst, do_alt_chi2=do_alt_chi2,
+                            do_cafana_chi2=do_cafana_chi2, do_ind_chi2=do_ind_chi2,
+                            return_trkhitdf=True)
+    S, mu_ilocs = fetch_candidates(S, P, do_calo_syst, use_chi2=use_chi2, do_alt_chi2=do_alt_chi2,
+                                   do_cafana_chi2=do_cafana_chi2, do_ind_chi2=do_ind_chi2,
+                                   return_mu_ilocs=True)
+    if save_mu_endhits:
+        mu_endhits = _mu_endhits(trkhitdf, mu_ilocs)
+    del trkhitdf
 
     # ------------------------------------------------------------------
     # Reco_class (classification_type_debug port, via mcnu-level classification)
@@ -1206,7 +1238,24 @@ def make_maple_evt_df(f, selection="none", do_calo_syst=True, use_chi2=True, do_
     else:
         raise ValueError("selection must be 'none', 'presel', or 'full'")
 
+    if save_mu_endhits:
+        # keep only the hits of slices surviving the selection; one file at a
+        # time per process, so drop anything left over from a previous file
+        keep = mu_endhits.index.droplevel(-1).isin(S.index)
+        _MU_ENDHIT_CACHE.clear()
+        _MU_ENDHIT_CACHE[f.file_path] = mu_endhits[keep]
+
     return S
+
+def make_maple_mu_endhit_df(f):
+    """Muon-candidate end hits (x, y, z, rr of the collection-plane calo points
+    with rr <= MU_ENDHIT_RR_MAX), index (entry, slc, hit), for the slices kept
+    in the evt df. Requires a make_maple_evt_df(..., save_mu_endhits=True)
+    builder earlier in DFS for the same file."""
+    if f.file_path not in _MU_ENDHIT_CACHE:
+        raise RuntimeError("make_maple_mu_endhit_df: no cached muon end hits for %s -- "
+                           "a save_mu_endhits=True evt builder must precede it in DFS" % f.file_path)
+    return _MU_ENDHIT_CACHE.pop(f.file_path)
 
 
 # thin wrappers for configs -----------------------------------------------
@@ -1232,6 +1281,17 @@ def make_maple_evt_fullsel_df(f):
 
 def make_maple_evt_fullsel_data_df(f):
     return make_maple_evt_df(f, selection="full", do_calo_syst=False)
+
+# muon-candidate end-hit mode: as above, plus stash the muon end hits for
+# make_maple_mu_endhit_df (list it after the evt builder in DFS)
+def make_maple_evt_presel_muendhit_df(f):
+    return make_maple_evt_df(f, selection="presel", do_calo_syst=True, save_mu_endhits=True)
+
+def make_maple_evt_presel_nocalo_muendhit_df(f):
+    return make_maple_evt_df(f, selection="presel", do_calo_syst=False, save_mu_endhits=True)
+
+def make_maple_evt_presel_data_muendhit_df(f):
+    return make_maple_evt_df(f, selection="presel", do_calo_syst=False, save_mu_endhits=True)
 
 
 # =====================================================================
