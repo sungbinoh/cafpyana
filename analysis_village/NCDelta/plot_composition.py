@@ -153,6 +153,10 @@ def cut_var_specs(topo, C=None):
         s["shw_dedx"] = dict(var=lambda d: d.shw_dedx_best, range=(0, 10),
                              label="Shower dE/dx, best plane [MeV/cm]",
                              cuts=[C["shw_dedx_min"]], keep="above")
+    if C.get("shw_dedx_max") is not None:
+        s["shw_dedx_max"] = dict(var=lambda d: d.shw_dedx_best, range=(0, 20),
+                                 label="Shower dE/dx, best plane [MeV/cm]",
+                                 cuts=[C["shw_dedx_max"]], keep="below")
     if C.get("shw_conv_dist_min") is not None:
         s["shw_conv_dist"] = dict(var=lambda d: d.shw_conv_dist, range=(0, 100),
                                   label="Shower conversion distance [cm]",

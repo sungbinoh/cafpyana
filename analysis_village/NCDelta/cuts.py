@@ -27,41 +27,62 @@ the photon energy slightly worse.
 
 Tuning
 ------
-CUTBASED_* was tuned on 500 nopresel dataframes (1.8e20 POT). Every change had
-to hold up on the even and the odd file split separately and on a true
-holdout. Signal is is_signal(): true vertex in the *active* volume, so
-efficiencies here and from evaluate.py are AV-based; [1] uses the FV, which is
-a factor ~1.33 larger (15519 true signal neutrinos instead of 21450).
+CUTBASED_* was tuned on 314 presel dataframes against the Delta(1232)-specific
+is_signal(), then re-evaluated on 498 (1.795e20 POT, 771 true signal
+neutrinos). A second tune on the full 498 was run and REJECTED: it gained
+5-19% of FOM on the full sample but, when tuned on one file half and scored on
+the other, gained in only 2 of 8 tests in both rounds. With 33-64 selected
+signal slices and ~10 free thresholds there is not enough information to
+locate the frontier. Treat the values as provisional and re-run the tune --
+with the holdout check, not just the full-sample FOM -- as statistics grow.
+
+Signal is is_signal(): true vertex in the *active* volume, so efficiencies
+here and from evaluate.py are AV-based; [1] uses the FV.
 
 Two working points, quoted separately rather than summed (see SELECTIONS).
-FV-based efficiency / purity, against [1] Table I:
+AV-based efficiency / purity on the 498-file sample:
 
-                this file              [1] Pandora
-  1g1p   2.27% / 11.1% (balanced)   4.24% / 14.8%
-         0.69% / 20.9% (high_purity)
-  1g0p   3.24% /  8.2% (balanced)   5.52% /  4.0%
-         2.07% / 10.5% (high_purity)
+                  balanced              high_purity
+  1g1p      8.30% / 5.41%            4.28% / 9.59%
+  1g0p      8.30% / 6.37%            6.87% / 7.48%
+
+These are not comparable to [1] Table I any more: that comparison predates the
+Delta(1232) signal definition, under which the true-signal denominator fell by
+~26x and roughly half the previously "selected signal" turned out to be pi0
+decay photons.
 
 Kept despite the figures of merit preferring otherwise, because an MC-only
 figure of merit cannot see what they cost: the fiducial volume (keeps badly
-modelled regions out) and trk_proton_like (dropping it inflates the 1g1p
-CC numu 1pi0 background 8x). Conversely opt0_score_min was dropped despite
-being worth ~0.2 points of purity, for the same reason in reverse -- the score
-is not well validated and costs real MC/data comparison work.
+modelled regions out) and trk_proton_like. opt0_score_min is back on, and
+still carries the MC/data validation burden that got it dropped before --
+in 1g0p it now does real work, so that channel depends on it.
+
+Cuts measured inert by leave-one-out on 498 files: nu_score_min in 1g0p
+rejected 3 of 938 background slices and is now None. nu_score_min elsewhere,
+shw_conv_dist_min/_max in high_purity 1g1p and shw_dedx_max in 1g1p all raise
+purity while lowering S/sqrt(S+B) -- kept, since purity is what high_purity
+exists for and this FOM does not reward that trade.
 
 Where the ceiling is
 --------------------
-Topology plus the FV caps efficiency at 10.7% (1g1p) and 6.9% (1g0p) at ~0.5%
-purity, so everything happens in stage 3 -- and that is where the limit bites.
-It is the input variables, not the cut shape:
+Everything happens in the cut-based stage. NC 1pi0 non-coherent is 68-89% of
+the remaining background in every channel, and a pi0 that loses one photon
+genuinely is a single photon in the detector.
 
-  - the best single variable rejects only ~20% of background at 90% signal
-    efficiency;
-  - a 17-variable naive-Bayes likelihood ratio, trained on one split and
-    evaluated on the other, lands on the same efficiency-purity frontier;
-  - against NC pi0 (80% of the 1g1p background, 39% of the 1g0p one) the best
-    variable rejects 18% -- correctly, since a pi0 that loses one photon
-    really is a single photon in the detector.
+An earlier version of this note claimed the best single variable rejects only
+~20% of that background and a likelihood ratio does no better. That was
+measured when ~54% of the "signal" sample was itself pi0 decay photons, so it
+was largely circular. Re-measured against the Delta(1232) definition, with a
+20-variable naive-Bayes ratio trained on one file half and scored on the
+other, at 90% signal efficiency:
+
+  1g1p   22% of NC 1pi0 rejected   (best single variable: delta_mass, 35%)
+  1g0p   37% of NC 1pi0 rejected   (best single: shower energy, ~37%)
+
+So there is real headroom, and delta_mass_range -- currently None -- is the
+most promising unused cut: a (1.08, 1.45) GeV window took 1g1p purity from
+5.96% to 8.90% on the 314-file sample. A BDT is the structurally correct next
+step, deferred until the signal sample can support one.
 
 Closing that needs a second-shower / unassociated-hit variable, which [2] used
 and these CAFs lack (n_nonprim_shw is identically 0 for 1g0p and counts only
@@ -100,10 +121,14 @@ PRESEL_1G0P = {
 # SELECTIONS: the window defines the signal region of the measurement, so
 # narrowing it per selection would inflate purity by discarding signal phase
 # space rather than by rejecting background.
-# GeV, on shw_energy_corrected().
+# GeV, on shw_energy_corrected(). The 1g0p upper edge was narrowed from 0.950
+# to 0.600: the pi0 decay photon is HARDER than the signal photon there
+# (median 0.358 vs 0.301 GeV), because the pi0 carries the Delta's full decay
+# momentum while the radiative photon shares the boost with a nucleon. The cut
+# removes 229 background slices and zero signal slices.
 ENERGY_WINDOW = {
     "1g1p": (0.020, 0.700),
-    "1g0p": (0.120, 0.950),
+    "1g0p": (0.120, 0.600),
 }
 
 TOPOLOGIES = ("1g1p", "1g0p")
@@ -315,19 +340,23 @@ PRESELECTION = {"1g1p": preselection_1g1p, "1g0p": preselection_1g0p}
 # with nminus1_masks(). Set a value to None to disable.
 
 CUTBASED_1G1P = {
-    "nu_score_min":            0.35,
-    "bary_score_min":          1e-6,   # mcs_pid baryscore_cut
-    # OpT0 flash match. Dropped from every working point despite being worth
-    # ~0.2 points of purity on both splits: the OpT0 score is not well
-    # validated and carries a real MC/data comparison burden, which an MC-only
-    # figure of merit cannot see. It was also doing different things per
-    # channel -- in 1g0p it removed cosmics and dirt (75 of 124 slices, no
-    # signal), in 1g1p only 4 NC pi0 slices and no cosmics at all. For the
-    # record, higher score = better match: at 1g0p topology level cosmics have
-    # median score 10.6 with 35% having no match, signal median 656 with 3%.
-    "opt0_score_min":          None,
+    "nu_score_min":            0.45,
+    "bary_score_min":          0.05,   # was 1e-6 (mcs_pid baryscore_cut)
+    # OpT0 flash match, higher score = better match. Re-enabled against the
+    # Delta(1232) signal definition; it had been dropped earlier because the
+    # score is not well validated and carries an MC/data comparison burden
+    # that an MC-only figure of merit cannot see -- that caveat still stands.
+    # 1g1p gains little from it (FOM 1.674 -> 1.696) but 100 is the only
+    # threshold that improves both file halves.
+    "opt0_score_min":          100.,
     "shw_dedx_min":            3.5,    # MeV/cm; photon ~2 MIP (peak 4.2), electron ~1
-    "shw_conv_dist_max":       80.0,   # X0 = 14 cm, so 80 cm is misreco
+    # Upper bound on the same variable. shw_dedx_min only rejects electrons,
+    # below the photon peak; a proton sits far ABOVE it (median 9.3 MeV/cm,
+    # tail to 37) and passes. In 1g1p that is the largest single background:
+    # 339 of 618 "BNB other" slices are a two-proton nu-mu interaction with one
+    # proton as the track and the other reconstructed as the shower.
+    "shw_dedx_max":            6.0,
+    "shw_conv_dist_max":       60.0,   # X0 = 14 cm, so 60 cm is misreco
     "trk_proton_like":         True,   # chi2_proton < chi2_muon
     "energy_window":           None,   # None = ENERGY_WINDOW[topology]
 
@@ -354,7 +383,12 @@ CUTBASED_1G1P = {
     # sit near 0.39 while CC numu events whose muon was filed as shower-like
     # pile up at ~0.47 -- just under the boundary, which is how they reach
     # 1g0p with no track to cut on. Tightening it targets that background.
-    "shw_trackScore_max":      None,
+    # In 1g1p the same boundary effect produces two-proton nu-mu events: one
+    # proton becomes the track, the other is filed as shower-like at ~0.47.
+    # Signal photons sit at 0.37 (q90 0.416) and the track-like background at
+    # 0.469 (q10 0.426), so the two barely overlap -- 0.44 rejects 83% of it
+    # for one signal slice. All four channels now carry this cut.
+    "shw_trackScore_max":      0.44,
     "extrap_det_path_min":     None,   # 1g0p only: dirt is just 1-3% of this
                                        # channel, the track already vetoes it
     # p+gamma mass window [GeV]: the peak is at ~1.143, below the PDG
@@ -363,18 +397,19 @@ CUTBASED_1G1P = {
 }
 
 CUTBASED_1G0P = {
-    "nu_score_min":       0.35,
-    "bary_score_min":     0.02,
-    # OpT0 flash match. Dropped from every working point despite being worth
-    # ~0.2 points of purity on both splits: the OpT0 score is not well
-    # validated and carries a real MC/data comparison burden, which an MC-only
-    # figure of merit cannot see. It was also doing different things per
-    # channel -- in 1g0p it removed cosmics and dirt (75 of 124 slices, no
-    # signal), in 1g1p only 4 NC pi0 slices and no cosmics at all. For the
-    # record, higher score = better match: at 1g0p topology level cosmics have
-    # median score 10.6 with 35% having no match, signal median 656 with 3%.
-    "opt0_score_min":     None,
-    "shw_dedx_min":        2.0,  # looser than 1g1p: shw_dedx_best is measured
+    # Dropped: a leave-one-out test on 498 files found it rejects 3 of 938
+    # selected background slices and no signal. The pre-selection and the
+    # other cuts already remove everything a nu_score threshold would.
+    # high_purity 1g0p keeps its own 0.50 override.
+    "nu_score_min":       None,
+    "bary_score_min":     0.05,
+    # OpT0 flash match, see CUTBASED_1G1P for the validation caveat. Much more
+    # useful here: 700 takes the FOM 1.509 -> 1.651 on top of the narrowed
+    # energy window, for 5 signal slices.
+    "opt0_score_min":     700.,
+    "shw_dedx_max":       10.0,  # see CUTBASED_1G1P; looser here because with
+                                 # no track a two-proton event is rarer
+    "shw_dedx_min":        3.0,  # looser than 1g1p: shw_dedx_best is measured
                                  # badly enough that tighter costs more signal
                                  # than the CC nue it removes
     "energy_window":      None,  # None = ENERGY_WINDOW[topology]
@@ -397,8 +432,8 @@ CUTBASED_1G0P = {
     # sit near 0.39 while CC numu events whose muon was filed as shower-like
     # pile up at ~0.47 -- just under the boundary, which is how they reach
     # 1g0p with no track to cut on. Tightening it targets that background.
-    "shw_trackScore_max": 0.48,
-    "extrap_det_path_min": 40.0,
+    "shw_trackScore_max": 0.42,
+    "extrap_det_path_min": 60.0,
 }
 
 CUTBASED = {"1g1p": CUTBASED_1G1P, "1g0p": CUTBASED_1G0P}
@@ -422,11 +457,15 @@ SELECTIONS = {
         # shw_nhits_min / shw_start_dist_min to 1g0p, which is a change of
         # variables rather than of values. Reverted: it costs 0.12 points of
         # purity in 1g1p, and in 1g0p trades 2.3 points for 29% more signal.
-        "1g1p": {"nu_score_min": 0.50, "bary_score_min": 0.02,
+        # shw_dedx_max off in 1g1p: every value tested lowered the FOM, the
+        # shw_len_min / shw_open_angle_max cuts already drop stubby protons.
+        "1g1p": {"nu_score_min": 0.50, "bary_score_min": 0.05,
+                 "shw_dedx_max": None,
                  "shw_conv_dist_min": 4.0, "shw_conv_dist_max": 50.0,
-                 "shw_len_min": 30.0, "shw_open_angle_max": 0.25,
+                 "shw_len_min": 30.0, "shw_open_angle_max": 0.15,
                  "shw_trackScore_max": 0.42, "trk_calo_E_max": 0.300},
-        "1g0p": {"nu_score_min": 0.50, "shw_dedx_min": 2.5,
+        "1g0p": {"nu_score_min": 0.50, "bary_score_min": 0.10,
+                 "shw_dedx_min": 2.5,
                  "shw_open_angle_max": 0.20, "shw_trackScore_max": 0.44,
                  "extrap_det_path_min": 80.0},
     },
@@ -479,6 +518,8 @@ def cutbased_cuts(df, topology, cfg=None):
     # CC nue
     if on("shw_dedx_min"):
         out["shw_dedx"] = sv(df, "shw_dedx_best") > c["shw_dedx_min"]
+    if on("shw_dedx_max"):
+        out["shw_dedx_max"] = sv(df, "shw_dedx_best") < c["shw_dedx_max"]
     if on("shw_conv_dist_min"):
         out["shw_conv_dist"] = df.shw_conv_dist > c["shw_conv_dist_min"]
 
