@@ -1,93 +1,12 @@
-"""Pandora NC Delta -> N gamma selection for SBND, adapted from MicroBooNE.
+"""Pandora NC Delta(1232) -> N gamma selection for SBND, adapted from [1].
 
-References
-----------
-[1] MicroBooNE, arXiv:2502.05750. Its Pandora channels are unchanged from [2].
+Energies GeV, lengths cm; dE/dx and PIDA keep the conventional MeV/cm.
+Cut values are provisional: not holdout-validated, on a small signal sample.
+
+[1] MicroBooNE, arXiv:2502.05750 (Pandora channels unchanged from [2]).
 [2] MicroBooNE, PRL 128, 111801 (2022), arXiv:2110.00409 (+ supplemental).
-[3] Numeric pre-cuts: final Runs 1-3 Hive configs,
-    github.com/markrosslonergan/hellstroms_hive, hive/xml/
-      1g1p_xmls/hive2.5/1g1p_CinnabarWorldOrder_v33.3_15_04_30_Combined_Run123_v1_updatedBDTfiles.xml
-      1g0p_xmls/hive2.5/1g0p_CinnabarWorldOrder_v33.3_4_29_20_CombinedRuns13_updatedBDTfiles.xml
-
-Stages:
-  1. Topology: one shower and one (1g1p) or zero (1g0p) primary tracks.
-  2. Pre-selection (PRESEL_*): the fiducial volume only. Stages 1+2 are what
-     the dataframe maker applies, so keeping stage 2 minimal means the
-     dataframes do not bake in a tuning choice.
-  3. Background rejection: rectangular cuts on CAF features (CUTBASED_*).
-  4. Signal window in reconstructed shower energy (ENERGY_WINDOW).
-
-Energies are GeV and lengths cm, except dE/dx and PIDA which keep the
-conventional MeV/cm. Shower energy is shw_energy_corrected(): the
-best plane's energy (best = most hits, as sbncode FillReco.cxx defines it for
-SBND) with the per-plane scale SHW_ENERGY_SCALE applied. The MicroBooNE
-"#GE#" convention -- collection plane with a max-plane fallback -- is not
-used: SBND's wire planes are not MicroBooNE's, and post-selection it resolves
-the photon energy slightly worse.
-
-Tuning
-------
-CUTBASED_* was tuned on 314 presel dataframes against the Delta(1232)-specific
-is_signal(), then re-evaluated on 498 (1.795e20 POT, 771 true signal
-neutrinos). A second tune on the full 498 was run and REJECTED: it gained
-5-19% of FOM on the full sample but, when tuned on one file half and scored on
-the other, gained in only 2 of 8 tests in both rounds. With 33-64 selected
-signal slices and ~10 free thresholds there is not enough information to
-locate the frontier. Treat the values as provisional and re-run the tune --
-with the holdout check, not just the full-sample FOM -- as statistics grow.
-
-Signal is is_signal(): true vertex in the *active* volume, so efficiencies
-here and from evaluate.py are AV-based; [1] uses the FV.
-
-Two working points, quoted separately rather than summed (see SELECTIONS).
-AV-based efficiency / purity on the 498-file sample:
-
-                  balanced              high_purity
-  1g1p      8.30% / 5.41%            4.28% / 9.59%
-  1g0p      8.30% / 6.37%            6.87% / 7.48%
-
-These are not comparable to [1] Table I any more: that comparison predates the
-Delta(1232) signal definition, under which the true-signal denominator fell by
-~26x and roughly half the previously "selected signal" turned out to be pi0
-decay photons.
-
-Kept despite the figures of merit preferring otherwise, because an MC-only
-figure of merit cannot see what they cost: the fiducial volume (keeps badly
-modelled regions out) and trk_proton_like. opt0_score_min is back on, and
-still carries the MC/data validation burden that got it dropped before --
-in 1g0p it now does real work, so that channel depends on it.
-
-Cuts measured inert by leave-one-out on 498 files: nu_score_min in 1g0p
-rejected 3 of 938 background slices and is now None. nu_score_min elsewhere,
-shw_conv_dist_min/_max in high_purity 1g1p and shw_dedx_max in 1g1p all raise
-purity while lowering S/sqrt(S+B) -- kept, since purity is what high_purity
-exists for and this FOM does not reward that trade.
-
-Where the ceiling is
---------------------
-Everything happens in the cut-based stage. NC 1pi0 non-coherent is 68-89% of
-the remaining background in every channel, and a pi0 that loses one photon
-genuinely is a single photon in the detector.
-
-An earlier version of this note claimed the best single variable rejects only
-~20% of that background and a likelihood ratio does no better. That was
-measured when ~54% of the "signal" sample was itself pi0 decay photons, so it
-was largely circular. Re-measured against the Delta(1232) definition, with a
-20-variable naive-Bayes ratio trained on one file half and scored on the
-other, at 90% signal efficiency:
-
-  1g1p   22% of NC 1pi0 rejected   (best single variable: delta_mass, 35%)
-  1g0p   37% of NC 1pi0 rejected   (best single: shower energy, ~37%)
-
-So there is real headroom, and delta_mass_range -- currently None -- is the
-most promising unused cut: a (1.08, 1.45) GeV window took 1g1p purity from
-5.96% to 8.90% on the 314-file sample. A BDT is the structurally correct next
-step, deferred until the signal sample can support one.
-
-Closing that needs a second-shower / unassociated-hit variable, which [2] used
-and these CAFs lack (n_nonprim_shw is identically 0 for 1g0p and counts only
-the leading track's daughters for 1g1p). That is a make_ncdelta.py change plus
-a dataframe remake.
+[3] Numeric pre-cuts: Runs 1-3 Hive configs, github.com/markrosslonergan/
+    hellstroms_hive, hive/xml/{1g1p,1g0p}_xmls/hive2.5
 """
 
 from collections import OrderedDict
@@ -95,37 +14,34 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 
-# ---------------------------------------------------------------------------
-# Thresholds
-# ---------------------------------------------------------------------------
+# cuts.py is imported both as analysis_village.NCDelta.cuts and, by the
+# standalone scripts, as plain "cuts" with this directory on sys.path.
+try:
+    from analysis_village.NCDelta.shower_energy import (      # noqa: F401
+        SHW_ENERGY_SCALE, shw_best_plane, shw_energy_corrected)
+except ImportError:
+    from shower_energy import (                               # noqa: F401
+        SHW_ENERGY_SCALE, shw_best_plane, shw_energy_corrected)
 
-# Track/shower classification. PFPs with NaN or negative score are counted
-# as "unclassified", not as tracks or showers.
+# --- Thresholds
+
+# PFPs with NaN or negative score count as neither track nor shower.
 TRK_SCORE_CUT = 0.5
 
-# Pre-selection. Applied at dataframe creation, so it is deliberately limited
-# to the fiducial volume and Pandora's clear-cosmic flag: anything tighter
-# bakes a tuning choice into the dataframes and cannot be loosened afterwards.
-# Every other cut lives in CUTBASED_* below, re-tunable without a remake.
+# Applied at dataframe creation, so kept minimal: anything here is baked in.
 PRESEL_1G1P = {
     "not_clear_cosmic": True,   # Pandora's neutrino candidate only, as in [3]
-    "vtx_fv": True,             # FV on the slice vertex (the track fixes it)
+    "vtx_fv": True,
+    "shw_fv": True,
 }
 
 PRESEL_1G0P = {
     "not_clear_cosmic": True,
-    "shw_fv": True,             # FV on the shower start (no track defines the vertex)
+    "vtx_fv": True,
+    "shw_fv": True,
 }
 
-# Signal window in shw_energy_corrected(). Common to both working points in
-# SELECTIONS: the window defines the signal region of the measurement, so
-# narrowing it per selection would inflate purity by discarding signal phase
-# space rather than by rejecting background.
-# GeV, on shw_energy_corrected(). The 1g0p upper edge was narrowed from 0.950
-# to 0.600: the pi0 decay photon is HARDER than the signal photon there
-# (median 0.358 vs 0.301 GeV), because the pi0 carries the Delta's full decay
-# momentum while the radiative photon shares the boost with a nucleon. The cut
-# removes 229 background slices and zero signal slices.
+# GeV. The measurement's signal region, so common to both working points.
 ENERGY_WINDOW = {
     "1g1p": (0.020, 0.700),
     "1g0p": (0.120, 0.600),
@@ -133,15 +49,12 @@ ENERGY_WINDOW = {
 
 TOPOLOGIES = ("1g1p", "1g0p")
 
-# ---------------------------------------------------------------------------
-# Geometry (SBND only)
-# ---------------------------------------------------------------------------
+# --- Geometry (SBND only)
 
 # Active volume: the TPC box, no insets.
 ACTIVE_VOLUME = {"x": (-200.0, 200.0), "y": (-200.0, 200.0), "z": (0.0, 500.0)}
 
-# Fiducial volume: the SBND part of the FV in analysis_village/mcs_pid/cuts.py,
-# i.e. the active volume with insets and the high-yz region excluded.
+# Fiducial volume: a copy of the SBND one in analysis_village/mcs_pid/cuts.py.
 SBND_FV = {
     "lowYZ":  {"x": (-200., 200.), "y": (-200., 200.), "z": (0., 250.)},
     "highYZ": {"x": (-200., 200.), "y": (-200., 100.), "z": (250., 500.)},
@@ -190,63 +103,11 @@ def _fv(df, prefix):
                             df.detector), index=df.index)
 
 
-# ---------------------------------------------------------------------------
-# Shower energy
-# ---------------------------------------------------------------------------
-
-# Per-plane energy scale, applied to the best plane's energy. SBND's best
-# plane for energy is the one with the most hits (sbncode FillReco.cxx), and
-# which plane that is varies event to event, so all three factors are in play.
-#
-# Derived from selected signal showers truth-matched to a photon, as
-# 1 / median(E_plane / E_true_photon) over the events where that plane is the
-# best plane. Stable to +-0.01 across both working points and both file
-# splits. Applying them centres the energy scale within 0.5% of truth
-# out-of-sample; the fractional resolution (~13%) is unchanged, since a
-# multiplicative factor cannot change it.
-#
-# Caveat: the factors are derived on selected events, which is also where they
-# are applied, so there is mild circularity -- the inclusive bias is larger
-# (median 0.74 rather than 0.85), the selection keeping better-reconstructed
-# showers. Re-derive if the selection changes substantially.
-SHW_ENERGY_SCALE = (1.20, 1.20, 1.15)   # (I0 induction-1, I1 induction-2, I2 collection)
-
-
-def shw_best_plane(df):
-    """Index of the best plane for energy: the one with the most hits."""
-    nh = np.vstack([np.nan_to_num(df.shw_nhits_I0.to_numpy(dtype=float), nan=-1.),
-                    np.nan_to_num(df.shw_nhits_I1.to_numpy(dtype=float), nan=-1.),
-                    np.nan_to_num(df.shw_nhits_I2.to_numpy(dtype=float), nan=-1.)])
-    return np.argmax(nh, axis=0)
-
-
-def shw_energy_corrected(df, scale=SHW_ENERGY_SCALE):
-    """Best-plane shower energy [GeV] with the per-plane scale applied.
-
-    Reproduces the CAF's shw_energy_best to 99.97% of showers before scaling,
-    so it can be used on dataframes that predate this correction.
-    """
-    ep = np.vstack([df.shw_energy_I0.to_numpy(dtype=float),
-                    df.shw_energy_I1.to_numpy(dtype=float),
-                    df.shw_energy_I2.to_numpy(dtype=float)])
-    bp = shw_best_plane(df)
-    idx = np.arange(len(df))
-    return pd.Series(np.asarray(scale)[bp] * ep[bp, idx], index=df.index)
-
-
 def extrap_det_path(df):
-    """Extrapolated detector path length [cm].
+    """Distance back along the shower direction to the AV edge [cm].
 
-    Distance from the shower start, projected *backwards* along the shower
-    direction, to where it leaves the active volume: how far the photon could
-    have travelled inside the detector before converting.
-
-    Small for dirt -- a neutrino interacting in the surrounding rock sends its
-    photon in through a nearby wall, so there is little detector behind the
-    conversion point. Large for a genuine in-detector interaction. This is the
-    handle the fiducial-volume cut cannot provide, because with no track the
-    FV is applied to the shower start, which for dirt is legitimately inside
-    (median 23 cm in from the wall, while the true vertex is ~29 cm outside).
+    How far the photon could have travelled inside the detector before
+    converting. Small for dirt, which enters through a nearby wall.
     """
     b = ACTIVE_VOLUME
     start = (sv(df, "shw_start_x").to_numpy(dtype=float),
@@ -265,9 +126,7 @@ def extrap_det_path(df):
     return pd.Series(t, index=df.index)
 
 
-# ---------------------------------------------------------------------------
-# Topology
-# ---------------------------------------------------------------------------
+# --- Topology
 
 def topology_1g1p(df):
     return (df.n_shw == 1) & (df.n_trk == 1)
@@ -283,9 +142,7 @@ def topology_cut(df):
 
 TOPOLOGY_CUTS = {"1g1p": topology_1g1p, "1g0p": topology_1g0p}
 
-# ---------------------------------------------------------------------------
-# Pre-selection (NaN comparisons are False, so missing quantities fail)
-# ---------------------------------------------------------------------------
+# --- Pre-selection (NaN comparisons are False, so missing quantities fail)
 
 def presel_1g1p_cuts(df, cfg=PRESEL_1G1P):
     """Ordered dict of the individual 1g1p pre-cuts (topology excluded)."""
@@ -294,6 +151,8 @@ def presel_1g1p_cuts(df, cfg=PRESEL_1G1P):
         out["not_clear_cosmic"] = ~df.is_clear_cosmic.astype(bool)
     if cfg.get("vtx_fv"):
         out["vtx_fv"] = _fv(df, "slc_vtx")
+    if cfg.get("shw_fv"):
+        out["shw_fv"] = _fv(df, "shw_start")
     return out
 
 
@@ -302,6 +161,8 @@ def presel_1g0p_cuts(df, cfg=PRESEL_1G0P):
     out = OrderedDict()
     if cfg.get("not_clear_cosmic"):
         out["not_clear_cosmic"] = ~df.is_clear_cosmic.astype(bool)
+    if cfg.get("vtx_fv"):
+        out["vtx_fv"] = _fv(df, "slc_vtx")
     if cfg.get("shw_fv"):
         out["shw_fv"] = _fv(df, "shw_start")
     return out
@@ -332,153 +193,85 @@ def preselection(df):
 
 PRESELECTION = {"1g1p": preselection_1g1p, "1g0p": preselection_1g0p}
 
-# ---------------------------------------------------------------------------
-# Cut-based background rejection
-# ---------------------------------------------------------------------------
-# Cuts are grouped by the background they target. Unless a source is given,
-# values are untuned physics-motivated starting points: tune them on SBND MC
-# with nminus1_masks(). Set a value to None to disable.
+# --- Cut-based background rejection
+# Every cut a working point can set. A config lists only the ones it uses;
+# anything absent is off. Thresholds are repeated per working point on purpose
+# -- each config is readable on its own.
+CUT_KEYS = (
+    "nu_score_min", "bary_score_min", "opt0_score_min",
+    "shw_dedx_min", "shw_dedx_max", "shw_nhits_min",
+    "shw_len_min", "shw_open_angle_max", "shw_trackScore_max",
+    "shw_conv_dist_min", "shw_conv_dist_max", "shw_start_dist_min",
+    "extrap_det_path_min", "vtx_dist_min", "trk_dist_min",
+    "trk_ke_max", "trk_calo_E_max", "trk_pida_max", "trk_proton_like",
+    "trk_start_dist_to_vtx_max", "abs_cos_trk_shw_max", "n_nonprim_shw_max",
+    "delta_mass_range", "energy_window",
+)
 
-CUTBASED_1G1P = {
-    "nu_score_min":            0.45,
-    "bary_score_min":          0.05,   # was 1e-6 (mcs_pid baryscore_cut)
-    # OpT0 flash match, higher score = better match. Re-enabled against the
-    # Delta(1232) signal definition; it had been dropped earlier because the
-    # score is not well validated and carries an MC/data comparison burden
-    # that an MC-only figure of merit cannot see -- that caveat still stands.
-    # 1g1p gains little from it (FOM 1.674 -> 1.696) but 100 is the only
-    # threshold that improves both file halves.
-    "opt0_score_min":          100.,
-    "shw_dedx_min":            3.5,    # MeV/cm; photon ~2 MIP (peak 4.2), electron ~1
-    # Upper bound on the same variable. shw_dedx_min only rejects electrons,
-    # below the photon peak; a proton sits far ABOVE it (median 9.3 MeV/cm,
-    # tail to 37) and passes. In 1g1p that is the largest single background:
-    # 339 of 618 "BNB other" slices are a two-proton nu-mu interaction with one
-    # proton as the track and the other reconstructed as the shower.
-    "shw_dedx_max":            6.0,
-    "shw_conv_dist_max":       60.0,   # X0 = 14 cm, so 60 cm is misreco
-    "trk_proton_like":         True,   # chi2_proton < chi2_muon
-    "energy_window":           None,   # None = ENERGY_WINDOW[topology]
-
-    # Switched off: a leave-one-out test showed each was worth <0.3 points of
-    # purity once the cuts above are applied (several removed nothing at all).
-    # Kept as None to document what is available. Signal/background slices
-    # each removed, out of 350/2734 selected:
-    "vtx_dist_min":            None,   # 2.0:    0 / 0
-    "trk_dist_min":            None,   # 2.0:    0 / 2
-    "shw_start_dist_min":      None,   # 2.0:    0 / 6
-    "trk_ke_max":              None,   # 0.7 GeV: 0 / 6
-    "n_nonprim_shw_max":       None,   # 1:      0 / 3
-    "shw_nhits_min":           None,   # 150:    0 / 1
-    "trk_start_dist_to_vtx_max": None, # 10.0:   0 / 0
-    "abs_cos_trk_shw_max":     None,   # 0.99:   1 / 7
-    # On in high_purity only:
-    "trk_calo_E_max":          None,   # GeV
-    "trk_pida_max":            None,
-    "shw_len_min":             None,
-    "shw_open_angle_max":      None,
-    "shw_conv_dist_min":       None,
-    # Pandora's track/shower score for the leading shower. TRK_SCORE_CUT = 0.5
-    # already bounds it from above by construction, but genuine photon showers
-    # sit near 0.39 while CC numu events whose muon was filed as shower-like
-    # pile up at ~0.47 -- just under the boundary, which is how they reach
-    # 1g0p with no track to cut on. Tightening it targets that background.
-    # In 1g1p the same boundary effect produces two-proton nu-mu events: one
-    # proton becomes the track, the other is filed as shower-like at ~0.47.
-    # Signal photons sit at 0.37 (q90 0.416) and the track-like background at
-    # 0.469 (q10 0.426), so the two barely overlap -- 0.44 rejects 83% of it
-    # for one signal slice. All four channels now carry this cut.
-    "shw_trackScore_max":      0.44,
-    "extrap_det_path_min":     None,   # 1g0p only: dirt is just 1-3% of this
-                                       # channel, the track already vetoes it
-    # p+gamma mass window [GeV]: the peak is at ~1.143, below the PDG
-    # Delta(1232), and NC pi0 peaks at 1.108, so a window buys ~0.2% purity.
-    "delta_mass_range":        None,
+# Maximizes S/sqrt(S+B).
+BALANCED_1G1P = {
+    "nu_score_min":        0.45,
+    "bary_score_min":      0.05,
+    "opt0_score_min":      100.,   # higher = better match; poorly validated
+    "shw_dedx_min":        3.5,    # MeV/cm; photon ~2 MIP, electron ~1
+    "shw_dedx_max":        6.0,    # shw_dedx_min only bounds below; protons pass
+    "shw_conv_dist_max":   60.,    # X0 = 14 cm, so 60 cm is misreco
+    "shw_trackScore_max":  0.44,   # track-like fakes pile up under TRK_SCORE_CUT
+    "trk_proton_like":     True,   # chi2_proton < chi2_muon
 }
 
-CUTBASED_1G0P = {
-    # Dropped: a leave-one-out test on 498 files found it rejects 3 of 938
-    # selected background slices and no signal. The pre-selection and the
-    # other cuts already remove everything a nu_score threshold would.
-    # high_purity 1g0p keeps its own 0.50 override.
-    "nu_score_min":       None,
-    "bary_score_min":     0.05,
-    # OpT0 flash match, see CUTBASED_1G1P for the validation caveat. Much more
-    # useful here: 700 takes the FOM 1.509 -> 1.651 on top of the narrowed
-    # energy window, for 5 signal slices.
-    "opt0_score_min":     700.,
-    "shw_dedx_max":       10.0,  # see CUTBASED_1G1P; looser here because with
-                                 # no track a two-proton event is rarer
-    "shw_dedx_min":        3.0,  # looser than 1g1p: shw_dedx_best is measured
-                                 # badly enough that tighter costs more signal
-                                 # than the CC nue it removes
-    "energy_window":      None,  # None = ENERGY_WINDOW[topology]
-
-    # Switched off (see the 1g1p note); removed out of 525/5941 selected:
-    "shw_start_dist_min": None,  # 2.0:  0 / 0
-    "n_nonprim_shw_max":  None,  # 0: structurally dead, n_nonprim_shw is
-                                 # identically 0 for every 1g0p slice
-    "shw_nhits_min":      None,  # 100:  5 / 131
-    "shw_conv_dist_max":  None,  # 5.0:  1 / 65
-    "shw_len_min":        None,  # on in high_purity only
-    "shw_open_angle_max": None,  # on in high_purity only
-    # Dirt rejection, 1g0p only. With no track the FV is applied to the shower
-    # start, which for a dirt event is legitimately inside the detector (median
-    # 23 cm in) even though the true vertex is ~29 cm outside -- the photon
-    # travels in and converts. This cut asks how much detector lies behind the
-    # conversion point instead, and roughly halves the dirt background.
-    # Pandora's track/shower score for the leading shower. TRK_SCORE_CUT = 0.5
-    # already bounds it from above by construction, but genuine photon showers
-    # sit near 0.39 while CC numu events whose muon was filed as shower-like
-    # pile up at ~0.47 -- just under the boundary, which is how they reach
-    # 1g0p with no track to cut on. Tightening it targets that background.
-    "shw_trackScore_max": 0.42,
-    "extrap_det_path_min": 60.0,
+BALANCED_1G0P = {
+    "bary_score_min":      0.05,   # nu_score_min is inert here, so omitted
+    "opt0_score_min":      700.,
+    "shw_dedx_min":        3.0,    # looser: dedx is measured worse with no track
+    "shw_dedx_max":        10.0,   # looser: two-proton events are rarer
+    "shw_trackScore_max":  0.42,
+    "extrap_det_path_min": 60.,    # dirt; the FV cannot do this on a shower start
 }
 
-CUTBASED = {"1g1p": CUTBASED_1G1P, "1g0p": CUTBASED_1G0P}
+# Maximizes purity.
+HIGH_PURITY_1G1P = {
+    "nu_score_min":        0.50,
+    "bary_score_min":      0.05,
+    "opt0_score_min":      100.,
+    "shw_dedx_min":        3.5,
+    "shw_conv_dist_min":   4.0,    # shw_dedx_max off: len/open_angle already
+    "shw_conv_dist_max":   50.,    # drop the stubby protons it would catch
+    "shw_len_min":         30.,
+    "shw_open_angle_max":  0.15,
+    "shw_trackScore_max":  0.42,
+    "trk_calo_E_max":      0.300,
+    "trk_proton_like":     True,
+}
 
+HIGH_PURITY_1G0P = {
+    "nu_score_min":        0.50,
+    "bary_score_min":      0.10,
+    "opt0_score_min":      700.,
+    "shw_dedx_min":        2.5,
+    "shw_dedx_max":        10.0,
+    "shw_open_angle_max":  0.20,
+    "shw_trackScore_max":  0.44,
+    "extrap_det_path_min": 80.,
+}
 
-# The defaults above are "balanced": they maximize S/sqrt(S+B), which is the
-# same as maximizing purity x efficiency, since (S/sqrt(S+B))^2 = S * purity
-# and purity x efficiency = S * purity / N_true with N_true fixed. Verified by
-# optimizing each separately and getting identical cuts in both channels.
-# "high_purity" maximizes purity, equivalently S/B, since
-# purity = (S/B) / (1 + S/B).
-#
-# Use selection_config(name, topo), dump one to JSON for evaluate.py --config,
-# or pass --selection to plot_composition.py.
 SELECTIONS = {
-    "balanced": {"1g1p": {}, "1g0p": {}},
-    "high_purity": {
-        # Same variables as the original tuning -- the re-convergence after the
-        # energy change had added shw_nhits_min / n_nonprim_shw_max /
-        # trk_start_dist_to_vtx_max here and shw_conv_dist_max / shw_len_min /
-        # shw_nhits_min / shw_start_dist_min to 1g0p, which is a change of
-        # variables rather than of values. Reverted: it costs 0.12 points of
-        # purity in 1g1p, and in 1g0p trades 2.3 points for 29% more signal.
-        # shw_dedx_max off in 1g1p: every value tested lowered the FOM, the
-        # shw_len_min / shw_open_angle_max cuts already drop stubby protons.
-        "1g1p": {"nu_score_min": 0.50, "bary_score_min": 0.05,
-                 "shw_dedx_max": None,
-                 "shw_conv_dist_min": 4.0, "shw_conv_dist_max": 50.0,
-                 "shw_len_min": 30.0, "shw_open_angle_max": 0.15,
-                 "shw_trackScore_max": 0.42, "trk_calo_E_max": 0.300},
-        "1g0p": {"nu_score_min": 0.50, "bary_score_min": 0.10,
-                 "shw_dedx_min": 2.5,
-                 "shw_open_angle_max": 0.20, "shw_trackScore_max": 0.44,
-                 "extrap_det_path_min": 80.0},
-    },
+    "balanced":    {"1g1p": BALANCED_1G1P,    "1g0p": BALANCED_1G0P},
+    "high_purity": {"1g1p": HIGH_PURITY_1G1P, "1g0p": HIGH_PURITY_1G0P},
 }
+DEFAULT_SELECTION = "balanced"
+
+# Back-compat names for evaluate.py and plot_composition.py.
+CUTBASED_1G1P = BALANCED_1G1P
+CUTBASED_1G0P = BALANCED_1G0P
+CUTBASED = SELECTIONS[DEFAULT_SELECTION]
 
 
 def selection_config(name, topology):
-    """CUTBASED[topology] with the named working point's overrides applied."""
+    """The named working point's cuts for one channel."""
     if name not in SELECTIONS:
         raise KeyError("Unknown selection %r; have %s" % (name, sorted(SELECTIONS)))
-    cfg = dict(CUTBASED[topology])
-    cfg.update(SELECTIONS[name][topology])
-    return cfg
+    return dict(SELECTIONS[name][topology])
 
 
 def cutbased_cuts(df, topology, cfg=None):
@@ -631,9 +424,7 @@ def cutflow(df, topology, weight=None, **kwargs):
     return pd.DataFrame(rows).set_index("stage")
 
 
-# ---------------------------------------------------------------------------
-# Truth categories ([2], Table II). Works on the slice df and the mcnu df.
-# ---------------------------------------------------------------------------
+# --- Truth categories ([2], Table II). Works on the slice df and the mcnu df.
 
 CATEGORY_LABELS = OrderedDict([
     (0, "NC Delta->Ngamma"),
@@ -646,9 +437,7 @@ CATEGORY_LABELS = OrderedDict([
     (7, "Cosmic"),
 ])
 
-# CAF "no value" markers, left in the dataframe and masked here instead. A cut
-# on NaN is False either way, which is what a missing measurement should do.
-# tmatch_idx and true_pdg are excluded: is_cosmic() reads their sentinels.
+# CAF "no value" markers. tmatch_idx/true_pdg excluded: is_cosmic() reads them.
 SENTINELS = {
     "shw_dedx_best": (-5.,), "shw_dedx_I2": (-999.,),
     "shw_density": (-5.,), "shw_open_angle": (-5.,),
@@ -669,10 +458,7 @@ def sv(df, col):
 GENIE_MODE_RES = 1
 GENIE_MODE_COH = 3
 
-# genie::EResonance, from rec.mc.nu.resnum. genie_mode == GENIE_MODE_RES is ANY
-# resonance, so resnum is what picks out the Delta(1232).
-# Ref: GENIE Framework/ParticleData/BaryonResonance.h, sbnanaobj
-# StandardRecord/SRTrueInteraction.h.
+# genie::EResonance (BaryonResonance.h). genie_mode == kRes is ANY resonance.
 RESNUM_NO_RESONANCE = -1
 RESNUM_DELTA_1232 = 0      # kP33_1232
 RESNUM = {
@@ -702,10 +488,8 @@ def is_cosmic(df):
 def is_ncdelta_rad(df):
     """NC Delta(1232) -> N gamma from GENIE truth.
 
-    genie_mode == kRes is any resonance, so resnum pins the Delta(1232).
-    GENIE primaries include ~3 MeV de-excitation gammas, hence the hard-photon
-    requirement. npi0 == 0 drops Delta -> N pi0 with a photon from elsewhere,
-    which is indistinguishable from signal and overlaps the NC 1pi0 category.
+    resnum pins the Delta(1232); genie_mode == kRes is any resonance. GENIE
+    primaries include ~3 MeV de-excitation gammas, hence the hard photon.
     """
     return ((df.true_isnc == 1)
             & (df.true_resnum == RESNUM_DELTA_1232)
@@ -722,14 +506,16 @@ def truth_category(df):
     cc = df.true_iscc == 1
     npi0 = df.true_npi0
 
+    coh = df.true_genie_mode == GENIE_MODE_COH
+    # Mutually exclusive by construction; anything unmatched is 5, "BNB other".
     conds = [
-        cosmic,
-        nu & ~av,
-        av & is_ncdelta_rad(df),
-        av & nc & (npi0 == 1) & (df.true_genie_mode == GENIE_MODE_COH),
-        av & nc & (npi0 == 1),
-        av & cc & (df.true_pdg == 14) & (npi0 == 1),  # numubar -> other, as in [3]
-        av & cc & (df.true_pdg.abs() == 12),
+        cosmic,                                                     # 7
+        nu & ~av,                                                   # 6 dirt
+        av & is_ncdelta_rad(df),                                    # 0 signal
+        av & nc & (npi0 == 1) & coh,                                # 1
+        av & nc & (npi0 == 1) & ~coh,                               # 2
+        av & cc & (df.true_pdg == 14) & (npi0 == 1),  # 3; numubar -> other, as in [3]
+        av & cc & (df.true_pdg.abs() == 12),                        # 4
     ]
     codes = [7, 6, 0, 1, 2, 3, 4]
     return pd.Series(np.select(conds, codes, default=5), index=df.index)

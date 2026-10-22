@@ -49,7 +49,7 @@ def channel_config(overrides, topo):
     if not overrides or topo not in overrides:
         return None
     cfg = dict(cuts.CUTBASED[topo])
-    unknown = set(overrides[topo]) - set(cfg)
+    unknown = set(overrides[topo]) - set(cuts.CUT_KEYS)
     if unknown:
         raise KeyError("Unknown %s cut(s) in config: %s" % (topo, sorted(unknown)))
     cfg.update(overrides[topo])

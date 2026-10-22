@@ -12,6 +12,7 @@ changing the cuts in `cuts.py`.
 | File | Role |
 |---|---|
 | `cuts.py` | All selection definitions: topology, pre-selection, cut-based stage, energy window, truth categories. **The file being optimized.** |
+| `shower_energy.py` | Best-plane shower energy and the per-plane scale. Reconstruction, not selection; imported by `cuts.py`. |
 | `dfio.py` | Reads `.df` files (HDF5, keys `slc_<i>`, `mcnu_<i>`, `hdr_<i>`). |
 | `evaluate.py` | Efficiency, purity, S/√B, S/√(S+B) per channel. The objective. |
 | `plot_composition.py` | Stacked truth-composition plots, including N−1 plots of every cut. |
@@ -66,12 +67,14 @@ directly from Python instead of the CLI: loading the data is the slow part.
    which is not in this directory, imports `TRK_SCORE_CUT`, `topology_cut`,
    `preselection` and `dist_to_active_boundary`. The plotting script relies on
    `stage_cuts`, `nminus1_masks`, `PRESEL_*`, `CUTBASED_*` and `ENERGY_WINDOW`.
-   New cuts go into `cutbased_cuts` with a config key in `CUTBASED_*`. Add a
-   matching entry in `plot_composition.cut_var_specs` so the cut gets an N−1 plot.
+   New cuts go into `cutbased_cuts`, get a name in `CUT_KEYS`, and go in the
+   working-point configs that use them (`BALANCED_*` / `HIGH_PURITY_*`; each
+   lists only its active cuts). Add a matching entry in
+   `plot_composition.cut_var_specs` so the cut gets an N−1 plot.
 6. The fiducial volume in `cuts.py` is a copy of the one in cafpyana's
    `mcs_pid/cuts.py`; don't change it here.
 7. Report the figure of merit you optimized, the cut values, and the
    efficiency and purity of each channel, before and after.
 
-`cuts.py` is copied back into cafpyana unchanged, so it must stay importable
-with only numpy and pandas.
+`cuts.py` is copied back into cafpyana unchanged and must stay importable with
+only numpy and pandas. It imports `shower_energy.py`, so copy both.
