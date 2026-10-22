@@ -1,46 +1,24 @@
 #!/usr/bin/env python3
-"""Truth-composition plots for the NCDelta dataframes.
-
-For each channel (1g1p, 1g0p), stacked by the truth categories in cuts.py:
+"""Truth-composition plots for the NCDelta dataframes, stacked by the truth
+categories in cuts.py. Per channel (1g1p, 1g0p):
 
   composition_trueE_<ch>.png  true neutrino energy
   composition_recoE_<ch>.png  reconstructed visible energy, E_gamma + T_p
-  invmass_1g1p.png            proton + photon invariant mass, with the
-                              Delta(1232) mass marked (1g1p only)
-  cutvars_<ch>.png            N-1 distribution of each cut variable: every
-                              other cut applied, threshold drawn, rejected
-                              side shaded
-  yields_<ch>.csv             yields per category at each stage
+  invmass_1g1p.png            proton + photon invariant mass (1g1p only)
+  cutvars_<ch>.png            N-1 panel per cut: every other cut applied,
+                              threshold drawn, rejected side shaded
 
-The energy and mass plots have three stages:
-  dataframe     every slice in the .df (already topology + pre-selection
-                for ncdelta_mc.py; all non-clear-cosmic slices for
-                ncdelta_mc_nopresel.py)
-  preselection  topology + the fiducial volume and clear-cosmic veto, all the
-                pre-selection now is (see cuts.py)
-  selection     full selection
+Per-category yields are in each legend, totals and purity in the titles.
 
-Visible energy is used because the outgoing neutrino in an NC event is not
-measured, so the true neutrino energy cannot be reconstructed.
+Visible energy, because the outgoing neutrino of an NC event is not measured.
+Cosmic slices have no true neutrino energy, so in the true-energy plots they
+appear only as a legend yield.
 
-Cosmic slices have no true neutrino energy. In the true-energy plots they
-appear only as a yield in the legend; elsewhere they are stacked normally.
+The energy and mass plots show two panels: before the cut-based selection
+(topology + pre-selection) and after it.
 
-Pre-selection is now only the fiducial volume, which depends on all three
-vertex coordinates and is not drawn; every cut that does get an N-1 panel
-lives in CUTBASED_*. On dataframes made with ncdelta_mc.py the FV cut is
-already applied, so use the ncdelta_mc_nopresel.py ones to see what it
-removes.
-
-Inputs (-i) can be grid output directories, .df files, glob patterns, or
-.list/.txt files of paths. A directory contributes every .df file in it.
-Files that cannot be read (e.g. from crashed grid jobs) are skipped with a
-warning, and their POT is not counted.
-
-Example (from the repository root):
-  python analysis_village/NCDelta/plot_composition.py \\
-      -i /pnfs/sbnd/scratch/users/nrowe/cafpyana_out/dfs/2026_10_17_164529__ncdelta.df/ \\
-      --pot 1e20 -o plots/
+Inputs (-i) are directories, .df files, glob patterns or .list files;
+unreadable files are skipped with a warning and their POT is not counted.
 """
 
 import argparse
@@ -61,6 +39,7 @@ from matplotlib.patches import Patch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import cuts                            # noqa: E402
+from shower_energy import visible_energy   # noqa: E402
 from dfio import expand_inputs, load   # noqa: E402
 
 DEFAULT_INPUT = "/pnfs/sbnd/scratch/users/nrowe/cafpyana_out/dfs/2026_10_17_164529__ncdelta.df/"
@@ -79,141 +58,99 @@ COLORS = {
     7: "#bcbd22",  # Cosmic
 }
 STAGE_TITLES = {
-    "dataframe": "All slices in dataframe",
-    "preselection": "{topo} topology + pre-selection",
-    "selection": "{topo} full selection",
+    "preselection": "{topo} before selection",
+    "selection": "{topo} after selection",
 }
+STAGE_ORDER = ("preselection", "selection")
 
 
 # ---------------------------------------------------------------------------
 # Derived quantities
 # ---------------------------------------------------------------------------
 
-def visible_energy(df):
-    """Shower energy plus proton KE from range [GeV]; shower only without a track."""
-    return cuts.shw_energy_corrected(df) + df.trk_ke_p.where(df.n_trk > 0, 0.).fillna(0.)
+# --- Cut variables: what to plot for each stage name in cuts.stage_cuts()
+# One row per cut: stage name, the cuts.py config key, the quantity, the axis
+# range, the label, and which side passes. A float range means (0, that x the
+# threshold), for scores whose scale follows the cut. Thresholds come from
+# cuts.py, so the plots follow it. Cuts absent from a config are not drawn.
+_CUT_PLOTS = (
+    ("nu_score",          "nu_score_min",        lambda d: d.nu_score,
+     (0, 1),      "Pandora neutrino score",                     "above"),
+    ("flash_match",       "bary_score_min",      lambda d: d.bary_score,
+     (0, 1),      "Barycenter flash-match score",               "above"),
+    ("opt0_score",        "opt0_score_min",      lambda d: d.opt0_score,
+     6.,          "OpT0 flash-match score",                     "above"),
+    ("shw_dedx",          "shw_dedx_min",        lambda d: d.shw_dedx_best,
+     (0, 10),     "Shower dE/dx, best plane [MeV/cm]",          "above"),
+    ("shw_dedx_max",      "shw_dedx_max",        lambda d: d.shw_dedx_best,
+     (0, 20),     "Shower dE/dx, best plane [MeV/cm]",          "below"),
+    ("shw_conv_dist",     "shw_conv_dist_min",   lambda d: d.shw_conv_dist,
+     (0, 100),    "Shower conversion distance [cm]",            "above"),
+    ("shw_conv_dist_max", "shw_conv_dist_max",   lambda d: d.shw_conv_dist,
+     4.,          "Shower conversion distance [cm]",            "below"),
+    ("shw_len",           "shw_len_min",         lambda d: d.shw_len,
+     (0, 200),    "Shower length [cm]",                         "above"),
+    ("shw_trackScore",    "shw_trackScore_max",  lambda d: d.shw_trackScore,
+     (0, 0.5),    "Shower track/shower score",                  "below"),
+    ("shw_open_angle",    "shw_open_angle_max",  lambda d: d.shw_open_angle,
+     (0, 1),      "Shower opening angle [rad]",                 "below"),
+    ("shw_nhits",         "shw_nhits_min",
+     lambda d: d.shw_nhits_I0 + d.shw_nhits_I1 + d.shw_nhits_I2,
+     (0, 1000),   "Shower hits, all planes",                    "above"),
+    ("extrap_det_path",   "extrap_det_path_min", lambda d: cuts.extrap_det_path(d),
+     (0, 600),    "Extrapolated detector path length [cm]",     "above"),
+    ("shw_contained",     "shw_start_dist_min",  lambda d: d.shw_start_dist_to_wall,
+     (-10, 100),  "Shower start distance to wall [cm]",         "above"),
+    ("vtx_contained",     "vtx_dist_min",        lambda d: d.vtx_dist_to_wall,
+     (-10, 100),  "Vertex distance to wall [cm]",               "above"),
+    ("trk_contained",     "trk_dist_min",
+     lambda d: np.minimum(d.trk_start_dist_to_wall, d.trk_end_dist_to_wall),
+     (-10, 100),  "Track min distance to wall [cm]",            "above"),
+    ("trk_ke",            "trk_ke_max",          lambda d: d.trk_ke_p,
+     (0, 1.0),    "Proton KE from range [GeV]",                 "below"),
+    ("trk_calo_E",        "trk_calo_E_max",      lambda d: d.trk_calo_E,
+     (0, 1.0),    "Track calorimetric energy [GeV]",            "below"),
+    ("trk_attached",      "trk_start_dist_to_vtx_max",
+     lambda d: d.trk_start_dist_to_vtx,
+     (0, 30),     "Track start distance to vertex [cm]",        "below"),
+    ("trk_pida",          "trk_pida_max",        lambda d: d.trk_pida,
+     (0, 40),     r"Track PIDA [MeV/cm$^{1.42}$]",              "below"),
+)
 
-
-# ---------------------------------------------------------------------------
-# Cut variables: what to plot for each stage name in cuts.stage_cuts()
-# ---------------------------------------------------------------------------
-# keep: "above" (pass > cut), "below" (pass < cut), "between" (lo < x < hi).
-# Thresholds are read from cuts.py so the plots follow any changes there.
 
 def cut_var_specs(topo, C=None):
+    """{stage name: plot spec} for the cuts enabled in config `C`."""
     C = cuts.CUTBASED[topo] if C is None else C
-    lo_E, hi_E = cuts.energy_window(topo, C)
     s = {}
+    for stage, key, var, rng, label, keep in _CUT_PLOTS:
+        thr = C.get(key)
+        if thr is None:
+            continue
+        s[stage] = dict(var=var, label=label, cuts=[thr], keep=keep,
+                        range=(0, rng * thr) if isinstance(rng, float) else rng)
 
-    # These used to be pre-selection; they now live in CUTBASED_* too, and
-    # each is drawn only when it is enabled there. The pre-selection proper is
-    # the fiducial volume, which depends on all three coordinates and is not
-    # drawn (see the module docstring).
-    if topo == "1g1p":
-        if C.get("vtx_dist_min") is not None:
-            s["vtx_contained"] = dict(var=lambda d: d.vtx_dist_to_wall, range=(-10, 100),
-                                      label="Vertex distance to wall [cm]",
-                                      cuts=[C["vtx_dist_min"]], keep="above")
-        if C.get("trk_dist_min") is not None:
-            s["trk_contained"] = dict(var=lambda d: np.minimum(d.trk_start_dist_to_wall, d.trk_end_dist_to_wall),
-                                      range=(-10, 100), label="Track min distance to wall [cm]",
-                                      cuts=[C["trk_dist_min"]], keep="above")
-        if C.get("trk_dedx_min") is not None:
-            s["trk_shw_angle"] = dict(var=lambda d: d.cos_trk_shw_implied, range=(-1, 1),
-                                      label=r"cos$\theta$(track, vertex$\to$shower)",
-                                      cuts=[-C["abs_cos_trk_shw_max"], C["abs_cos_trk_shw_max"]],
-                                      keep="between")
-        if C.get("shw_start_dist_min") is not None:
-            s["shw_contained"] = dict(var=lambda d: d.shw_start_dist_to_wall, range=(-10, 100),
-                                      label="Shower start distance to wall [cm]",
-                                      cuts=[C["shw_start_dist_min"]], keep="above")
-        if C.get("trk_ke_max") is not None:
-            s["trk_ke"] = dict(var=lambda d: d.trk_ke_p, range=(0, 1.0),
-                               label="Proton KE from range [GeV]",
-                               cuts=[C["trk_ke_max"]], keep="below")
-        if C.get("trk_calo_E_max") is not None:
-            s["trk_calo_E"] = dict(var=lambda d: d.trk_calo_E, range=(0, 1.0),
-                                   label="Track calorimetric energy [GeV]",
-                                   cuts=[C["trk_calo_E_max"]], keep="below")
-    else:
-        if C.get("shw_start_dist_min") is not None:
-            s["shw_contained"] = dict(var=lambda d: d.shw_start_dist_to_wall, range=(-10, 100),
-                                      label="Shower start distance to wall [cm]",
-                                      cuts=[C["shw_start_dist_min"]], keep="above")
-
-    # cut-based stage (only stages enabled in CUTBASED appear in the masks)
-    if C.get("nu_score_min") is not None:
-        s["nu_score"] = dict(var=lambda d: d.nu_score, range=(0, 1),
-                             label="Pandora neutrino score", cuts=[C["nu_score_min"]], keep="above")
-    if C.get("bary_score_min") is not None:
-        s["flash_match"] = dict(var=lambda d: d.bary_score, range=(0, 1),
-                                label="Barycenter flash-match score",
-                                cuts=[C["bary_score_min"]], keep="above")
-    if C.get("shw_dedx_min") is not None:
-        s["shw_dedx"] = dict(var=lambda d: d.shw_dedx_best, range=(0, 10),
-                             label="Shower dE/dx, best plane [MeV/cm]",
-                             cuts=[C["shw_dedx_min"]], keep="above")
-    if C.get("shw_dedx_max") is not None:
-        s["shw_dedx_max"] = dict(var=lambda d: d.shw_dedx_best, range=(0, 20),
-                                 label="Shower dE/dx, best plane [MeV/cm]",
-                                 cuts=[C["shw_dedx_max"]], keep="below")
-    if C.get("shw_conv_dist_min") is not None:
-        s["shw_conv_dist"] = dict(var=lambda d: d.shw_conv_dist, range=(0, 100),
-                                  label="Shower conversion distance [cm]",
-                                  cuts=[C["shw_conv_dist_min"]], keep="above")
-    if C.get("shw_conv_dist_max") is not None:
-        s["shw_conv_dist_max"] = dict(var=lambda d: d.shw_conv_dist,
-                                      range=(0, 4 * C["shw_conv_dist_max"]),
-                                      label="Shower conversion distance [cm]",
-                                      cuts=[C["shw_conv_dist_max"]], keep="below")
-    if C.get("shw_len_min") is not None:
-        s["shw_len"] = dict(var=lambda d: d.shw_len, range=(0, 200),
-                            label="Shower length [cm]",
-                            cuts=[C["shw_len_min"]], keep="above")
-    if C.get("shw_trackScore_max") is not None:
-        s["shw_trackScore"] = dict(var=lambda d: d.shw_trackScore, range=(0, 0.5),
-                                   label="Shower track/shower score",
-                                   cuts=[C["shw_trackScore_max"]], keep="below")
-    if C.get("extrap_det_path_min") is not None:
-        s["extrap_det_path"] = dict(var=lambda d: cuts.extrap_det_path(d), range=(0, 600),
-                                    label="Extrapolated detector path length [cm]",
-                                    cuts=[C["extrap_det_path_min"]], keep="above")
-    if C.get("shw_nhits_min") is not None:
-        s["shw_nhits"] = dict(var=lambda d: d.shw_nhits_I0 + d.shw_nhits_I1 + d.shw_nhits_I2,
-                              range=(0, 1000), label="Shower hits, all planes",
-                              cuts=[C["shw_nhits_min"]], keep="above")
-    if C.get("shw_open_angle_max") is not None:
-        s["shw_open_angle"] = dict(var=lambda d: d.shw_open_angle, range=(0, 1),
-                                   label="Shower opening angle [rad]",
-                                   cuts=[C["shw_open_angle_max"]], keep="below")
-    if C.get("opt0_score_min") is not None:
-        # The score runs to ~5000, so the axis is scaled to the cut instead:
-        # what matters here is the rejected low tail, not the bulk.
-        s["opt0_score"] = dict(var=lambda d: d.opt0_score,
-                               range=(0, 6 * C["opt0_score_min"]),
-                               label="OpT0 flash-match score",
-                               cuts=[C["opt0_score_min"]], keep="above")
+    # Cuts whose panel needs more than one threshold or a custom axis.
+    if C.get("abs_cos_trk_shw_max") is not None:
+        a = C["abs_cos_trk_shw_max"]
+        s["trk_shw_angle"] = dict(var=lambda d: d.cos_trk_shw_implied, range=(-1, 1),
+                                  label=r"cos$\theta$(track, vertex$\to$shower)",
+                                  cuts=[-a, a], keep="between")
     if C.get("n_nonprim_shw_max") is not None:
-        s["no_second_shw"] = dict(var=lambda d: d.n_nonprim_shw, range=(-0.5, 5.5), nbins=6,
-                                  label="Non-primary showers in slice",
-                                  cuts=[C["n_nonprim_shw_max"] + 0.5], keep="below",
-                                  cut_labels=[r"$\leq$ %d" % C["n_nonprim_shw_max"]])
+        n = C["n_nonprim_shw_max"]
+        s["no_second_shw"] = dict(var=lambda d: d.n_nonprim_shw, range=(-0.5, 5.5),
+                                  nbins=6, label="Non-primary showers in slice",
+                                  cuts=[n + 0.5], keep="below",
+                                  cut_labels=[r"$\leq$ %d" % n])
     if C.get("delta_mass_range") is not None:
         s["delta_mass"] = dict(var=lambda d: d.delta_mass, range=(0.9, 2.0),
                                label="Proton + photon invariant mass [GeV]",
                                cuts=list(C["delta_mass_range"]), keep="between")
     if C.get("trk_proton_like"):
-        s["trk_proton_like"] = dict(var=lambda d: d.trk_chi2_proton - d.trk_chi2_muon, range=(-100, 100),
-                                    label=r"$\chi^2_p - \chi^2_\mu$", cuts=[0.], keep="below")
-    if C.get("trk_start_dist_to_vtx_max") is not None:
-        s["trk_attached"] = dict(var=lambda d: d.trk_start_dist_to_vtx, range=(0, 30),
-                                 label="Track start distance to vertex [cm]",
-                                 cuts=[C["trk_start_dist_to_vtx_max"]], keep="below")
-    if C.get("trk_pida_max") is not None:
-        s["trk_pida"] = dict(var=lambda d: d.trk_pida, range=(0, 40),
-                             label="Track PIDA [MeV/cm$^{1.42}$]",
-                             cuts=[C["trk_pida_max"]], keep="below")
+        s["trk_proton_like"] = dict(var=lambda d: d.trk_chi2_proton - d.trk_chi2_muon,
+                                    range=(-100, 100), label=r"$\chi^2_p - \chi^2_\mu$",
+                                    cuts=[0.], keep="below")
 
+    lo_E, hi_E = cuts.energy_window(topo, C)
     s["energy_window"] = dict(var=lambda d: cuts.shw_energy_corrected(d), range=(0, 1.2),
                               label="Shower energy, scaled best plane (signal window) [GeV]",
                               cuts=[lo_E, hi_E], keep="between",
@@ -271,9 +208,9 @@ def stage_title(name, topo, cat, w):
     return "%s\ntotal %.1f, purity %.1f%%" % (STAGE_TITLES[name].format(topo=topo), total, 100. * purity)
 
 
-def three_stage_figure(stages, topo, values_fn, bins, xlabel, ylabel, out,
-                       include_cosmic=True, logy=False, vline=None):
-    names = [n for n in ("dataframe", "preselection", "selection") if n in stages]
+def stage_figure(stages, topo, values_fn, bins, xlabel, ylabel, out,
+                 include_cosmic=True, logy=False, vline=None):
+    names = [n for n in STAGE_ORDER if n in stages]
     fig, axes = plt.subplots(1, len(names), figsize=(5.4 * len(names), 5), squeeze=False)
     for ax, name in zip(axes[0], names):
         d, w, cat = stages[name]
@@ -375,15 +312,6 @@ def cutvars_figure(df, w, topo, nbins, ylabel, out, logy=False, cfg=None):
     print("Wrote", out)
 
 
-def yield_table(stages):
-    rows = {}
-    for name, (d, w, cat) in stages.items():
-        rows[name] = {label: w[(cat == code).values].sum()
-                      for code, label in cuts.CATEGORY_LABELS.items()}
-        rows[name]["total"] = w.sum()
-    return pd.DataFrame(rows).T
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -430,26 +358,24 @@ def main():
         pre = cuts.PRESELECTION[topo](df)
         sel = cuts.selection(df, topo, cutbased=cfg)
         stages = {}
-        for name, m in (("dataframe", slice(None)), ("preselection", pre), ("selection", sel)):
+        for name, m in (("preselection", pre), ("selection", sel)):
             d = df[m]
             stages[name] = (d, w[m], cuts.truth_category(d))
 
-        three_stage_figure(stages, topo, lambda d: d.true_E, true_bins,
+        stage_figure(stages, topo, lambda d: d.true_E, true_bins,
                            "True neutrino energy [GeV]", ylabel,
                            os.path.join(args.outdir, "composition_trueE_%s.png" % topo),
                            include_cosmic=False, logy=args.logy)
 
         reco_label = (r"Reconstructed visible energy $E_\gamma + T_p$ [GeV]" if topo == "1g1p"
                       else r"Reconstructed visible energy $E_\gamma$ [GeV]")
-        three_stage_figure(stages, topo, lambda d: visible_energy(d), reco_bins,
+        stage_figure(stages, topo, lambda d: visible_energy(d), reco_bins,
                            reco_label, ylabel,
                            os.path.join(args.outdir, "composition_recoE_%s.png" % topo),
                            logy=args.logy)
 
-        if topo == "1g1p":
-            # Needs a proton candidate, so only the 1g1p stages are drawn.
-            mass_stages = {k: v for k, v in stages.items() if k != "dataframe"}
-            three_stage_figure(mass_stages, topo, lambda d: d.delta_mass, mass_bins,
+        if topo == "1g1p":            # needs a proton candidate
+            stage_figure(stages, topo, lambda d: d.delta_mass, mass_bins,
                                r"Proton + photon invariant mass $M_{p\gamma}$ [GeV]", ylabel,
                                os.path.join(args.outdir, "invmass_%s.png" % topo),
                                logy=args.logy, vline=(DELTA_MASS, r"$\Delta(1232)$"))
@@ -457,10 +383,6 @@ def main():
         cutvars_figure(df, w, topo, args.nbins, ylabel,
                        os.path.join(args.outdir, "cutvars_%s.png" % topo), logy=args.logy,
                        cfg=cfg)
-
-        table = yield_table(stages)
-        print("\n%s yields by truth category:\n%s\n" % (topo, table.round(2).to_string()))
-        table.to_csv(os.path.join(args.outdir, "yields_%s.csv" % topo))
 
 
 if __name__ == "__main__":

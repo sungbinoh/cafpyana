@@ -31,3 +31,8 @@ def shw_energy_corrected(df, scale=SHW_ENERGY_SCALE):
     bp = shw_best_plane(df)
     idx = np.arange(len(df))
     return pd.Series(np.asarray(scale)[bp] * ep[bp, idx], index=df.index)
+
+
+def visible_energy(df):
+    """Shower energy plus proton KE from range [GeV]; shower only with no track."""
+    return shw_energy_corrected(df) + df.trk_ke_p.where(df.n_trk > 0, 0.).fillna(0.)
