@@ -416,24 +416,25 @@ def add_crt(f, S):
     S["crthit_ismc"] = S.crthit_ismc.fillna(False).astype(bool)
     return S
 
-def add_pmt(f, S, DETECTOR):
-    # Flash value for trigger emulation. Note: these need to be scaled per-detector, per-Run
+def _flash_summary(f, DETECTOR):
+    # Per-event in-time (-5, 5 us) flash PE summary, indexed by entry. Events
+    # with no flashes at all are absent.
     flashes = make_opflashdf(f)
     if DETECTOR == "ICARUS":
         timename = "firsttime"
     elif DETECTOR == "SBND":
         timename = "time"
     intime = (flashes[timename] > -5) & (flashes[timename] < 5)
-    maxpe = (flashes.totalpe*intime).groupby(level=[0]).max().rename("flash_maxpe")
-    S = S.join(maxpe)
-    sumpe = (flashes.totalpe*intime).groupby(level=[0]).sum().rename("flash_sumpe")
-    S = S.join(sumpe)
+    return pd.DataFrame({
+        "flash_maxpe": (flashes.totalpe*intime).groupby(level=[0]).max(),
+        "flash_sumpe": (flashes.totalpe*intime).groupby(level=[0]).sum(),
+        "flash_maxpe_cryo0": (flashes.totalpe * intime * (flashes.cryo == 0)).groupby(level=[0]).max(),
+        "flash_maxpe_cryo1": (flashes.totalpe * intime * (flashes.cryo == 1)).groupby(level=[0]).max(),
+    })
 
-    flash_cryo0 = (flashes.totalpe * intime * (flashes.cryo == 0)).groupby(level=[0]).max().rename("flash_maxpe_cryo0")
-    flash_cryo1 = (flashes.totalpe * intime * (flashes.cryo == 1)).groupby(level=[0]).max().rename("flash_maxpe_cryo1")
-    S = S.join(flash_cryo0)
-    S = S.join(flash_cryo1)
-    return S
+def add_pmt(f, S, DETECTOR):
+    # Flash value for trigger emulation. Note: these need to be scaled per-detector, per-Run
+    return S.join(_flash_summary(f, DETECTOR))
 
 def _load_bnbinfo(f, leaf, varlist):
     # Load the requested SRBNBInfo fields of rec.hdr.<leaf> (bnbinfo or
@@ -1324,6 +1325,18 @@ def make_maple_bnbdf(f):
             B[v] = np.nan
     B["good_spill"] = gmpl.beam_quality_cut(B, prefix="").astype(bool)
     return B
+
+def make_maple_flashdf(f):
+    # Per-event in-time flash summary (flash_sumpe, flash_maxpe,
+    # flash_maxpe_cryo0/1; see _flash_summary) for EVERY event, independent of
+    # any slice selection. Indexed like hdr; events without flashes get 0 PE.
+    # SBND flashes have cryo == -5, so the cryo columns are 0 there.
+    meta = fetch_metadata(f)
+    if isinstance(meta, pd.DataFrame):
+        return pd.DataFrame()
+    DETECTOR, _, _ = meta
+    entries = loadbranches(f["recTree"], ["rec.hdr.run"]).rec.hdr.run.index
+    return _flash_summary(f, DETECTOR).reindex(entries).fillna(0.)
 
 def make_maple_nudf(f):
     mc = _flatcols(loadbranches(f["recTree"], mcbranches).rec.mc.nu)
