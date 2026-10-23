@@ -5,6 +5,7 @@ from .util import *
 from .calo import *
 from . import numisyst, g4syst, geniesyst, bnbsyst, getenv
 from makedf import chi2pid
+from makedf import llpid
 
 pd.set_option('future.no_silent_downcasting', True)
 

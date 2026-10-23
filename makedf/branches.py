@@ -182,6 +182,7 @@ trkbranches = [
     trkbranch + "chi2pid.2.pid_ndof",
     trkbranch + "chi2pid.2.chi2_muon",
     trkbranch + "chi2pid.2.chi2_proton",
+    trkbranch + "chi2pid.2.chi2_pion",
     trkbranch + "chi2pid.2.pida",
 ] + pfpbranches
 
