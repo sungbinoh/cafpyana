@@ -233,7 +233,9 @@ def flash_cut(df):
 def cosmic_cut(df):
     return (df["mu_p_opening_angle_deg"] < _det_cut_th(df.detector, "max_opening_angle")) & (df["crthit"] == 0)
 
-# BNB spill beam quality (SBN SPINE numu-dis technote, DocDB 49387 Sec. 6.1.2).
+# BNB spill beam quality (good-beam definition of SBN-doc-49735-v1; the LM875A/B/C
+# > 1e-2 requirement of the SPINE numu-dis technote, DocDB 49387 Sec. 6.1.2, is
+# no longer applied, 2026-10-20).
 # Applies to the spill_<var> columns of the evt df (prefix="spill_") or to the
 # per-spill "bnb" df (prefix=""). The FOM upper bound is what rejects the
 # failure flags stored in FOM (-999, -1, 0, 2, 3, 4, and the +100 assumed-width
@@ -241,8 +243,7 @@ def cosmic_cut(df):
 # so only apply this to data. Not part of any selection chain.
 def beam_quality_cut(df, prefix="spill_"):
     v = lambda name: df[prefix + name]
-    intensity = (v("TOR860") > 1e11) & (v("TOR875") > 1e11) & \
-        (v("LM875A") > 1e-2) & (v("LM875B") > 1e-2) & (v("LM875C") > 1e-2)
+    intensity = (v("TOR860") > 1e11) & (v("TOR875") > 1e11)
     horn = (v("THCURR") >= 173) & (v("THCURR") <= 175)
     fom = (v("FOM") > 0.98) & (v("FOM") <= 1)
     return intensity & horn & fom

@@ -194,11 +194,13 @@ systematics_by_cut = None
 # defaults below are the prescaled/partial streams; detector_files(...,
 # full_onbeam=True) swaps in the entry here. ICARUS Run 2's *_unblind.df is
 # exactly a 1/10 prescale of its FullOnBeam file (same gate_delta distribution,
-# 1.985e19 vs 1.994e20 POT). There is deliberately no ICARUS Run 4 entry --
-# sbn-rewgted-19 ships no full-stats Run 4 file.
+# 1.985e19 vs 1.994e20 POT). ICARUS Run 4's default ONBEAM is already the
+# full-dataset ReCAF2026 file (sbn-rewgted-25; spill info and POT from
+# dataquality.EXTERNAL_BEAM), so its entry here is the same file.
 FULL_ONBEAM = {
     "SBND":        "SBND_SpringBNBData_FullOnBeam.df",
     "ICARUS Run2": "ICARUS_SpringRun2BNB_FullOnBeam.df",
+    "ICARUS Run4": "ICARUS_SpringRun4BNB_ReCAF2026.df",
 }
 
 
@@ -258,8 +260,8 @@ def detector_files(detector, df_dir, full_onbeam=False):
         detvar_names = ["SCE", "WM $X\\theta_{xw}$"]
 
     elif detector == "ICARUS Run4":
-        onbeam = D + "ICARUS_SpringRun4BNB_unblind.df"
-        offbeam_files = [D + "ICARUS_SpringRun4BNBOff_unblind.df"]
+        onbeam = D + "ICARUS_SpringRun4BNB_ReCAF2026.df"
+        offbeam_files = [D + "ICARUS_SpringRun4BNBOff_ReCAF2026.df"]
 
         mc_files = [D + "ICARUSRun4_SpringMCOverlay_rewgt_%i.df" % i for i in range(4)]
         dirt_files = [D + "ICARUSRun4_Spring_Overlay_Dirt.df"]
@@ -484,16 +486,20 @@ def breakdown_pdg_mu(var, d):
 # ============================================================
 # TRIGGER SYSTEMATIC: flash-PE scale-factor uncertainty
 # ============================================================
-# Best-fit MC PE scale factors from the data/MC fits in FlashMCDataComparison.ipynb
-# (applied to flash_maxpe at load time in loaddf.py):
-#   SBND: 0.642 +/- 0.005   ICARUS Run2: 0.632 +/- 0.024   ICARUS Run4: 0.358 +/- 0.017
+# Nominal MC PE scale factors from the data/MC fits in FlashMCDataComparison.ipynb
+# (applied to flash_maxpe at load time in loaddf.py). The uncertainty on each is the
+# difference between that nominal scale and the GUMPLE Contained-stage fit
+# (plots-gumple-2026-10-20-rewgted25/flashpe_fit/gumple: 0.618 / 0.477 / 0.293):
+#   SBND: 0.642 +/- 0.024   ICARUS Run2: 0.632 +/- 0.155   ICARUS Run4: 0.358 +/- 0.065
 #
-# Varying the scale s -> s*(1 -+ f), f = unc/s, is equivalent to varying the
-# threshold on flash_maxpe: T -> T/(1 -+ f). The flash cut is applied in the
-# per-stage cut columns (NOT the load-time preselection), so both the
-# tightened- and loosened-threshold universes are available.
+# The systematic varies the scale s -> s*(1 -+ f), f = unc/s: two MC universes
+# with flash_maxpe itself scaled (v_flashscale), whose stage cuts are re-evaluated
+# like the chi2 variations. This moves the flash cut and the plotted flash PE
+# (e.g. the flash N-1 stage) together. On the cut alone it is equivalent to
+# varying the threshold, T -> T/(1 -+ f): the "_trig_up"/"_trig_dn" cut columns
+# (trig_flash_cut_var) do that, for mcdata_constraint_gumple's own trigger term.
 TRIG_PE_SCALE     = {1: 0.642, 2: 0.632, 4: 0.358}  # Run -> best-fit s (matches loaddf.py)
-TRIG_PE_SCALE_UNC = {1: 0.005, 2: 0.024, 4: 0.017}  # Run -> unc. on s
+TRIG_PE_SCALE_UNC = {1: 0.024, 2: 0.155, 4: 0.065}  # Run -> unc. on s = |s - s_GUMPLE fit|
 # Run -> gump_cuts.flash_cut threshold. NB: SBND used to sit at -1 here, which is
 # not the cut gump_cuts applies (2000): both universes then degenerated to "no
 # flash cut at all" and blew up the SBND detector systematic.
@@ -513,6 +519,18 @@ def trig_flash_cut_var(d, updn, runs=None):
         Tvar = T / (1 - updn*f) if (runs is None or run in runs) else T
         sel = sel | ((d.Run == run) & (d.flash_maxpe > Tvar))
     return sel
+
+
+def v_flashscale(d, updn):
+    """MC universe with flash_maxpe scaled by the +/-1 sigma PE-scale uncertainty.
+
+    updn = +1: scale DOWN 1 sigma (fewer events pass the flash cut)
+    updn = -1: scale UP   1 sigma (more events)
+    """
+    d = v_variation(d, [])
+    f = d.Run.map(TRIG_PE_SCALE_UNC).fillna(0.) / d.Run.map(TRIG_PE_SCALE).fillna(1.)
+    d["flash_maxpe"] = d.flash_maxpe * (1 - updn*f)
+    return d
 
 
 # ============================================================
@@ -700,6 +718,17 @@ def make_plot_data(var, bins, cut, mc_weight, breakdown, areanorm, breakdown_lab
 
     N = NON - NOff*OFF_w
     Nerr = np.sqrt(NON + NOff*OFF_w**2)
+    # Data stat. uncertainty for the chi2: the Poisson variance of the on-beam
+    # count is taken from its PREDICTION -- the MC plus the subtracted off-beam
+    # estimate OFF_w*NOff -- rather than from the observed NON, so a bin that
+    # fluctuates low does not get a smaller error. For an area-normalized
+    # comparison the MC is first scaled to the data's integral. The off-beam
+    # sample keeps its observed variance OFF_w^2*NOff. The plotted error bars
+    # (NDataErr) stay sqrt(NON + OFF_w^2 NOff).
+    NMC_pred = NMC_abs
+    if areanorm and NMC_abs.sum() > 0:
+        NMC_pred = NMC_abs * max(N.sum(), 0.) / NMC_abs.sum()
+    Nerr_pred = np.sqrt(np.maximum(NMC_pred + NOff*OFF_w, 0.) + NOff*OFF_w**2)
     if areanorm:
         diff = (bins[1:] - bins[:-1])
 
@@ -707,11 +736,12 @@ def make_plot_data(var, bins, cut, mc_weight, breakdown, areanorm, breakdown_lab
         if norm > 1e-5:
             N = N / norm
             Nerr = Nerr / norm
+            Nerr_pred = Nerr_pred / norm
 
     cov = syst.cov(var, cut, bins, NMC_abs, shapeonly=areanorm, fillna=fillna)
     err = np.sqrt(np.diag(cov))
 
-    cov_w_stat = cov + np.diag(Nerr**2) # add stat uncertainty
+    cov_w_stat = cov + np.diag(Nerr_pred**2) # add stat uncertainty (predicted on-beam counts)
     chi2, ndof = f_chi2(NMC, N, cov_w_stat, NON=NON)
 
     return {
@@ -726,6 +756,7 @@ def make_plot_data(var, bins, cut, mc_weight, breakdown, areanorm, breakdown_lab
         "NMC_total": NMC,
         "NData": N,
         "NDataErr": Nerr,
+        "NDataErrPred": Nerr_pred,  # data stat error used in the chi2 (predicted on-beam counts)
         "NON": NON,  # raw on-beam counts per bin: NON == 0 bins are dropped from the chi2
         "cov": cov,
         "cov_w_stat": cov_w_stat,
@@ -1404,6 +1435,8 @@ def prepare_detector(detector, args):
     # Chi2/calorimetry variations built from the full CV df (incl. dirt, whose
     # variation columns were set to nominal); SampleSystematic needs no separate CV.
     chi2_detvars = [v_calovariation(df, V) for V in chi2_variations]
+    # trigger (flash-PE scale) universes, [up, dn]
+    flash_detvars = [v_flashscale(df, +1), v_flashscale(df, -1)]
 
     df_ooav = df[OOAV(df)].copy()
 
@@ -1429,8 +1462,8 @@ def prepare_detector(detector, args):
             for j in range(len(detvars[i])):
                 detvars[i][j][vname] = v(detvars[i][j])
 
-        for i in range(len(chi2_detvars)):
-            chi2_detvars[i][vname] = v(chi2_detvars[i])
+        for d in chi2_detvars + flash_detvars:
+            d[vname] = v(d)
 
     # ---- per-stage cut columns ----
     for c, cname in zip(CUTS, CUTNAMES):
@@ -1446,8 +1479,8 @@ def prepare_detector(detector, args):
             for j in range(len(detvars[i])):
                 detvars[i][j][cname] = c(detvars[i][j]) & gc.flash_cut(detvars[i][j])
 
-        for i in range(len(chi2_detvars)):
-            chi2_detvars[i][cname] = c(chi2_detvars[i]) & gc.flash_cut(chi2_detvars[i])
+        for d in chi2_detvars + flash_detvars:
+            d[cname] = c(d) & gc.flash_cut(d)
 
     # ---- del_p-sliced cut columns ----
     for frame in [df, df_ooav, ONdf, OFFdf]:
@@ -1457,8 +1490,8 @@ def prepare_detector(detector, args):
     for i in range(len(detvars)):
         for j in range(len(detvars[i])):
             add_dp_cuts(detvars[i][j])
-    for i in range(len(chi2_detvars)):
-        add_dp_cuts(chi2_detvars[i])
+    for d in chi2_detvars + flash_detvars:
+        add_dp_cuts(d)
 
     # ---- binding-energy universe ----
     # Built here, after the per-stage cut columns exist. The *stage* cuts read
@@ -1556,12 +1589,12 @@ def prepare_detector(detector, args):
         syst.SystSampleSystematic(df_ooav),                                        # OOAV/dirt, 100% unc.
     ])
 
-    # Per-cut: add the trigger (flash-PE scale) SelectionSystematic for that stage.
+    # Per-cut: base + the trigger (flash-PE scale) universes, averaged [up, dn].
+    # Kept out of base_systematics: mcdata_constraint_gumple reads .systs[0] and
+    # adds its own trigger term.
+    flash_syst = syst.SampleSystematic(flash_detvars)
     systematics_by_cut = {
-        cname: syst.SystematicList([
-            base_systematics,
-            syst.SelectionSystematic(df, ["%s_trig_up" % cname, "%s_trig_dn" % cname]),
-        ])
+        cname: syst.SystematicList([base_systematics, flash_syst])
         for cname in list(CUTNAMES) + dp_cutnames()
     }
 

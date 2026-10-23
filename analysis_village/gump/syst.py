@@ -262,7 +262,7 @@ def v_chi2dedxbias(df):
 
 def v_flashscale(df, updn):
     TRIG_PE_SCALE     = {1: 0.642, 2: 0.632, 4: 0.358}  # Run -> best-fit s
-    TRIG_PE_SCALE_UNC = {1: 0.005, 2: 0.024, 4: 0.017}  # Run -> unc. on s
+    TRIG_PE_SCALE_UNC = {1: 0.024, 2: 0.155, 4: 0.065}  # Run -> unc. on s = |s - s_GUMPLE fit|
 
     # 1. Map the dictionaries to the 'Run' column to get Series for both parts
     unc_series = df["Run"].map(TRIG_PE_SCALE_UNC).astype(float)

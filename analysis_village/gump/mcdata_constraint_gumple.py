@@ -184,7 +184,7 @@ def removed_var_comparisons(detector, cut, plotdir, no_save, log):
     return n
 
 
-def data_stat_cov_blocks(ONdf, OFFdf, OFF_w, blocks, fillna=-1.):
+def data_stat_cov_blocks(MCdf, OFFdf, OFF_w, blocks, fillna=-1.):
     """Joint statistical covariance of the (ON - OFF_w x OFF) data vector over
     an arbitrary list of concatenated blocks.
 
@@ -193,12 +193,19 @@ def data_stat_cov_blocks(ONdf, OFFdf, OFF_w, blocks, fillna=-1.):
     of block i AND bin b of block j -- the 2-D histogram over the rows passing
     both blocks' cuts. Disjoint del_p slices share no events and so come out
     uncorrelated, while the two variables within one slice do not.
+
+    The on-beam term is the PREDICTED count, as in
+    mcdata_comparison_gumple.make_plot_data: the MC 2-D histogram (weights
+    glob_scale) plus the off-beam estimate OFF_w x OFF; the off-beam sample
+    adds its own variance OFF_w^2 x OFF. Together the off-beam weight is
+    OFF_w + OFF_w^2.
     """
     sizes = [len(b) - 1 for _, b, _ in blocks]
     edges = np.cumsum([0] + sizes)
     C = np.zeros((edges[-1], edges[-1]))
 
-    for frame, w in ((ONdf, 1.0), (OFFdf, OFF_w**2)):
+    for frame, w in ((MCdf, np.asarray(MCdf["glob_scale"], dtype=float)),
+                     (OFFdf, np.full(len(OFFdf), OFF_w + OFF_w**2))):
         vals = {}
         for v, _, _ in blocks:
             if v not in vals:
@@ -209,13 +216,13 @@ def data_stat_cov_blocks(ONdf, OFFdf, OFF_w, blocks, fillna=-1.):
                 m = masks[i] & masks[j]
                 if not m.any():
                     continue
-                h = np.histogramdd([vals[vi][m], vals[vj][m]], bins=[bi, bj])[0]
-                C[edges[i]:edges[i+1], edges[j]:edges[j+1]] += w*h
+                h = np.histogramdd([vals[vi][m], vals[vj][m]], bins=[bi, bj], weights=w[m])[0]
+                C[edges[i]:edges[i+1], edges[j]:edges[j+1]] += h
 
     return 0.5*(C + C.T)
 
 
-def data_stat_cov(ONdf, OFFdf, OFF_w, cut, varx, binsx, vary, binsy, fillna=-1.):
+def data_stat_cov(MCdf, OFFdf, OFF_w, cut, varx, binsx, vary, binsy, fillna=-1.):
     """Joint statistical covariance of the (ON - OFF_w x OFF) data vector over
     the concatenated [x-bins, y-bins].
 
@@ -223,22 +230,25 @@ def data_stat_cov(ONdf, OFFdf, OFF_w, cut, varx, binsx, vary, binsy, fillna=-1.)
     (a, b) of block (i, j) is the number of events in bin a of var i AND bin b of
     var j -- the 2-D histogram -- with the off-beam sample entering at OFF_w^2
     (it is subtracted with weight OFF_w, so its Poisson variance scales as the
-    square). For i == j this reduces to the familiar diagonal
-    diag(N_ON + OFF_w^2 N_OFF) that mcdata_comparison uses for NDataErr.
+    square). The on-beam term is the PREDICTED count: the MC 2-D histogram
+    (weights glob_scale) plus the off-beam estimate OFF_w x OFF. For i == j
+    this reduces to diag(N_MC + OFF_w N_OFF + OFF_w^2 N_OFF), the
+    NDataErrPred that mcdata_comparison uses in its chi2.
     """
     nx, ny = len(binsx) - 1, len(binsy) - 1
     vs = [(varx, binsx), (vary, binsy)]
     C = np.zeros((nx + ny, nx + ny))
     edges = [0, nx, nx + ny]
 
-    for frame, w in ((ONdf, 1.0), (OFFdf, OFF_w**2)):
+    for frame, w in ((MCdf, MCdf["glob_scale"].astype(float)),
+                     (OFFdf, pd.Series(OFF_w + OFF_w**2, index=OFFdf.index))):
         m = frame[cut]
         for i, (vi, bi) in enumerate(vs):
             for j, (vj, bj) in enumerate(vs):
                 h = np.histogramdd([frame.loc[m, vi].fillna(fillna),
                                     frame.loc[m, vj].fillna(fillna)],
-                                   bins=[bi, bj])[0]
-                C[edges[i]:edges[i+1], edges[j]:edges[j+1]] += w*h
+                                   bins=[bi, bj], weights=w[m])[0]
+                C[edges[i]:edges[i+1], edges[j]:edges[j+1]] += h
 
     return 0.5*(C + C.T)
 
@@ -462,12 +472,12 @@ def run(detector, args, ctx=None):
             log("  !! WARNING: joint block does not reproduce the 1-D covariance")
 
     # ---- data statistical covariance (with cross terms) ----
-    Cstat = data_stat_cov(ONdf, OFFdf, OFF_w, cut, var_x, bins_x, var_y, bins_y)
-    # consistency with the error bars drawn on figures 1 and 2
-    for name, got, ref in (("x", np.sqrt(np.diag(Cstat[:nx, :nx])), pd_x["NDataErr"]),
-                           ("y", np.sqrt(np.diag(Cstat[nx:, nx:])), pd_y["NDataErr"])):
+    Cstat = data_stat_cov(df, OFFdf, OFF_w, cut, var_x, bins_x, var_y, bins_y)
+    # consistency with the stat error the single-variable chi2s use
+    for name, got, ref in (("x", np.sqrt(np.diag(Cstat[:nx, :nx])), pd_x["NDataErrPred"]),
+                           ("y", np.sqrt(np.diag(Cstat[nx:, nx:])), pd_y["NDataErrPred"])):
         d = np.abs(got - ref).max()
-        log("  data stat %s block vs NDataErr: max |diff| = %.3g" % (name, d))
+        log("  data stat %s block vs NDataErrPred: max |diff| = %.3g" % (name, d))
 
     # ---- fixed-width normalization (variable-width binning only) ----
     # Applied here, before the constraint: the covariances transform as D C D
@@ -668,7 +678,7 @@ def run_dp(detector, args, ctx=None):
     if d > 1e-6*max(np.abs(ref).max(), 1e-30):
         log("  !! WARNING: joint block does not reproduce the 1-D covariance")
 
-    Cstat = data_stat_cov_blocks(ONdf, OFFdf, OFF_w,
+    Cstat = data_stat_cov_blocks(df, OFFdf, OFF_w,
                                  list(zip(vars6, bins6, cuts6)))
 
     # ---- fixed-width normalization (see run(); chi2 and constraint invariant) ----
