@@ -1144,7 +1144,10 @@ def _mu_endhits(trkhitdf, mu_ilocs, rr_max=MU_ENDHIT_RR_MAX):
     (entry, slc, hit) -- the pfp level is dropped, since there is one muon
     candidate per slice, so the table joins directly onto the evt df."""
     if len(mu_ilocs) == 0 or len(trkhitdf) == 0:
-        idx = pd.MultiIndex.from_arrays([[], [], []], names=[trkhitdf.index.names[i] for i in (0, 1, -1)])
+        # int64 levels: a plain [] gives object levels, which concat then
+        # propagates onto the populated tables of the same job
+        idx = pd.MultiIndex.from_arrays([np.array([], dtype=np.int64)] * 3,
+                                        names=[trkhitdf.index.names[i] for i in (0, 1, -1)])
         return pd.DataFrame({c: pd.Series(dtype=float) for c in MU_ENDHIT_COLS}, index=idx)
     is_mu = trkhitdf.index.droplevel(-1).isin(pd.Index(mu_ilocs.values))
     hits = trkhitdf.loc[is_mu & (trkhitdf.rr <= rr_max), MU_ENDHIT_COLS].copy()
