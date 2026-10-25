@@ -261,8 +261,9 @@ def v_chi2dedxbias(df):
     return v_variation(df, setvars)
 
 def v_flashscale(df, updn):
-    TRIG_PE_SCALE     = {1: 0.642, 2: 0.632, 4: 0.358}  # Run -> best-fit s
-    TRIG_PE_SCALE_UNC = {1: 0.024, 2: 0.155, 4: 0.065}  # Run -> unc. on s = |s - s_GUMPLE fit|
+    import loaddf  # local: loaddf imports this module
+    TRIG_PE_SCALE     = {r: loaddf.MC_PE_SCALE[d] for r, d in loaddf.RUN_DETECTOR.items()}      # Run -> all-trigger s
+    TRIG_PE_SCALE_UNC = {r: loaddf.MC_PE_SCALE_UNC[d] for r, d in loaddf.RUN_DETECTOR.items()}  # Run -> |s_all - s_Contained|
 
     # 1. Map the dictionaries to the 'Run' column to get Series for both parts
     unc_series = df["Run"].map(TRIG_PE_SCALE_UNC).astype(float)

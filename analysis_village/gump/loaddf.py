@@ -761,6 +761,19 @@ _DETECTOR_RUN = {"SBND": 1, "ICARUS Run2": 2, "ICARUS Run4": 4}
 # keep the raw POT.
 SBND_MC_POT_SCALE = 0.97
 
+# MC PE scale factors, applied to the MC flash_maxpe in load_one (flash_sumpe is
+# left unscaled). CV = the all-trigger fit (flashpe_fit_gumple.py --schema flashonly,
+# every triggered event); the trigger-systematic uncertainty is |all-trigger -
+# Contained-stage fit (--schema gumple)|. From plots-gumple-2026-10-24-rewgted25/
+# flashpe_fit/trigger_scale_summary.tsv:
+#   all-trigger 0.647 / 0.574 / 0.369, Contained 0.618 / 0.477 / 0.293.
+# NB: keep in sync with tab:trigger-systematic in the technote (see
+# technote/figure_manifest.tsv). The scale enters the MC cache key.
+MC_PE_SCALE = {"SBND": 0.647, "ICARUS Run2": 0.574, "ICARUS Run4": 0.369}
+MC_PE_SCALE_UNC = {"SBND": 0.029, "ICARUS Run2": 0.097, "ICARUS Run4": 0.076}
+# Run number (the Run column) -> detector key of the two dicts above
+RUN_DETECTOR = {1: "SBND", 2: "ICARUS Run2", 4: "ICARUS Run4"}
+
 def _mc_pot_scale(detector, ismc):
     return SBND_MC_POT_SCALE if (ismc and detector == "SBND") else 1.
 
@@ -785,11 +798,12 @@ def load_one(fname, idf,
     # Check cache
     if cache_dir is not None:
         # The data cuts only enter the key for data files (no mcnu key in the
-        # GUMPLE productions), so MC cache entries are unchanged by them.
+        # GUMPLE productions), so MC cache entries are unchanged by them. The MC
+        # PE scale (applied before caching) enters the key for MC files only.
         with h5py.File(fname, "r") as _f:
             _is_data = (mcname % idf) not in _f
         data_cut_key = dict(beam_quality=beam_quality, data_quality=data_quality,
-                            run_list=dq.RUN_LIST_HASH) if _is_data else {}
+                            run_list=dq.RUN_LIST_HASH) if _is_data else dict(mc_pe_scale=MC_PE_SCALE[detector])
         cache_hash = _cache_key(fname, idf, **data_cut_key, detector=detector, include_syst=include_syst,
             nuniv=nuniv, spline=spline, xsec_univ=xsec_univ, xsec_spline=xsec_spline, reweight_aFF=reweight_aFF, pot_univ=pot_univ,
             flux_univ=flux_univ, sep_flux_univ=sep_flux_univ, g4_univ=g4_univ,
@@ -817,13 +831,7 @@ def load_one(fname, idf,
     ismc = hdr.ismc.iloc[0] == 1
 
     # apply the scaled pe flash
-    if ismc: # Scale PE for MC-only
-        # Best-fit MC PE scale factors from the data/MC fits in FlashMCDataComparison.ipynb
-        if detector == "SBND": pe_scale = 0.642
-        elif detector == "ICARUS Run2": pe_scale = 0.632
-        elif detector == "ICARUS Run4": pe_scale = 0.358
-    else:
-        pe_scale = 1.0
+    pe_scale = MC_PE_SCALE[detector] if ismc else 1.0 # Scale PE for MC-only
 
     if "ICARUS" in detector:
         df["flash_maxpe"] = df["flash_maxpe_cryo0"] * pe_scale

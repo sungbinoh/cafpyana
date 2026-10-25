@@ -212,6 +212,9 @@ def numbered_files(df_dir, pattern):
     production to production, and a stale count silently throws away statistics."""
     fs = glob.glob(df_dir + pattern.replace("%i", "*"))
     fs = sorted(fs, key=lambda f: int(re.search(r"_(\d+)\.df$", f).group(1)))
+    # productions that ship the sample unsplit (e.g. sbn-rewgted-25-flashonly)
+    if not fs and os.path.exists(df_dir + pattern.replace("_%i", "")):
+        fs = [df_dir + pattern.replace("_%i", "")]
     if not fs:
         raise RuntimeError("no files matching %s in %s" % (pattern, df_dir))
     return fs
@@ -258,7 +261,7 @@ def detector_files(detector, df_dir, full_onbeam=False):
         onbeam = D + "ICARUS_SpringRun2BNB_unblind.df"
         offbeam_files = [D + "ICARUS_SpringRun2BNBOff_unblind.df"]
 
-        mc_files = [D + "ICARUSRun2_SpringMCOverlay_rewgt_%i.df" % i for i in range(3)]
+        mc_files = numbered_files(D, "ICARUSRun2_SpringMCOverlay_rewgt_%i.df")
         dirt_files = [D + "ICARUSRun2_Spring_Overlay_Dirt.df"]
 
         # NB: sbn-rewgted-19 ships no ICARUSRun2_Spring_Overlay_Nom.df, so the
@@ -276,7 +279,7 @@ def detector_files(detector, df_dir, full_onbeam=False):
         onbeam = D + "ICARUS_SpringRun4BNB_ReCAF2026.df"
         offbeam_files = [D + "ICARUS_SpringRun4BNBOff_ReCAF2026.df"]
 
-        mc_files = [D + "ICARUSRun4_SpringMCOverlay_rewgt_%i.df" % i for i in range(4)]
+        mc_files = numbered_files(D, "ICARUSRun4_SpringMCOverlay_rewgt_%i.df")
         dirt_files = [D + "ICARUSRun4_Spring_Overlay_Dirt.df"]
 
         # NB: no ICARUSRun4_Spring_Overlay_Nom.df in sbn-rewgted-19 either --
@@ -499,11 +502,10 @@ def breakdown_pdg_mu(var, d):
 # ============================================================
 # TRIGGER SYSTEMATIC: flash-PE scale-factor uncertainty
 # ============================================================
-# Nominal MC PE scale factors from the data/MC fits in FlashMCDataComparison.ipynb
-# (applied to flash_maxpe at load time in loaddf.py). The uncertainty on each is the
-# difference between that nominal scale and the GUMPLE Contained-stage fit
-# (plots-gumple-2026-10-20-rewgted25/flashpe_fit/gumple: 0.618 / 0.477 / 0.293):
-#   SBND: 0.642 +/- 0.024   ICARUS Run2: 0.632 +/- 0.155   ICARUS Run4: 0.358 +/- 0.065
+# Nominal MC PE scale factors = the all-trigger flash PE fit (applied to flash_maxpe
+# at load time in loaddf.py). The uncertainty on each is the difference between the
+# all-trigger and the Contained-stage fits (flashpe_fit_gumple.py, see loaddf.MC_PE_SCALE):
+#   SBND: 0.647 +/- 0.029   ICARUS Run2: 0.574 +/- 0.097   ICARUS Run4: 0.369 +/- 0.076
 #
 # The systematic varies the scale s -> s*(1 -+ f), f = unc/s: two MC universes
 # with flash_maxpe itself scaled (v_flashscale), whose stage cuts are re-evaluated
@@ -511,12 +513,12 @@ def breakdown_pdg_mu(var, d):
 # (e.g. the flash N-1 stage) together. On the cut alone it is equivalent to
 # varying the threshold, T -> T/(1 -+ f): the "_trig_up"/"_trig_dn" cut columns
 # (trig_flash_cut_var) do that, for mcdata_constraint_gumple's own trigger term.
-TRIG_PE_SCALE     = {1: 0.642, 2: 0.632, 4: 0.358}  # Run -> best-fit s (matches loaddf.py)
-TRIG_PE_SCALE_UNC = {1: 0.024, 2: 0.155, 4: 0.065}  # Run -> unc. on s = |s - s_GUMPLE fit|
+TRIG_PE_SCALE     = {r: loaddf.MC_PE_SCALE[d] for r, d in loaddf.RUN_DETECTOR.items()}      # Run -> all-trigger s
+TRIG_PE_SCALE_UNC = {r: loaddf.MC_PE_SCALE_UNC[d] for r, d in loaddf.RUN_DETECTOR.items()}  # Run -> |s_all - s_Contained|
 # Run -> gump_cuts.flash_cut threshold. NB: SBND used to sit at -1 here, which is
 # not the cut gump_cuts applies (2000): both universes then degenerated to "no
 # flash cut at all" and blew up the SBND detector systematic.
-TRIG_THRESHOLD    = {1: 2000., 2: 5000., 4: 1000.}
+TRIG_THRESHOLD    = {r: gc.FLASH_PE_THRESHOLD[d] for r, d in loaddf.RUN_DETECTOR.items()}
 
 
 def trig_flash_cut_var(d, updn, runs=None):

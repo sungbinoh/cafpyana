@@ -421,11 +421,11 @@ def add_selection(df):
 
 
 # TRIGGER SYSTEMATIC: flash-PE scale-factor uncertainty (notebook cell 46). The
-# uncertainty is |nominal s - GUMPLE Contained-stage fit s|, from
-# plots-gumple-2026-10-20-rewgted25/flashpe_fit/gumple (as in mcdata_comparison_gumple.py)
-TRIG_PE_SCALE     = {1: 0.642, 2: 0.632, 4: 0.358}
-TRIG_PE_SCALE_UNC = {1: 0.024, 2: 0.155, 4: 0.065}
-TRIG_THRESHOLD    = {1: 2000, 2: 5000., 4: 1000.}
+# nominal s is the all-trigger fit and the uncertainty |all-trigger - Contained-stage
+# fit s| (loaddf.MC_PE_SCALE / MC_PE_SCALE_UNC, as in mcdata_comparison_gumple.py)
+TRIG_PE_SCALE     = {r: loaddf.MC_PE_SCALE[d] for r, d in loaddf.RUN_DETECTOR.items()}
+TRIG_PE_SCALE_UNC = {r: loaddf.MC_PE_SCALE_UNC[d] for r, d in loaddf.RUN_DETECTOR.items()}
+TRIG_THRESHOLD    = {r: gc.FLASH_PE_THRESHOLD[d] for r, d in loaddf.RUN_DETECTOR.items()}
 
 def trig_flash_cut_var(df, updn, runs=None):
     sel = pd.Series(False, index=df.index)

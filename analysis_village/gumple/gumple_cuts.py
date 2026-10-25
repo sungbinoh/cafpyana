@@ -193,6 +193,13 @@ def _fv_cut(df, inx=10, iny=10, inzfront=10, inzback=50):
 
     return pd.Series(np_mask, index=df.index) 
 
+# Flash-PE threshold per detector, read by flash_cut(). Module-level so a driver
+# can override it (e.g. mcdata_comparison_gumple.py --run4-flash-pe).
+# Set (2026-10-24) to the lower edge of the flash PE scale fits
+# (flashpe_fit_gumple.py), which exclude the PE below it; was 2000 / 5000 / 1000.
+# NB keep in sync with the technote (tab:trigger-systematic, Event Selection cut table).
+FLASH_PE_THRESHOLD = {"SBND": 2000., "ICARUS Run2": 4000., "ICARUS Run4": 2000.}
+
 def flash_cut(df):
     det_col = "detector"
     if det_col not in df.columns:
@@ -219,11 +226,11 @@ def flash_cut(df):
     ]
 
     choices = [
-        df.flash_maxpe > 2000.0,  # SBND
-        df.flash_maxpe > 5000.0,  # ICARUS Run2
-        df.flash_maxpe > 1000.0,  # ICARUS Run4
-        ((df.flash_maxpe > 5000.0) & (df.Run == 2))
-        | ((df.flash_maxpe > 1000.0) & (df.Run == 4)),  # ICARUS (Generic)
+        df.flash_maxpe > FLASH_PE_THRESHOLD["SBND"],  # SBND
+        df.flash_maxpe > FLASH_PE_THRESHOLD["ICARUS Run2"],  # ICARUS Run2
+        df.flash_maxpe > FLASH_PE_THRESHOLD["ICARUS Run4"],  # ICARUS Run4
+        ((df.flash_maxpe > FLASH_PE_THRESHOLD["ICARUS Run2"]) & (df.Run == 2))
+        | ((df.flash_maxpe > FLASH_PE_THRESHOLD["ICARUS Run4"]) & (df.Run == 4)),  # ICARUS (Generic)
     ]
 
     np_mask = np.select(conditions, choices, default=False)
