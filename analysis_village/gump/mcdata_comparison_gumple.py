@@ -69,8 +69,10 @@ invalidates every cache entry.
 """
 
 import argparse
+import glob
 import os
 import pickle
+import re
 import subprocess
 import sys
 
@@ -204,6 +206,17 @@ FULL_ONBEAM = {
 }
 
 
+def numbered_files(df_dir, pattern):
+    """Every file matching `pattern` (a "..._%i.df" template) in df_dir, numerically
+    ordered. Globbed rather than hardcoded as range(N): the split changes from
+    production to production, and a stale count silently throws away statistics."""
+    fs = glob.glob(df_dir + pattern.replace("%i", "*"))
+    fs = sorted(fs, key=lambda f: int(re.search(r"_(\d+)\.df$", f).group(1)))
+    if not fs:
+        raise RuntimeError("no files matching %s in %s" % (pattern, df_dir))
+    return fs
+
+
 def detector_files(detector, df_dir, full_onbeam=False):
     """Input file lists for one detector.
 
@@ -225,7 +238,7 @@ def detector_files(detector, df_dir, full_onbeam=False):
         onbeam = D + "SBND_SpringBNBData_FixedDev.df"
         offbeam_files = [D + "SBND_SpringBNBOffData.df"]
 
-        mc_files = [D + "SBNDMCCV_%i.df" % i for i in range(3)]
+        mc_files = numbered_files(D, "SBNDMCCV_%i.df")
         dirt_files = [D + "SBND_SpringLowEMC.df"]
 
         detvar_files = [

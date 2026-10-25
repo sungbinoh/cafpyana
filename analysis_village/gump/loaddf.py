@@ -771,7 +771,7 @@ def load_one(fname, idf,
     pot_spline=False, detvar_spline=False, spline_dir="rwt_outputs",
     load_truth=True, load_crt=False, load_evtrec=False, match_Enu=True, # load extra information
     offbeampot=False, # POT handling
-    data_quality=False, beam_quality=False,# POT handling
+    data_quality=True, beam_quality=True, # data-only cuts: good-run list (on- and off-beam) and per-spill beam quality (on-beam), see dataquality.py
     preselection=None, # apply preselection cut
     shift_binding_E=False, split_tracks=None, # variations applied to the output df (see _apply_variations)
     shift_fraction=None, split_fraction=None, # fraction of events each variation is applied to (None -> BE_FRACTION / SPLIT_FRAC)
