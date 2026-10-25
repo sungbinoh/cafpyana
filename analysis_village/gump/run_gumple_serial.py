@@ -17,6 +17,20 @@ cache writing into the -calovarB directory (loaddf's CACHE_WITH_INPUT default):
                                             in-time cosmic MC; technote only)
   8. selection_plots_gumple.py             (CV cut breakdowns, efficiencies,
                                             near/far signal-box distributions)
+  Technote-only, run only when named with --only (TECHNOTE_ONLY):
+  sbsyst     signalbox_systematics_gumple.py (signalbox/{1p,mp,joint}/)
+  pot        pot_quality_summary.py          (BQ/DQ POT plots, bq/dq_tables.tex)
+  stability  selection_stability_gumple.py   (selection stability vs date)
+  cvwgt      cvweight_impact_gumple.py       (CV-weight impact on selected events)
+  flashpe    flashpe_vs_trueE_gumple.py      (flash PE vs true neutrino energy)
+  flashfit   flashpe_fit_gumple.py           (MC flash-PE scale fits: --schema gumple on
+                                              --df-dir, --schema flashonly on
+                                              --flashonly-df-dir; flashpe_fit/. NB the
+                                              technote's tab:trigger-systematic and
+                                              loaddf.MC_PE_SCALE[_UNC] follow its
+                                              trigger_scale_summary.tsv)
+  nminus1    nminus1_gumple.py -d all        (N-1 cut comparisons, evtsel_n-1/)
+  sbndsplit  TrackSplittingCorrection_SBND_GUMPLE.py (SBND APA-gap splitting, sbndtracksplit/)
 
 --df-dir / --plotbase reach every step: the scripts by argument, the PID and
 SignalBox notebooks through the GUMPLE_DF_DIR / GUMPLE_PLOTBASE environment
@@ -66,8 +80,16 @@ import sys
 import time
 
 GUMP_DIR = os.path.dirname(os.path.abspath(__file__))
-PY = "python3"
-JUPYTER = "/exp/sbnd/app/users/nrowe/cafpyana/envs/venv_py310_cafpyana/bin/jupyter"
+PY = os.environ.get("GUMPLE_PY", "python3")
+JUPYTER = os.environ.get("GUMPLE_JUPYTER", "/exp/sbnd/app/users/nrowe/cafpyana/envs/venv_py310_cafpyana/bin/jupyter")
+# Kernel the notebooks execute in. Empty -> the notebook's own kernelspec
+# (venv_py310_cafpyana, which exists only on the GPVMs); set e.g.
+# GUMPLE_KERNEL=python3 where that kernel is not installed.
+KERNEL_ARGS = (["--ExecutePreprocessor.kernel_name=" + os.environ["GUMPLE_KERNEL"]]
+               if os.environ.get("GUMPLE_KERNEL") else [])
+
+# steps skipped unless named with --only
+TECHNOTE_ONLY = {"sbsyst", "pot", "stability", "cvwgt", "flashpe", "flashfit", "nminus1", "sbndsplit"}
 
 DF_DIR = "/exp/sbnd/data/users/nrowe/GUMPLE/sbn-rewgted-20-calovarB"
 REMOTE = "nrowe@sbndgpvm04.fnal.gov"
@@ -234,7 +256,8 @@ def main(argv=None):
     ap.add_argument("--poll", type=int, default=60, help="Download poll interval [s]")
     ap.add_argument("--only", action="append", default=None,
                     help="Run only these steps (validate, tracksplit, mcdata, "
-                         "constraint, pid, signalbox, corsika, selection). "
+                         "constraint, pid, signalbox, corsika, selection; technote "
+                         "only: sbsyst, pot, stability, cvwgt, flashpe, flashfit, nminus1, sbndsplit). "
                          "Repeatable.")
     ap.add_argument("--chi2-flavor", action="append", default=None,
                     help="chi2 PID flavor(s) for the pid step: %s, or 'all' "
@@ -244,6 +267,9 @@ def main(argv=None):
                     help="Input production directory (default: %(default)s). "
                          "Pass --skip-wait with a non-default one -- the "
                          "download gate is sized from the -calovarB remote.")
+    ap.add_argument("--flashonly-df-dir", default=None,
+                    help="flashfit step: flash-only production for the all-trigger "
+                         "fit (default: <df-dir>-flashonly/)")
     ap.add_argument("--calo-model", default="scan",
                     choices=["scan", "nominal", "smearscan"],
                     help="pid step: 'scan' (default) runs every smearing model, "
@@ -335,7 +361,7 @@ def main(argv=None):
                 for ps in ["1p", "np", "mp"]:
                     steps.append(("pid-%s-%s-%s" % (tag, flavor, ps), [
                         JUPYTER, "nbconvert", "--to", "notebook", "--execute",
-                        "--ExecutePreprocessor.timeout=-1",
+                        "--ExecutePreprocessor.timeout=-1"] + KERNEL_ARGS + [
                         "--output", "MCDataComparisonPID-GUMPLE-%s-%s.ipynb" % (tag, flavor),
                         "nb/MCDataComparisonPID-GUMPLE.ipynb"],
                         {"GUMPLE_DETECTOR": det, "GUMPLE_CHI2_FLAVOR": flavor,
@@ -346,7 +372,7 @@ def main(argv=None):
             else:
                 steps.append(("pid-%s-%s" % (tag, flavor), [
                     JUPYTER, "nbconvert", "--to", "notebook", "--execute",
-                    "--ExecutePreprocessor.timeout=-1",
+                    "--ExecutePreprocessor.timeout=-1"] + KERNEL_ARGS + [
                     "--output", "MCDataComparisonPID-GUMPLE-%s-%s.ipynb" % (tag, flavor),
                     "nb/MCDataComparisonPID-GUMPLE.ipynb"],
                     {"GUMPLE_DETECTOR": det, "GUMPLE_CHI2_FLAVOR": flavor,
@@ -359,13 +385,13 @@ def main(argv=None):
         for ps in ["1p", "np", "mp"]:
             steps.append(("signalbox-%s" % (ps), [
                 JUPYTER, "nbconvert", "--to", "notebook", "--execute", "--inplace",
-                "--ExecutePreprocessor.timeout=-1",
+                "--ExecutePreprocessor.timeout=-1"] + KERNEL_ARGS + [
                 "nb/SignalBoxSystematics-GUMPLE.ipynb"],
                 {"GUMPLE_DF_DIR": df_dir, "GUMPLE_PLOTBASE": plotbase, "PROTON_SEL":ps}))
     else:
         steps.append(("signalbox", [
             JUPYTER, "nbconvert", "--to", "notebook", "--execute", "--inplace",
-            "--ExecutePreprocessor.timeout=-1",
+            "--ExecutePreprocessor.timeout=-1"] + KERNEL_ARGS + [
             "nb/SignalBoxSystematics-GUMPLE.ipynb"],
             {"GUMPLE_DF_DIR": df_dir, "GUMPLE_PLOTBASE": plotbase, "PROTON_SEL":proton_sel}))
 
@@ -382,10 +408,61 @@ def main(argv=None):
         "--df-dir", df_dir,
         "--plotdir", os.path.join(plotbase, "selection") + "/"], None))
 
+    # Technote-only steps (2026-10-20): the signal-box systematics script (1p, Mp
+    # and joint outputs under signalbox/{1p,mp,joint}/, every SBNDMCCV shard), the
+    # BQ/DQ POT bookkeeping and tables, selection stability vs date (the
+    # technote's <= 15 / >= 5 group configuration), the CV-weight impact and the
+    # flash-PE vs true-energy figures. Not part of the default chain: select with
+    # --only.
+    steps.append(("sbsyst", [
+        PY, "signalbox_systematics_gumple.py",
+        "--df-dir", df_dir,
+        "--plotbase", plotbase], None))
+
+    steps.append(("pot", [
+        PY, "pot_quality_summary.py",
+        "--df-dir", df_dir,
+        "--outdir", os.path.join(plotbase, "pot")], None))
+
+    steps.append(("stability", [
+        PY, "selection_stability_gumple.py",
+        "--df-dir", df_dir,
+        "--outdir", os.path.join(plotbase, "stability"),
+        "--max-groups", "15", "--min-groups", "5"], None))
+
+    steps.append(("cvwgt", [
+        PY, "cvweight_impact_gumple.py",
+        "--df-dir", df_dir,
+        "--plotbase", os.path.join(plotbase, "cvwgt")], None))
+
+    steps.append(("flashpe", [
+        PY, "flashpe_vs_trueE_gumple.py",
+        "--df-dir", df_dir,
+        "--plotdir", os.path.join(plotbase, "flashpe_vs_trueE") + "/"], None))
+
+    flashonly_dir = args.flashonly_df_dir or df_dir.rstrip("/") + "-flashonly/"
+    for schema, d in (("gumple", df_dir), ("flashonly", flashonly_dir)):
+        steps.append(("flashfit-" + schema, [
+            PY, "flashpe_fit_gumple.py", "--schema", schema,
+            "--df-dir", d,
+            "--plotdir", os.path.join(plotbase, "flashpe_fit", schema) + "/"], None))
+
+    steps.append(("nminus1", [
+        PY, "nminus1_gumple.py", "-d", "all",
+        "--df-dir", df_dir,
+        "--plotdir", os.path.join(plotbase, "evtsel_n-1") + "/"], None))
+
+    steps.append(("sbndsplit", [
+        PY, "TrackSplittingCorrection_SBND_GUMPLE.py",
+        "--df-dir", df_dir,
+        "--plotdir", os.path.join(plotbase, "sbndtracksplit") + "/"], None))
+
     if args.only:
         keep = set(args.only)
         steps = [s for s in steps if any(s[0] == k or s[0].startswith(k + "-")
                                          for k in keep)]
+    else:
+        steps = [s for s in steps if s[0].split("-")[0] not in TECHNOTE_ONLY]
 
     results = {}
     for name, cmd, env_extra in steps:

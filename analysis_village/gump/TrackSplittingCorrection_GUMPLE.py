@@ -68,14 +68,29 @@ Reported alongside is a flat-line chi2/ndof testing "no angular dependence".
 Runs both ICARUS periods by default, each in its own subprocess so memory is
 reclaimed in between, then writes a combined summary.
 
-ICARUS Run 2 runs on the *full* on-beam stream
-(ICARUS_SpringRun2BNB_FullOnBeam.df, 1.994e20 POT). The "unblind" file every
-earlier run used is a 1/10 prescale of it, so this is a 10x statistics gain and
-nothing else -- and it is what makes the angular measurement above possible at
-all. sbn-rewgted-19 has no Run 4 equivalent, so Run 4 stays on the prescaled
-stream; that asymmetry is deliberate and is logged at run time. Note OFF_w goes
-0.105 -> 1.049 with it, so the w_OFF^2*N_OFF term in var(N_data) is no longer
-negligible -- the formulae already carry it, but it is now the term that matters.
+Both ICARUS periods run on their *full* on-beam stream:
+ICARUS_SpringRun2BNB_FullOnBeam.df (1.994e20 POT; the "unblind" file earlier runs
+used is a 1/10 prescale of it) and, since 2026-10-20 (sbn-rewgted-25), the full
+ICARUS_SpringRun4BNB_ReCAF2026.df (3.61e20 POT before BQ/DQ; mcdata's default
+Run 4 file is its 10% ReCAF2026_unblind subset). This is what makes the angular
+measurement above possible, and it now runs for both periods. Note OFF_w is ~1
+for both, so the w_OFF^2*N_OFF term in var(N_data) is not negligible -- the
+formulae already carry it.
+
+combine() overlays the Run 2 and Run 4 angular results per plane and stage
+(tracksplit_<stage>_<key>_f_vs_theta_run2run4) and quotes the Run 2 - Run 4
+inclusive difference in sigma. The angular bins are never summed across runs:
+the quantile edges are fitted per run.
+
+Post-split end points (2026-10-24). Per plane and stage, <tag>_<stage>_<key>_muend_split
+draws the nominal MC (filled, MC-stat band) against loaddf's own track-split
+universe (loaddf._apply_variations at loaddf.SPLIT_FRAC, i.e. exactly what the
+signal-box systematic applies; selection re-evaluated after the split) and data.
+The bins are 2w wide with the central one exactly the window [c-w, c+w]: the MC
+puts every split endpoint on the plane, the data excess spreads over the window.
+For CRYO_SPLIT_DETECTORS (Run 4) the Z=0 plot is also drawn per cryostat
+(_eastcryo/_westcryo, mdc.cryo_mask) with the SAME f -- a check of the common-f
+strategy, not a per-cryostat measurement.
 
 NB: `FV` must stay a module-level function in `__main__`. loaddf's load cache is
 keyed on the preselection's `__module__ + "." + __qualname__`, and the cache was
@@ -124,11 +139,13 @@ import mcdata_comparison_gumple as mdc
 DETECTORS = ["ICARUS Run2", "ICARUS Run4"]
 
 # Detectors read from the full-statistics on-beam stream instead of the
-# 1/10-prescaled *_unblind.df. Run 2 only: sbn-rewgted-19 has no full-stats
-# Run 4 file, so that period necessarily stays prescaled. Using the full stream
+# prescaled *_unblind.df (mdc.FULL_ONBEAM). Using the full stream
 # here is a sideband measurement of mu_end_* (not a blinded variable), and every
 # zoom plot is area-normalized, so no absolute ICARUS rate is exposed.
-FULL_ONBEAM_DETECTORS = ["ICARUS Run2"]
+# ICARUS Run 4 added 2026-10-20 when the mcdata default Run 4 on-beam file became
+# the 10% ReCAF2026_unblind subset: the track-splitting fit keeps the full
+# ReCAF2026 dataset it used on sbn-rewgted-25.
+FULL_ONBEAM_DETECTORS = ["ICARUS Run2", "ICARUS Run4"]
 
 DEFAULT_DF_DIR = "/Users/gputnam/Work/osc/sbn-rewgted-20/"
 # NB: plots-tracksplit-7-27/, -8-01/ and -8-21/ hold the earlier (reCAF) runs
@@ -160,7 +177,18 @@ KEEPCOLS = ["detector", "Run", "nu_score", "flash_maxpe",
             "mu_chi2_of_mu_cand", "mu_chi2_of_prot_cand",
             "prot_chi2_of_mu_cand", "prot_chi2_of_prot_cand",
             "mu_len", "mu_trackScore", "mu_dist_start",
-            "mu_prim_pfp", "mu_contained10"]
+            "mu_prim_pfp", "mu_contained10",
+            # syst.split_tracks -> recompute_kinematics inputs/outputs, so the
+            # post-split plots (split_plot) can build the systematic's own
+            # universe with loaddf._apply_variations on the slimmed MC
+            "mu_E", "psum_E", "psum_p", "psum_dir_x", "psum_dir_y", "psum_dir_z",
+            "n_pfp", "nu_E_calo", "nu_E_ccqe", "del_p", "del_Tp", "del_phi"]
+
+# Beam- and data-quality cuts on the data frames. Passed explicitly: since
+# f3f2d25 (2026-10-19) loaddf.load_one defaults both to False, while
+# mdc.compute_norm's POT applies them -- without this the data events and the
+# POT disagree (the 2026-10-24 rerun picked up ~5-25% extra data events).
+DATA_CUTS = dict(beam_quality=True, data_quality=True)
 
 # Half-width scan grid, cm. Counting is done directly on the coordinate (no
 # histogram binning), so the grid can be as fine as we like.
@@ -174,11 +202,24 @@ NORM_EXCLUDE_W = 15.0
 # ---- angular binning ----
 # Number of equal-population bins in the angle to the plane normal.
 N_QUANTILE = 4
-# Detectors the angular measurement runs for. Run 2 only: it is the only period
-# with a full-statistics on-beam stream, and at the prescaled Run 4 statistics
-# four angular bins would each hold ~15 in-window data events. --angular-detector
-# lifts this without a code change once a Run 4 FullOnBeam file exists.
-ANGULAR_DETECTORS = ["ICARUS Run2"]
+# Detectors the angular measurement runs for: every period on a full-statistics
+# on-beam stream (Run 4 joined 2026-10-20 with the full ReCAF2026 file). On a
+# prescaled stream four angular bins would each hold only ~15 in-window data
+# events; --angular none / --angular <det> overrides.
+ANGULAR_DETECTORS = ["ICARUS Run2", "ICARUS Run4"]
+
+# ---- post-split end-point plots ----
+# Plane key -> loaddf.SPLIT_REGIONS name. The split MC drawn by split_plot is
+# loaddf's own track-split universe for that plane, at loaddf.SPLIT_FRAC.
+SPLIT_REGION = {"z0": "Z=0", "east": "East Cathode", "west": "West Cathode"}
+# Detectors whose Z=0 post-split plot is also drawn per cryostat. This checks the
+# common-f strategy (one f for both cryostats); f itself is NOT refitted per
+# cryostat.
+CRYO_SPLIT_DETECTORS = ["ICARUS Run4"]
+# Half-range [cm] the post-split binning extends to (at least), per plane axis
+SPLIT_PLOT_RANGE = {"z": 50.0, "x": 25.0}
+# Minimum number of bins on each side of the central window bin
+SPLIT_PLOT_MIN_SIDE = 3
 
 
 # ============================================================
@@ -356,12 +397,13 @@ def load_all(detector, files, pot, include_dirt, log):
 
     log("loading ON: %s" % os.path.basename(files["ONBEAM"]))
     ondf, _, _ = loaddf.load(files["ONBEAM"], load_truth=False, include_syst=False,
-                             detector=detector, preselection=FV, match_Enu=False)
+                             detector=detector, preselection=FV, match_Enu=False,
+                             **DATA_CUTS)
     ondf = _slim(ondf)
 
     log("loading OFF: %s" % ", ".join(os.path.basename(f) for f in files["OFFBEAM_FILES"]))
     offs = [loaddf.load(f, load_truth=False, include_syst=False, detector=detector,
-                        preselection=FV, offbeampot=True, match_Enu=False)
+                        preselection=FV, offbeampot=True, match_Enu=False, **DATA_CUTS)
             for f in files["OFFBEAM_FILES"]]
     offdf = pd.concat([_slim(o[0]) for o in offs], ignore_index=True)
 
@@ -672,6 +714,131 @@ def zoom_plot(mcdf, ondf, offdf, off_w, alpha, dim, coord, w, name, detector, st
     return fig
 
 
+def split_bins(dim, coord, w):
+    """Bins of width 2w whose central bin is exactly the window [c-w, c+w].
+
+    The split MC puts every split endpoint exactly on the plane, while the data
+    excess is spread over the whole window; a bin as wide as the window is the
+    finest binning in which the two can be compared at all.
+    """
+    nside = max(SPLIT_PLOT_MIN_SIDE,
+                int(np.ceil((SPLIT_PLOT_RANGE[dim] - w)/(2*w))))
+    return coord - w - 2*w*nside + 2*w*np.arange(2*nside + 2)
+
+
+def split_plot(mcdf, splitdf, ondf, offdf, off_w, alpha, dim, coord, w, frac,
+               name, detector, stage, annotate=None):
+    """Nominal MC (filled, MC-stat band) vs the track-split MC universe (line)
+    vs data, around one plane, in window-wide bins. Area normalized, as zoom_plot.
+
+    `splitdf` is loaddf's split universe for this plane at fraction `frac`
+    (already selected); its weights are glob_scale like the nominal's.
+
+    Returns (fig, info). info holds the in-window comparison with the MC
+    normalized to data on the OTHER plotted bins (the window is excluded from
+    the normalization, as in the f measurement): data/nominal and data/split in
+    the central bin with their data-stat errors.
+    """
+    bins = split_bins(dim, coord, w)
+    ic = (len(bins) - 1)//2   # the window bin
+    centers = 0.5*(bins[:-1] + bins[1:])
+    end = "mu_end_" + dim
+    xlabel = "Muon End %s [cm]" % dim.upper()
+
+    is_dirt = mcdf.dirt.to_numpy()
+    wgt = alpha*mcdf.glob_scale.to_numpy()
+    n_nu, _ = np.histogram(mcdf[end][~is_dirt], bins=bins, weights=wgt[~is_dirt])
+    n_dirt, _ = np.histogram(mcdf[end][is_dirt], bins=bins, weights=wgt[is_dirt])
+    n_mc = n_nu + n_dirt
+    v_mc, _ = np.histogram(mcdf[end], bins=bins, weights=wgt**2)
+    n_split, _ = np.histogram(splitdf[end], bins=bins,
+                              weights=alpha*splitdf.glob_scale.to_numpy())
+
+    n_on, _ = np.histogram(ondf[end], bins=bins)
+    n_off, _ = np.histogram(offdf[end], bins=bins)
+    n_data = n_on - n_off*off_w
+    n_err = np.sqrt(n_on + n_off*off_w**2)
+
+    # ---- in-window numbers, MC normalized on the side bins ----
+    side = np.arange(len(n_mc)) != ic
+    info = dict(window_bin=(float(bins[ic]), float(bins[ic + 1])),
+                N_data=float(n_data[ic]), N_data_err=float(n_err[ic]))
+    for lbl, n in (("nominal", n_mc), ("split", n_split)):
+        k = n_data[side].sum()/n[side].sum() if n[side].sum() > 0 else np.nan
+        info["N_%s" % lbl] = float(k*n[ic])
+        info["ratio_%s" % lbl] = float(n_data[ic]/(k*n[ic]))
+        info["ratio_%s_err" % lbl] = float(n_err[ic]/(k*n[ic]))
+
+    # ---- area normalization, as in zoom_plot ----
+    diff = bins[1:] - bins[:-1]
+    mc_norm = float(np.sum(n_mc*diff))
+    if mc_norm > 1e-5:
+        n_nu, n_dirt, n_mc = n_nu/mc_norm, n_dirt/mc_norm, n_mc/mc_norm
+        v_mc = v_mc/mc_norm**2
+    split_norm = float(np.sum(n_split*diff))
+    if split_norm > 1e-5:
+        n_split = n_split/split_norm
+    data_norm = float(np.sum(n_data*diff))
+    if data_norm > 1e-5:
+        n_data, n_err = n_data/data_norm, n_err/data_norm
+    e_mc = np.sqrt(v_mc)
+
+    fig, (ax0, ax1) = plt.subplots(2, 1, height_ratios=[3, 1], sharex=True)
+
+    fill = np.array([centers, centers]).T
+    ax0.hist(fill, bins=bins, stacked=True, label=["MC $\\nu$ + cosmic", "Dirt"],
+             color=["#1e3f54", "#43140b"], weights=np.array([n_nu, n_dirt]).T)
+    band = ax0.fill_between(bins, np.append(n_mc - e_mc, (n_mc - e_mc)[-1]),
+                            np.append(n_mc + e_mc, (n_mc + e_mc)[-1]), step="post",
+                            facecolor="none", hatch="//", edgecolor="gray",
+                            linewidth=0.0, label="MC stat. unc.")
+    sline, = ax0.step(bins, np.append(n_split, n_split[-1]), where="post",
+                      color="#d54c28", linewidth=2.0,
+                      label="Split MC ($f$ = %.1f%%)" % (100*frac))
+    line = ax0.errorbar(centers, n_data, n_err, color="black", linestyle="none", marker=".")
+
+    for ax in (ax0, ax1):
+        ax.axvline(coord, color="#d54c28", linestyle=":", linewidth=1.2, zorder=0)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.where(n_mc > 0, n_data/n_mc, np.nan)
+        ratio_err = np.where(n_mc > 0, n_err/n_mc, np.nan)
+        r_split = np.where(n_mc > 0, n_split/n_mc, np.nan)
+        r_band = np.where(n_mc > 0, e_mc/n_mc, np.nan)
+    ax1.fill_between(bins, np.append(1 - r_band, (1 - r_band)[-1]),
+                     np.append(1 + r_band, (1 + r_band)[-1]), step="post",
+                     facecolor="none", hatch="//", edgecolor="gray", linewidth=0.0)
+    ax1.step(bins, np.append(r_split, r_split[-1]), where="post",
+             color="#d54c28", linewidth=2.0)
+    ax1.errorbar(centers, ratio, ratio_err, color="black", linestyle="none", marker=".")
+    top = np.nanmax(np.concatenate([ratio + ratio_err, r_split]))
+    ax1.set_ylim([0.5, max(1.5, 1.1*top) if np.isfinite(top) else 1.5])
+    ax1.axhline(1, color="gray", linestyle="--")
+    ax1.set_ylabel("Ratio to\nnominal MC", fontsize=FONTSIZE-5)
+
+    _style(ax0)
+    _style(ax1)
+    ax1.set_xlabel(xlabel, fontsize=FONTSIZE, fontweight='bold')
+    ax0.set_ylabel("Area Normalized", fontsize=FONTSIZE, fontweight='bold')
+    det = detector.replace(" ", "")
+    ax0.set_title("$\\bf{%s}$ %s -- %s" % (det, name, STAGE_LABEL[stage]),
+                  fontsize=FONTSIZE+2)
+
+    lo, hi = ax0.get_ylim()
+    ax0.set_ylim([lo, hi*1.6])
+    ld = ax0.legend([line], ["Data\n(ON Beam - OFF)"], frameon=False, loc="upper left",
+                    fontsize=10)
+    h, l = ax0.get_legend_handles_labels()
+    ax0.legend(h, l, fontsize=10, loc="upper right")
+    ax0.add_artist(ld)
+    if annotate:
+        ax0.text(0.02, 0.70, annotate, transform=ax0.transAxes, fontsize=11,
+                 verticalalignment="top")
+
+    plt.subplots_adjust(hspace=0.05)
+    return fig, info
+
+
 # NB: scan_plot, angular_plot, summary_plot and ratio_plot below plot fractions
 # and ratios, not distributions -- there is no area to normalize. Only zoom_plot
 # draws a histogram, and that is the one the area normalization applies to.
@@ -757,6 +924,48 @@ def angular_plot(rows, incl, name, detector, stage, dim):
     # headroom for the legend and the chi2 line below it
     lo_y, hi_y = ax.get_ylim()
     ax.set_ylim([lo_y, hi_y + 0.45*(hi_y - lo_y)])
+    return fig
+
+
+def angular_compare_plot(per, name, stage, dim):
+    """Overlay of f vs theta for several run periods at one plane and stage.
+
+    per: {detector: (angular rows sorted by bin, inclusive row or None)}. Each
+    run keeps its own quantile edges, so the points are side by side, not
+    summed; each run's inclusive result is drawn as a band in its colour.
+    """
+    fig, ax = plt.subplots(figsize=(7.5, 5))
+    for i, (det, (rows, incl)) in enumerate(per.items()):
+        c = GROUP_COLORS.get(det, "black")
+        lo = np.array([r["theta_lo"] for r in rows])
+        hi = np.array([r["theta_hi"] for r in rows])
+        f = np.array([100*r["f_split"] for r in rows])
+        fe = np.array([100*r["f_split_err"] for r in rows])
+        ctr = 0.5*(lo + hi)
+        # small horizontal offset so overlapping points stay readable
+        x = ctr + (i - 0.5*(len(per) - 1))*1.0
+        chi2, ndof, pval = flat_line_chi2([r["f_split"] for r in rows],
+                                          [r["f_split_err"] for r in rows])
+        lab = det.replace("ICARUS ", "")
+        if ndof > 0:
+            lab += ": flat $\\chi^2$/ndof = %.1f/%d (p = %.3f)" % (chi2, ndof, pval)
+        ax.errorbar(x, f, yerr=fe, xerr=[x - lo, hi - x], color=c, linestyle="none",
+                    marker="o", markersize=5, capsize=0, zorder=3, label=lab)
+        if incl is not None:
+            fi, fie = 100*incl["f_split"], 100*incl["f_split_err"]
+            ax.axhspan(fi - fie, fi + fie, color=c, alpha=0.12, zorder=0)
+            ax.axhline(fi, color=c, linewidth=1.0, linestyle="--", zorder=1)
+    ax.axhline(0, color="gray", linewidth=0.8, zorder=0)
+    _style(ax)
+    ax.set_xlim([0, 90])
+    ax.set_xlabel("$\\theta_{%s}$ to plane normal [deg]" % dim,
+                  fontsize=FONTSIZE, fontweight='bold')
+    ax.set_ylabel("Split fraction [%]", fontsize=FONTSIZE, fontweight='bold')
+    ax.set_title("$\\bf{ICARUS}$ %s -- %s" % (name, STAGE_LABEL[stage]),
+                 fontsize=FONTSIZE+2)
+    ax.legend(fontsize=10, loc="upper right")
+    lo_y, hi_y = ax.get_ylim()
+    ax.set_ylim([lo_y, hi_y + 0.35*(hi_y - lo_y)])
     return fig
 
 
@@ -959,13 +1168,17 @@ def run_angular(smc, son, soff, off_w, norm_sel, dim, coord, w, nq, log):
 
 
 def run_stage(stage, detector, args, frames, masks, norm_masks, off_w, pot,
-              points, widths, log):
+              points, widths, log, splits=None):
     """Normalization, per-plane counting, plots and results for one stage.
 
     Returns (results, scans, norm_info); norm_info carries the normalization-
     region counts, which the stage-ratio covariance below needs.
+
+    `splits` maps plane key -> loaddf's track-split universe of the (unselected)
+    MC for that plane; the stage selection is re-evaluated on it here for the
+    post-split end-point plots.
     """
-    skey, slabel, _ = stage
+    skey, slabel, sfn = stage
     mcdf, ondf, offdf = frames
     plotdir = args.plotdir
     dosave = not args.no_save
@@ -1077,6 +1290,34 @@ def run_stage(stage, detector, args, frames, masks, norm_masks, off_w, pot,
         fig = scan_plot(scan, w_star, name, detector, skey)
         _save(fig, plotdir, "%s_%s_%s_scan" % (tag, skey, key), dosave)
 
+        # ---- post-split end points: nominal MC vs the split universe ----
+        if splits and key in splits:
+            spl = splits[key]
+            # the split moves mu_end_* / mu_len: re-evaluate the selection
+            spl = spl[(sfn(spl) & gc.flash_cut(spl)).to_numpy()].reset_index(drop=True)
+            frac = loaddf.SPLIT_FRAC[SPLIT_REGION[key]]
+            variants = [("", lambda fr: fr, None)]
+            if key == "z0" and detector in CRYO_SPLIT_DETECTORS:
+                for cryo in ("east", "west"):
+                    variants.append(("_%scryo" % cryo,
+                                     lambda fr, c=cryo: fr[mdc.cryo_mask(fr, c).to_numpy()],
+                                     "%s cryostat" % cryo.capitalize()))
+            log("")
+            log("  post-split end points (split MC at f = %.2f%%, window bin, MC "
+                "normalized on the other plotted bins):" % (100*frac))
+            for suffix, sub, ann in variants:
+                fig, info = split_plot(sub(smc), sub(spl), sub(son), sub(soff), off_w,
+                                       alpha, dim, coord, w_star, frac, name,
+                                       detector, skey, annotate=ann)
+                _save(fig, plotdir, "%s_%s_%s_muend_split%s" % (tag, skey, key, suffix),
+                      dosave)
+                log("    %-16s [%.1f, %.1f] cm: N_data = %.1f +/- %.1f ; "
+                    "data/nominal = %.3f +/- %.3f ; data/split = %.3f +/- %.3f"
+                    % (ann or "both cryostats", info["window_bin"][0],
+                       info["window_bin"][1], info["N_data"], info["N_data_err"],
+                       info["ratio_nominal"], info["ratio_nominal_err"],
+                       info["ratio_split"], info["ratio_split_err"]))
+
         # ---- angular scan, at the inclusive half-width ----
         if do_angular:
             log("")
@@ -1162,16 +1403,13 @@ def run_detector(detector, args):
     log("TrackSplittingCorrection: %s" % detector)
     log("=" * 70)
 
-    # ICARUS Run 2 reads the full-statistics on-beam stream; there is no Run 4
-    # equivalent in sbn-rewgted-14, so Run 4 stays on the 1/10-prescaled file.
-    # Log which one was used -- the asymmetry is deliberate and someone reading
-    # two run periods with 10x different errors will want it said out loud.
+    # Both periods read their full-statistics on-beam stream (FULL_ONBEAM_DETECTORS)
+    # unless --no-full-onbeam. Log which one was used: a prescaled stream gives
+    # ~sqrt(10)x larger errors and someone reading the results will want it said.
     use_full = args.full_onbeam and detector in FULL_ONBEAM_DETECTORS
     files = mdc.detector_files(detector, args.df_dir, full_onbeam=use_full)
-    # NB "partial stream", not "1/10 prescale": the 1/10 factor is a verified
-    # property of ICARUS Run 2's *_unblind.df relative to its FullOnBeam file.
-    # No full-stats Run 4 file exists, so Run 4's prescale factor is not known
-    # here and must not be asserted.
+    # NB "partial stream", not "1/10 prescale": Run 2's *_unblind.df is an exact
+    # 1/10 prescale, Run 4's ReCAF2026_unblind a random 10% of the CAF files.
     log("on-beam stream: %s  [%s]"
         % (os.path.basename(files["ONBEAM"]),
            "FULL STATS" if use_full else "partial stream"))
@@ -1212,10 +1450,22 @@ def run_detector(detector, args):
             nm: (sfn(f) & gc.flash_cut(f)).to_numpy()
             for nm, f in (("MC", mcdf), ("ON", ondf), ("OFF", offdf))}
 
+    # ---- loaddf's track-split universe per plane (the systematic's own) ----
+    splits = {}
+    if not args.scan_only:
+        for (_, key, _, _, _) in points:
+            region = SPLIT_REGION[key]
+            sp = loaddf._apply_variations(mcdf.copy(), False, region)
+            log("split universe %-13s: f = %.4f, %d -> %d rows, sum(glob_scale) %.2f -> %.2f"
+                % (region, loaddf.SPLIT_FRAC[region], len(mcdf), len(sp),
+                   mcdf.glob_scale.sum(), sp.glob_scale.sum()))
+            splits[key] = sp.reset_index(drop=True)
+
     results, scans, norms, angular = [], {}, {}, []
     for stage in stages:
         r, s, ni, ar = run_stage(stage, detector, args, frames, stage_masks[stage[0]],
-                                 norm_masks, off_w, pot, points, widths, log)
+                                 norm_masks, off_w, pot, points, widths, log,
+                                 splits=splits)
         results += r
         scans[stage[0]] = s
         norms[stage[0]] = ni
@@ -1461,11 +1711,39 @@ def combine(detectors, args):
                     r["ratio"], r["ratio_err"]))
             lines.append("-" * W)
 
+    # ---- Run 2 vs Run 4, inclusive ----
+    if len(detectors) > 1:
+        lines += ["", "=" * W,
+                  "RUN-PERIOD COMPARISON  f(%s) - f(%s)  (data-stat errors, independent)"
+                  % (detectors[0], detectors[1]),
+                  "=" * W,
+                  "%-14s %-18s %14s %14s %14s %8s" % (
+                      "Point", "Stage", "f %s [%%]" % detectors[0].split()[-1],
+                      "f %s [%%]" % detectors[1].split()[-1], "diff [%]", "sigma"),
+                  "-" * W]
+        for (name, _, _, _, _) in split_points():
+            for (skey, slabel, _) in stages:
+                r0 = [r for r in rows if r["point"] == name and r["stage"] == skey
+                      and r["detector"] == detectors[0]]
+                r1 = [r for r in rows if r["point"] == name and r["stage"] == skey
+                      and r["detector"] == detectors[1]]
+                if not r0 or not r1:
+                    continue
+                r0, r1 = r0[0], r1[0]
+                d = r0["f_split"] - r1["f_split"]
+                de = np.hypot(r0["f_split_err"], r1["f_split_err"])
+                lines.append("%-14s %-18s %8.2f +/- %4.2f %8.2f +/- %4.2f %8.2f +/- %4.2f %7.1f"
+                             % (name, slabel, 100*r0["f_split"], 100*r0["f_split_err"],
+                                100*r1["f_split"], 100*r1["f_split_err"],
+                                100*d, 100*de, d/de if de > 0 else 0))
+            if lines[-1] != "-" * W:
+                lines.append("-" * W)
+
     # ---- angular results, merged across detectors ----
     # Concatenated only, never combined across run periods: the quantile edges
     # are fitted per detector/plane/stage, so a Run2+Run4 angular row would be
-    # summing over bins that are not the same bins. (Moot today -- only Run 2
-    # produces these -- but it is the first thing a Run 4 enablement will trip on.)
+    # summing over bins that are not the same bins. The runs are compared by
+    # overlay instead (angular_compare_plot).
     ang = []
     for det in detectors:
         apath = os.path.join(plotdir,
@@ -1476,6 +1754,20 @@ def combine(detectors, args):
     if ang:
         pd.DataFrame(ang).to_csv(os.path.join(plotdir, "tracksplit_angular.csv"),
                                  index=False)
+        for (skey, _, _) in STAGES:
+            for (name, key, dim, _, _) in split_points():
+                per = {}
+                for det in detectors:
+                    rows_ = sorted([r for r in ang if r["detector"] == det
+                                    and r["stage"] == skey and r["point"] == name],
+                                   key=lambda r: r["theta_bin"])
+                    incl = [r for r in rows if r["detector"] == det
+                            and r["stage"] == skey and r["point"] == name]
+                    if rows_:
+                        per[det] = (rows_, incl[0] if incl else None)
+                if len(per) > 1:
+                    _save(angular_compare_plot(per, name, skey, dim), plotdir,
+                          "tracksplit_%s_%s_f_vs_theta_run2run4" % (skey, key), True)
         W2 = 96
         lines += ["", "=" * W2,
                   "SPLIT FRACTION vs ANGLE TO THE PLANE NORMAL",

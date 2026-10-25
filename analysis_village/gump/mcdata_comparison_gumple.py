@@ -20,10 +20,12 @@ reCAF version:
 Runs the full plot set for one detector ("SBND", "ICARUS Run2" or
 "ICARUS Run4"):
 
-  * 5 selection stages x 27 variables, broken down by interaction mode.
+  * 7 selection stages x 27 variables, broken down by interaction mode.
+    "Simple Cosmic Rej." (FV & nu_score > 0.6) is a standalone stage, not
+    part of the selection chain.
     The PID stage is split on proton multiplicity: "PID 1p" (n_pfp == 2,
     the GUMP selection) and "PID Np" (n_pfp > 2, the MAPLE selection).
-  * 5 selection stages x 4 chi2 variables, broken down by true PDG
+  * 6 selection stages x 4 chi2 variables, broken down by true PDG
 
   2026-08-25: the muon-MOMENTUM and neutrino-energy comparisons (mu_p,
   nu_E_calo, nu_E_ccqe, nu_E_frac_diff -- including the del_p-sliced energy
@@ -58,6 +60,10 @@ variable, <det>_plotdata.pkl, <det>_chi2.csv and <det>_summary.txt.
 
     python analysis_village/gump/mcdata_comparison.py --detector all
     python analysis_village/gump/mcdata_comparison.py --detector SBND --absnorm
+
+--cryostat east|west (ICARUS only) keeps only slices whose reconstructed vertex
+is in that cryostat (slc_vtx_x < 0 East, > 0 West) in every MC, detvar, dirt and
+data frame. The cut is applied after loading, so the load cache is reused.
 
 Passing more than one --detector runs each in its own subprocess so memory is
 reclaimed in between.
@@ -196,9 +202,10 @@ systematics_by_cut = None
 # defaults below are the prescaled/partial streams; detector_files(...,
 # full_onbeam=True) swaps in the entry here. ICARUS Run 2's *_unblind.df is
 # exactly a 1/10 prescale of its FullOnBeam file (same gate_delta distribution,
-# 1.985e19 vs 1.994e20 POT). ICARUS Run 4's default ONBEAM is already the
-# full-dataset ReCAF2026 file (sbn-rewgted-25; spill info and POT from
-# dataquality.EXTERNAL_BEAM), so its entry here is the same file.
+# 1.985e19 vs 1.994e20 POT). ICARUS Run 4's default ONBEAM is the 10% unblind
+# subset ICARUS_SpringRun4BNB_ReCAF2026_unblind.df (random 10% of the CAF files of
+# the full-dataset ReCAF2026 file, 3.60e19 of 3.61e20 POT); its entry here is the
+# full ReCAF2026 file (spill info and POT from dataquality.EXTERNAL_BEAM).
 FULL_ONBEAM = {
     "SBND":        "SBND_SpringBNBData_FullOnBeam.df",
     "ICARUS Run2": "ICARUS_SpringRun2BNB_FullOnBeam.df",
@@ -276,7 +283,10 @@ def detector_files(detector, df_dir, full_onbeam=False):
         detvar_names = ["SCE", "WM $X\\theta_{xw}$"]
 
     elif detector == "ICARUS Run4":
-        onbeam = D + "ICARUS_SpringRun4BNB_ReCAF2026.df"
+        # 10% unblind subset of the full ReCAF2026 dataset (random 10% of its CAF
+        # files, with their own spills; make_unblind_subsample.py, 2026-10-20).
+        # The full file is FULL_ONBEAM["ICARUS Run4"].
+        onbeam = D + "ICARUS_SpringRun4BNB_ReCAF2026_unblind.df"
         offbeam_files = [D + "ICARUS_SpringRun4BNBOff_ReCAF2026.df"]
 
         mc_files = numbered_files(D, "ICARUSRun4_SpringMCOverlay_rewgt_%i.df")
@@ -347,6 +357,12 @@ def FV(df):
     # analog) and cut_cathode its cathode cut; slcfv_cut now also excludes the
     # ICARUS WW dangling-cable region.
     return gc.sanity_cut(df) & gc.slcfv_cut(df) & df.cut_contained & df.cut_cathode
+
+
+def cryo_mask(d, cryo):
+    # ICARUS cryostat from the reconstructed slice vertex (same convention as the
+    # flash_maxpe cryostat pick in loaddf): East = cryo 0 (x < 0), West = cryo 1 (x > 0)
+    return d.slc_vtx_x < 0 if cryo == "east" else d.slc_vtx_x > 0
 
 
 # ============================================================
@@ -470,9 +486,12 @@ def breakdown_mode(var, d):
     # fid = nuFV(d)
     fid = ~d.dirt
 
+    # NB: GUMPLE dirt slices are never truth-matched (tmatch_idx = -999, so
+    # genie_mode is NaN): select Dirt on the dirt flag alone, and keep it out of
+    # Cosmic, or every dirt slice is drawn as Cosmic and the Dirt stack is empty.
     ret = [
-        var[np.isnan(d.genie_mode)],
-        var[~fid & ~np.isnan(d.genie_mode)],
+        var[np.isnan(d.genie_mode) & fid],
+        var[~fid],
         var[(~np.any([d.genie_mode == i for i in mode_list], axis=0) | ~numu_cc) & fid & ~np.isnan(d.genie_mode)]
     ] +\
         [var[(d.genie_mode == i) & numu_cc & fid] for i in mode_list]
@@ -602,6 +621,13 @@ SBND_COSMIC_NORM = 0.107
 # ============================================================
 # Selection stages
 # ============================================================
+# The GUMP "simple cosmic rejection": FV & nu_score > 0.6 (as in
+# TrackSplittingCorrection_GUMPLE.simple_cosmic_rej). Not part of the selection
+# chain -- a standalone stage for the MC/data comparison.
+def simple_cosmic_rej(d):
+    return FV(d) & (d.nu_score > 0.6)
+
+
 # The GUMPLE cosmic rejection: mu-p opening angle at the tuned per-detector
 # thresholds (gc.SBND_CUTS / gc.ICARUS_CUTS) with the CRT veto folded in.
 # NB: unlike the reCAF chain there is no nu_score cut.
@@ -634,6 +660,17 @@ def pid_cut_mp(d):
 
 def pid_cut_np(d):
     return pid_cut(d) & (d.n_pfp >= 2)
+
+
+# The two-prong stage split the same way, mirroring the PID stages (Mp drops
+# the cosmic cut, as pid_cut_mp does), so the PID cut is the only difference
+# between the two-prong and PID joint signal-box comparisons.
+def twoprong_cut_1p(d):
+    return twoprong_cut(d) & (d.n_pfp == 2)
+
+
+def twoprong_cut_mp(d):
+    return twoprong_cut(d, cosmic_cut=False) & (d.n_pfp > 2)
 
 # ============================================================
 # Plotting
@@ -795,6 +832,14 @@ def ratio_plot(plt, plotdata, blinded=False, overlay=None):
     It is drawn before the legends are built, so it picks up a legend entry.
     """
     fig, (ax0, ax1) = plt.subplots(2, 1, height_ratios=[3, 1], sharex=True)
+    draw_ratio_axes(ax0, ax1, plotdata, blinded=blinded, overlay=overlay)
+    plt.subplots_adjust(hspace=0.05)
+    return fig, ax0, ax1
+
+
+def draw_ratio_axes(ax0, ax1, plotdata, blinded=False, overlay=None):
+    """ratio_plot's drawing onto an existing (main, ratio) axes pair, so several
+    comparisons can share one figure."""
     bins = plotdata["bins"]
     centers = (bins[:-1] + bins[1:])/2
 
@@ -879,9 +924,6 @@ def ratio_plot(plt, plotdata, blinded=False, overlay=None):
     ptxt = "%.2g" % pval if np.isfinite(pval) else "--"
     ax0.text(0.05, 0.8, "%s: %.1f / %i\np: %s" % (chi2_str, chi2, ndof, ptxt),
             verticalalignment="top", horizontalalignment="left", fontsize=FONTSIZE-2, transform=ax0.transAxes)
-
-    plt.subplots_adjust(hspace=0.05)
-    return fig, ax0, ax1
 
 
 # ============================================================
@@ -1066,6 +1108,7 @@ extravars = [
 
 CUTS = [
     FV,
+    simple_cosmic_rej,
     cosmic_rej,
     twoprong_cut,
     pid_cut_1p,
@@ -1075,12 +1118,54 @@ CUTS = [
 
 CUTNAMES = [
     "Contained",
+    "Simple Cosmic Rej.",
     "Cosmic Rej.",
     "Two Prong Cut",
     "PID 1p",
     "PID Np",
     "PID Mp",
 ]
+
+# Auxiliary stages: their cut columns (and del_p slices, trigger universes,
+# detvar / BE / track-split re-evaluations, systematics_by_cut entries) are
+# built exactly like CUTNAMES, but they are NOT plotted stage-by-stage here.
+# mcdata_constraint_gumple's joint two-prong signal-box comparison reads them.
+# "Contained No Flash" is the Contained stage without the flash cut, for the
+# flash-PE plot (plot_flash_pe).
+AUX_CUTS = [
+    twoprong_cut_1p,
+    twoprong_cut_mp,
+    FV,
+]
+
+AUX_CUTNAMES = [
+    "Two Prong 1p",
+    "Two Prong Mp",
+    "Contained No Flash",
+]
+FLASH_STAGE = "Contained No Flash"
+
+STAGE_CUTS = CUTS + AUX_CUTS
+STAGE_CUTNAMES = CUTNAMES + AUX_CUTNAMES
+
+# Hooks for drivers that add their own stages (nminus1_gumple.py extends both).
+#   NO_FLASH_STAGES: stage names built WITHOUT the flash cut (FLASH_STAGE, the
+#     flash N-1 stages); their "_trig_up"/"_trig_dn" cut columns then equal the
+#     nominal stage, but the flash-scale universes still move the plotted flash PE.
+#   EXTRA_UNIV_COLS: extra columns the binding-energy universe must carry
+#     (it is built from a column subset of the CV).
+NO_FLASH_STAGES = {FLASH_STAGE}
+EXTRA_UNIV_COLS = ["flash_maxpe"]
+
+
+def _stage_mask(c, cname, frame, flash=None):
+    """Stage cname's mask on frame: c(frame) AND the flash cut (nominal
+    gc.flash_cut unless `flash` is given), unless the stage is in
+    NO_FLASH_STAGES."""
+    m = c(frame)
+    if cname in NO_FLASH_STAGES:
+        return m
+    return m & (gc.flash_cut(frame) if flash is None else flash(frame))
 
 # NB: other_trk_length / other_shw_length are not stored in the GUMPLE dfs.
 # The replacements (lossy -- track and shower lengths are merged): the length of
@@ -1173,10 +1258,11 @@ LABELS = [
 # ============================================================
 # del_p slices
 # ============================================================
-# The two neutrino-energy estimators are additionally plotted in three slices of
+# The two neutrino-energy estimators are additionally plotted in four slices of
 # the transverse momentum imbalance del_p, which separates QE-like kinematics
 # (low del_p) from the FSI/MEC-enriched tail. Each entry: (tag, lo, hi); the tag
-# is the plot-file suffix.
+# is the plot-file suffix (no underscores: replot() splits the stem on "_").
+# 2026-10-16: added the open-ended tail slice vhidp [0.6, inf).
 #
 # NB: unlike every other cut column here, these read del_p -- a column that
 # syst.recompute_kinematics *changes*. So the slice must be re-derived on any
@@ -1187,6 +1273,14 @@ DP_SLICES = [
     ("lodp",  0.0, 0.2),
     ("middp", 0.2, 0.4),
     ("hidp",  0.4, 0.6),
+    ("vhidp", 0.6, np.inf),
+]
+
+# Extra del_p cut columns built alongside DP_SLICES (same naming, same BE /
+# track-split re-derivation) but NOT iterated as plotting slices. lt06dp is the
+# del_p < 0.6 Mp channel of mcdata_constraint_gumple's joint signal-box plot.
+DP_CUTS_EXTRA = [
+    ("lt06dp", 0.0, 0.6),
 ]
 
 # 2026-08-25: empty -- the del_p-sliced comparisons were of the two
@@ -1215,11 +1309,13 @@ def dp_mask(d, lo, hi):
 
 
 def dp_annotation(lo, hi):
+    if np.isinf(hi):
+        return "$\\delta p > %.1f$ GeV/c" % lo
     return "$%.1f < \\delta p < %.1f$ GeV/c" % (lo, hi)
 
 
 def dp_cutnames():
-    return [dp_cutname(c, tag) for tag, _, _ in DP_SLICES for c in CUTNAMES]
+    return [dp_cutname(c, tag) for tag, _, _ in DP_SLICES + DP_CUTS_EXTRA for c in STAGE_CUTNAMES]
 
 
 def add_dp_cuts(frame, suffix=""):
@@ -1228,15 +1324,16 @@ def add_dp_cuts(frame, suffix=""):
     `suffix` picks which base stage column to slice ("" for the nominal stage
     columns, "_trig_up"/"_trig_dn" for the trigger-systematic universes).
     """
-    for tag, lo, hi in DP_SLICES:
+    for tag, lo, hi in DP_SLICES + DP_CUTS_EXTRA:
         m = dp_mask(frame, lo, hi)
-        for cname in CUTNAMES:
+        for cname in STAGE_CUTNAMES:
             frame[dp_cutname(cname, tag) + suffix] = frame[cname + suffix] & m
     return frame
 
 
 PID_CUTNAMES = [
     "Contained",
+    "Simple Cosmic Rej.",
     "Cosmic Rej.",
     "Two Prong Cut",
     "PID 1p",
@@ -1254,7 +1351,7 @@ PID_BINS = [
     np.linspace(0, 60, 13),
     np.linspace(0, 120, 9),
     np.linspace(0, 60, 13),
-    np.linspace(0, 300, 21),
+    np.linspace(0, 270, 19),  # prot_chi2_of_mu_cand: last two 15-wide bins (270-300) dropped, 2026-10-01
 ]
 
 PID_LABELS = [
@@ -1284,8 +1381,8 @@ def plot_bins(detector):
         np.linspace(0, 60, 13),
         np.linspace(0, 120, 9),
         np.linspace(0, 60, 13),
-        np.linspace(0, 300, 21),
-        np.linspace(0.4, 1, 7),
+        np.linspace(0, 270, 19),  # prot_chi2_of_mu_cand: last two bins (270-300) dropped, 2026-10-01
+        np.linspace(0.4, 1, 13),  # mu_trackScore: doubled to 12 bins of 0.05, 2026-10-02
         np.linspace(0, 1, 11),
         np.linspace(0, 50, 11),
 
@@ -1339,6 +1436,27 @@ def prepare_detector(detector, args):
 
     DETECTOR = detector
     include_dirt = not args.no_dirt
+    cryo = getattr(args, "cryostat", None)
+    if cryo is not None and "ICARUS" not in detector:
+        raise ValueError("--cryostat is ICARUS-only, not %r" % detector)
+
+    def cryo_cut(frame, name):
+        if cryo is None:
+            return frame
+        out = frame[cryo_mask(frame, cryo)].copy()
+        log("  %s cryostat cut on %s: kept %d / %d rows" % (cryo, name, len(out), len(frame)))
+        return out
+
+    # --mc-pe-scale: the loaddf cache holds flash_maxpe already multiplied by
+    # loaddf.MC_PE_SCALE (and the scale is not in the cache key), so rescale
+    # the loaded MC frames by new/old instead of editing MC_PE_SCALE.
+    mc_pe_scale = getattr(args, "mc_pe_scale", None)
+    pe_ratio = 1. if mc_pe_scale is None else mc_pe_scale / loaddf.MC_PE_SCALE[detector]
+
+    def mc_pe_rescale(frame):
+        if pe_ratio != 1.:
+            frame["flash_maxpe"] = frame.flash_maxpe * pe_ratio
+        return frame
     chi2_variations, chi2_norm = chi2_config(detector)
 
     # Blinding backstop -- parse_args already rejects this combination, but
@@ -1360,8 +1478,13 @@ def prepare_detector(detector, args):
         summary_lines.append(str(msg))
 
     log("=" * 70)
-    log("DETECTOR = %s   INCLUDE_DIRT = %s   ABSNORM = %s   BLINDED = %s"
-        % (detector, include_dirt, bool(args.absnorm), bool(getattr(args, "blinded", False))))
+    log("DETECTOR = %s   INCLUDE_DIRT = %s   ABSNORM = %s   BLINDED = %s   CRYOSTAT = %s"
+        % (detector, include_dirt, bool(args.absnorm), bool(getattr(args, "blinded", False)),
+           cryo or "both"))
+    log("flash-PE thresholds: %s   trig base: %s" % (gc.FLASH_PE_THRESHOLD, TRIG_THRESHOLD))
+    if pe_ratio != 1.:
+        log("MC flash-PE scale overridden: %g -> %g (x%.4f on loaded MC flash_maxpe)"
+            % (loaddf.MC_PE_SCALE[detector], mc_pe_scale, pe_ratio))
     log("calo variations: %s" % ", ".join(
         "%s%s" % (v, "" if chi2_norm.get(v, 1.) == 1. else " (x%g)" % chi2_norm[v])
         for v in chi2_variations))
@@ -1372,6 +1495,11 @@ def prepare_detector(detector, args):
     # ---- normalization ----
     norm = compute_norm(detector, files, log)
     OFF_w = norm["OFF_w"]
+    offbeam_scale = getattr(args, "offbeam_scale", 1.0)
+    if offbeam_scale != 1.0:
+        OFF_w = OFF_w * offbeam_scale
+        log("OFF_w scaled by --offbeam-scale %g: %.5g -> %.5g"
+            % (offbeam_scale, norm["OFF_w"], OFF_w))
     POT = norm["POT"]
     NEVT = norm["NEVT"]
 
@@ -1380,6 +1508,7 @@ def prepare_detector(detector, args):
     df, match, mcpot = loaddf.loadl(files["MC_FILES"], njob=min(len(files["MC_FILES"]), 10),
                                     detector=detector, preselection=FV,
                                     reweight_aFF=True, pot_univ=True)
+    df = mc_pe_rescale(cryo_cut(df, "MC CV"))
 
     # ---- detector variations ----
     log("\nLoading detector variations (%d groups)..." % len(files["DETVAR_FILES"]))
@@ -1388,6 +1517,8 @@ def prepare_detector(detector, args):
                                      for (dv_det, dv) in tqdm(files["DETVAR_FILES"])])
     else:
         detvars, detvar_pots = [], []
+    detvars = [[mc_pe_rescale(cryo_cut(d, "%s[%d]" % (files["DETVAR_NAMES"][i], j))) for j, d in enumerate(dv)]
+               for i, dv in enumerate(detvars)]
 
     # ---- POT scaling ----
     log("MC CV POT scaling: %r" % (loaddf.scale_pot(df, mcpot, POT),))
@@ -1403,6 +1534,7 @@ def prepare_detector(detector, args):
                                                 njob=min(len(files["DIRT_FILES"]), 10),
                                                 detector=detector, preselection=FV,
                                                 include_syst=False)
+        dirt = mc_pe_rescale(cryo_cut(dirt, "dirt"))
         log("dirt POT scaling: %r" % (loaddf.scale_pot(dirt, dirtpot, POT),))
 
         # dirt has no systematic-universe weights: set them to 1
@@ -1459,12 +1591,13 @@ def prepare_detector(detector, args):
     log("Loading on-beam data...")
     ONdf, _, _ = loaddf.load(files["ONBEAM"], load_truth=False, include_syst=False,
                              detector=detector, preselection=FV, match_Enu=False)
+    ONdf = cryo_cut(ONdf, "on-beam")
 
     log("Loading off-beam data...")
     _offs = [loaddf.load(f, load_truth=False, include_syst=False, detector=detector,
                          preselection=FV, offbeampot=True, match_Enu=False)
              for f in files["OFFBEAM_FILES"]]
-    OFFdf = pd.concat([o[0] for o in _offs])
+    OFFdf = cryo_cut(pd.concat([o[0] for o in _offs]), "off-beam")
     OFFPOT = sum(o[2] for o in _offs)  # cross-check only; OFF_w computed above is used for scaling
     log("OFF-beam POT (cross-check only): %r" % OFFPOT)
 
@@ -1481,21 +1614,21 @@ def prepare_detector(detector, args):
             d[vname] = v(d)
 
     # ---- per-stage cut columns ----
-    for c, cname in zip(CUTS, CUTNAMES):
+    for c, cname in zip(STAGE_CUTS, STAGE_CUTNAMES):
         # nominal stage: base cut AND the nominal flash cut
         for frame in [df, df_ooav, ONdf, OFFdf]:
-            frame[cname] = c(frame) & gc.flash_cut(frame)
+            frame[cname] = _stage_mask(c, cname, frame)
 
         # trigger-systematic universes (MC CV only; the SelectionSystematic reads these)
-        df[cname + "_trig_up"] = c(df) & trig_flash_cut_var(df, +1)
-        df[cname + "_trig_dn"] = c(df) & trig_flash_cut_var(df, -1)
+        df[cname + "_trig_up"] = _stage_mask(c, cname, df, lambda d: trig_flash_cut_var(d, +1))
+        df[cname + "_trig_dn"] = _stage_mask(c, cname, df, lambda d: trig_flash_cut_var(d, -1))
 
         for i in range(len(detvars)):
             for j in range(len(detvars[i])):
-                detvars[i][j][cname] = c(detvars[i][j]) & gc.flash_cut(detvars[i][j])
+                detvars[i][j][cname] = _stage_mask(c, cname, detvars[i][j])
 
         for d in chi2_detvars + flash_detvars:
-            d[cname] = c(d) & gc.flash_cut(d)
+            d[cname] = _stage_mask(c, cname, d)
 
     # ---- del_p-sliced cut columns ----
     for frame in [df, df_ooav, ONdf, OFFdf]:
@@ -1514,8 +1647,8 @@ def prepare_detector(detector, args):
     # but the del_p slices do, so they are re-derived from the universe's own
     # (shifted) del_p below.
     be_cols = sorted(set(BE_RECOMPUTE_COLS + PLOTVARS + PID_PLOTVARS
-                         + list(CONSTRAINT_VARS)
-                         + list(CUTNAMES) + dp_cutnames()))
+                         + list(CONSTRAINT_VARS) + list(EXTRA_UNIV_COLS)
+                         + list(STAGE_CUTNAMES) + dp_cutnames()))
     be_df = syst.shift_binding_energy(df[be_cols], BE_SHIFT, fraction=0.5)
     add_dp_cuts(be_df)
     # shift_binding_energy recomputes both nu_E_calo and nu_E_ccqe under the
@@ -1567,8 +1700,8 @@ def prepare_detector(detector, args):
             # mu_end_* moved, so every stage cut must be re-evaluated on the split
             # rows (FV includes gc.mufv_cut, and TrackSplittingSystematic.univ
             # indexes splitdf by whichever stage is being plotted)
-            for c, cname in zip(CUTS, CUTNAMES):
-                sdf[cname] = c(sdf) & gc.flash_cut(sdf)
+            for c, cname in zip(STAGE_CUTS, STAGE_CUTNAMES):
+                sdf[cname] = _stage_mask(c, cname, sdf)
             # split_tracks recomputes del_p, so re-slice rather than carry over
             add_dp_cuts(sdf)
             tracksplit_systs.append(
@@ -1610,13 +1743,66 @@ def prepare_detector(detector, args):
     flash_syst = syst.SampleSystematic(flash_detvars)
     systematics_by_cut = {
         cname: syst.SystematicList([base_systematics, flash_syst])
-        for cname in list(CUTNAMES) + dp_cutnames()
+        for cname in list(STAGE_CUTNAMES) + dp_cutnames()
     }
 
     return dict(detector=detector, detname=detname, plotdir=plotdir,
                 norm=norm, df=df, df_ooav=df_ooav, ONdf=ONdf, OFFdf=OFFdf,
                 OFF_w=OFF_w, POT=POT, systematics_by_cut=systematics_by_cut,
                 log=log, summary_lines=summary_lines)
+
+
+# Max. flash PE before the flash cut (FLASH_STAGE). Zoomed on the bulk of the
+# events, with the nominal threshold on a bin edge (as in nminus1_gumple).
+FLASH_BINS = {
+    "SBND":        np.linspace(0, 20000, 21),
+    "ICARUS Run2": np.linspace(0, 40000, 17),
+    "ICARUS Run4": np.linspace(0, 20000, 21),
+}
+
+
+def plot_flash_pe(ctx, args):
+    """Max. flash PE at the Contained stage before the flash cut: the usual
+    data/MC comparison (its band includes the PE-scale systematic) with the
+    cut value marked. Returns the plotdata."""
+    detector, log = ctx["detector"], ctx["log"]
+    bins = FLASH_BINS[detector]
+    pd_ = make_plot_data("flash_maxpe", bins, FLASH_STAGE, "glob_scale", breakdown_mode, True,
+                         mode_labels, mode_colors, "Max. Flash PE", "Contained, before flash cut",
+                         fillna=-1, det=DETECTOR, syst=ctx["systematics_by_cut"][FLASH_STAGE])
+    chi2, ndof, pval = chi2_ndof_pvalue(pd_)
+    log("\nflash PE before the flash cut: chi2_shape = %.1f / %d (p = %.3g)" % (chi2, ndof, pval))
+    if args.no_save:
+        return pd_
+
+    fig, ax0, ax1 = ratio_plot(plt, pd_, blinded=args.blinded)
+
+    # log scale: the low-PE (cosmic) bins dwarf the neutrino peak in ICARUS.
+    # Headroom above the stack for the legends, and a smaller main legend so it
+    # clears the data label and chi2 text.
+    ymax = pd_["NMC_total"].max()
+    ax0.set_yscale("log")
+    ax0.set_ylim(ymax*1e-2, ymax*30)
+    ax0.legend(fontsize=10, loc="upper right", ncol=2, reverse=True)
+    # the ICARUS Run2 PE-scale band reaches ~+/-50%
+    ax1.set_ylim(0.25, 1.75)
+
+    # the cut value, with an arrow into the kept region
+    T = gc.FLASH_PE_THRESHOLD[detector]
+    for ax in (ax0, ax1):
+        ax.axvline(T, color="k", linestyle="--", linewidth=1.5, zorder=10)
+    trans = ax0.get_xaxis_transform()
+    ax0.annotate("", xy=(T + 0.08*(bins[-1] - bins[0]), 0.40), xytext=(T, 0.40),
+                 xycoords=trans, textcoords=trans,
+                 arrowprops=dict(arrowstyle="->", color="k", lw=1.5), zorder=10)
+    ax0.text(T, 0.42, " cut: %g PE" % T, transform=trans, fontsize=FONTSIZE-4,
+             horizontalalignment="left", verticalalignment="bottom")
+
+    stem = "%s_containednoflash_flash_maxpe" % detector.replace(" ", "-")
+    fig.savefig(os.path.join(ctx["plotdir"], "pdf", stem + ".pdf"), bbox_inches="tight")
+    fig.savefig(os.path.join(ctx["plotdir"], "png", stem + ".png"), bbox_inches="tight")
+    plt.close(fig)
+    return pd_
 
 
 def run_detector(detector, args):
@@ -1648,6 +1834,10 @@ def run_detector(detector, args):
     if not args.no_save:
         n_saved += _save_plots(all_plotdata, CUTNAMES, vis_vars, plotdir,
                                blinded=args.blinded)
+
+    # ---- plot: max. flash PE before the flash cut ----
+    flash_plotdata = plot_flash_pe(ctx, args)
+    n_saved += 0 if args.no_save else 1
 
     # ---- plots: PDG breakdown ----
     all_plotdata_pdg = {}
@@ -1788,7 +1978,7 @@ def run_detector(detector, args):
                          "mode": all_plotdata, "pdg": all_plotdata_pdg,
                          "mode_abs": all_plotdata_abs, "pdg_abs": all_plotdata_pdg_abs,
                          "dp": all_plotdata_dp, "dp_abs": all_plotdata_dp_abs,
-                         "dp_slices": DP_SLICES}, f)
+                         "dp_slices": DP_SLICES, "flash": flash_plotdata}, f)
         log("Wrote %s" % pkl_path)
 
     for tag, tdf in chi2dfs.items():
@@ -1824,7 +2014,25 @@ def parse_args(argv=None):
                         "data points in either panel. NB: this does NOT relax the "
                         "--absnorm detector restriction -- the printed chi2 is still a "
                         "data/MC comparison")
+    p.add_argument("--run4-flash-pe", type=float, default=None,
+                   help="Override the ICARUS Run4 flash-PE threshold (nominal %g), in "
+                        "both gc.flash_cut and the trigger-systematic base"
+                        % gc.FLASH_PE_THRESHOLD["ICARUS Run4"])
+    p.add_argument("--cryostat", choices=["east", "west"], default=None,
+                   help="ICARUS only: keep slices whose reco vertex is in this cryostat "
+                        "(east: slc_vtx_x < 0, west: slc_vtx_x > 0)")
+    p.add_argument("--offbeam-scale", type=float, default=1.0,
+                   help="Multiply the off-beam subtraction weight OFF_w by this factor "
+                        "(e.g. a fitted value from offbeam_scale_fit_gumple.py)")
+    p.add_argument("--mc-pe-scale", type=float, default=None,
+                   help="Override the MC flash-PE scale (loaddf.MC_PE_SCALE) for the "
+                        "detector being run, e.g. a fitted value from flashpe_fit_gumple.py. "
+                        "Single-detector runs only")
     args = p.parse_args(argv)
+
+    if args.run4_flash_pe is not None:
+        gc.FLASH_PE_THRESHOLD["ICARUS Run4"] = args.run4_flash_pe
+        TRIG_THRESHOLD[4] = args.run4_flash_pe
 
     if not args.detector:
         args.detector = ["all"]
@@ -1838,6 +2046,12 @@ def parse_args(argv=None):
         else:
             p.error("unknown detector %r (choose from %s, or 'all')" % (d, DETECTORS))
     args.detector = dets
+
+    if args.mc_pe_scale is not None and len(dets) != 1:
+        p.error("--mc-pe-scale is per detector: run one detector at a time")
+
+    if args.cryostat and any("ICARUS" not in d for d in dets):
+        p.error("--cryostat is ICARUS-only (requested %s)" % dets)
 
     # Fail before anything is loaded rather than part-way through a multi-detector run.
     bad = [d for d in dets if d not in ABSNORM_DETECTORS]
@@ -1858,6 +2072,10 @@ def main(argv=None):
     # reclaimed in between.
     passthrough = ["--df-dir", args.df_dir, "--plotdir", args.plotdir,
                    "--nproc", str(args.nproc)]
+    if args.cryostat:
+        passthrough += ["--cryostat", args.cryostat]
+    if args.offbeam_scale != 1.0:
+        passthrough += ["--offbeam-scale", repr(args.offbeam_scale)]
     for flag in ("no_dirt", "no_save", "skip_pdg", "absnorm", "blinded"):
         if getattr(args, flag):
             passthrough.append("--" + flag.replace("_", "-"))

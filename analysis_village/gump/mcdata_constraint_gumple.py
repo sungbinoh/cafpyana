@@ -47,6 +47,17 @@ Example:
 
     python mcdata_constraint_gumple.py -d SBND --plot-var nu_E_calo --constraint-var nu_E_ccqe
 
+A third round (run_joint_signalbox; --joint-only / --no-joint) is a JOINT
+SBND MC/data comparison of the plot variable over four signal-box spectra --
+1u1p in the del_p slices lodp / middp / hidp, and 1uMp ("PID Mp") with
+del_p < 0.6 unsliced -- with one covariance across all four blocks and one
+combined chi2 / ndof, drawn as a four-pane figure. It is made at two selection
+stages (JOINT_SB_STAGES): the full signal box (PID 1p / PID Mp) and the
+two-prong stage before the PID cut (Two Prong 1p / Two Prong Mp, the
+mdc.AUX_CUTNAMES stages). BLINDING: this round is the one exception to the
+1p-only gate below. It is SBND-only (absolute normalization) and shows the
+SBND Mp channel by explicit request (2026-10-20).
+
 Band conventions differ between the figures, deliberately, and are restated on
 each one: figures 1 and 2 keep the mcdata_comparison convention (the band is the
 MC systematic only; the data statistical uncertainty enters the chi2 alone),
@@ -358,9 +369,12 @@ def replot(npz_path, args):
     # the numbers cannot drift from the covariance actually drawn.
     NMC_x, NMC_y, NMC_shift = z["NMC_x"], z["NMC_y"], z["NMC_y_shift"]
     ND_x, ND_y = z["NData_x"], z["NData_y"]
-    c_x = mdc.f_chi2(NMC_x, ND_x, covw_x)
-    c_y = mdc.f_chi2(NMC_y, ND_y, covw_y)
-    c_c = mdc.f_chi2(NMC_shift, ND_y, cov_c)
+    # empty on-beam bins are dropped from the chi2 (archives predating NON_x/NON_y keep every bin)
+    NON_x = z["NON_x"] if "NON_x" in z.files else None
+    NON_y = z["NON_y"] if "NON_y" in z.files else None
+    c_x = mdc.f_chi2(NMC_x, ND_x, covw_x, NON=NON_x)
+    c_y = mdc.f_chi2(NMC_y, ND_y, covw_y, NON=NON_y)
+    c_c = mdc.f_chi2(NMC_shift, ND_y, cov_c, NON=NON_y)
 
     pd_y = mk(z["bins_y"], label_y, z["NMC_breakdown_y"], NMC_y,
               ND_y, z["NDataErr_y"], cov_y, covw_y, c_y)
@@ -513,8 +527,8 @@ def run(detector, args, ctx=None):
             % (_nneg, np.flatnonzero(NMC_y_shift <= 0).tolist()))
 
     # ---- chi2 before and after ----
-    chi2_0, ndof_0 = mdc.f_chi2(NMC_y, ND_y, pd_y["cov_w_stat"])
-    chi2_c, ndof_c = mdc.f_chi2(NMC_y_shift, ND_y, cov_cond)
+    chi2_0, ndof_0 = mdc.f_chi2(NMC_y, ND_y, pd_y["cov_w_stat"], NON=pd_y["NON"])
+    chi2_c, ndof_c = mdc.f_chi2(NMC_y_shift, ND_y, cov_cond, NON=pd_y["NON"])
     p0 = dict(pd_y, chi2=chi2_0, ndof=ndof_0)
     pc = dict(pd_y, chi2=chi2_c, ndof=ndof_c)
     _, _, pval_0 = mdc.chi2_ndof_pvalue(p0)
@@ -565,6 +579,7 @@ def run(detector, args, ctx=None):
                  NMC_x=NMC_x, NMC_y=NMC_y, NMC_y_shift=NMC_y_shift,
                  NData_x=ND_x, NData_y=ND_y,
                  NDataErr_x=pd_x["NDataErr"], NDataErr_y=pd_y["NDataErr"],
+                 NON_x=pd_x["NON"], NON_y=pd_y["NON"],
                  bins_x=bins_x, bins_y=bins_y, POT=POT,
                  NMC_breakdown_x=pd_x["NMC_breakdown"],
                  NMC_breakdown_y=pd_y["NMC_breakdown"],
@@ -589,14 +604,14 @@ def run(detector, args, ctx=None):
 def run_dp(detector, args, ctx=None):
     """As run(), but sliced into the del_p bins of mcdata_comparison.DP_SLICES.
 
-    Builds ONE joint covariance over the six blocks
+    Builds ONE joint covariance over the 2N blocks (N = len(DP_SLICES))
 
-        [x_lo, x_mid, x_hi, y_lo, y_mid, y_hi]
+        [x_lo, x_mid, x_hi, ..., y_lo, y_mid, y_hi, ...]
 
     (x = constraint variable, y = plot variable), so the cross-slice
     correlations are carried explicitly, then applies the conditional
     constraint within each del_p slice: y_i constrained by x_i, using that
-    slice's 2-block sub-matrix. Nine figures, three per slice.
+    slice's 2-block sub-matrix. 3N figures, three per slice.
     """
     plotdir = args.plotdir
     for sub in ("png", "pdf"):
@@ -634,7 +649,7 @@ def run_dp(detector, args, ctx=None):
         "%s [%.1f, %.1f)" % (t, lo, hi) for t, lo, hi in slices))
     log("=" * 70)
 
-    # block layout: the three constraint slices, then the three plot slices
+    # block layout: the N constraint slices, then the N plot slices
     cuts6 = [mdc.dp_cutname(cut, t) for t, _, _ in slices]*2
     vars6 = [var_x]*ns + [var_y]*ns
     bins6 = [bins_x]*ns + [bins_y]*ns
@@ -720,9 +735,9 @@ def run_dp(detector, args, ctx=None):
         for p, s_ in ((pd_x, blk[i]), (pd_y, blk[ns+i])):
             p["cov"] = Csyst[s_, s_]
             p["cov_w_stat"] = Csyst[s_, s_] + Cstat[s_, s_]
-            p["chi2"], p["ndof"] = mdc.f_chi2(p["NMC_total"], p["NData"], p["cov_w_stat"])
+            p["chi2"], p["ndof"] = mdc.f_chi2(p["NMC_total"], p["NData"], p["cov_w_stat"], NON=p["NON"])
 
-        chi2_c, ndof_c = mdc.f_chi2(NMC_y_shift, ND_y, cov_cond)
+        chi2_c, ndof_c = mdc.f_chi2(NMC_y_shift, ND_y, cov_cond, NON=pd_y["NON"])
         pd_c = dict(pd_y)
         pd_c["cov"] = cov_cond
         pd_c["cov_w_stat"] = cov_cond
@@ -765,6 +780,7 @@ def run_dp(detector, args, ctx=None):
                      NMC_y_shift=d_["NMC_y_shift"],
                      NData_x=px["NData"], NData_y=py["NData"],
                      NDataErr_x=px["NDataErr"], NDataErr_y=py["NDataErr"],
+                     NON_x=px["NON"], NON_y=py["NON"],
                      bins_x=bins_x, bins_y=bins_y, POT=POT,
                      NMC_breakdown_x=px["NMC_breakdown"],
                      NMC_breakdown_y=py["NMC_breakdown"],
@@ -784,6 +800,182 @@ def run_dp(detector, args, ctx=None):
         print("Wrote %s" % summary, flush=True)
 
     log("\nSaved %d figures (pdf+png) to %s" % (n_saved, plotdir))
+    return 0
+
+
+# Joint signal-box comparison: (1p / Mp stage, del_p tag, pane label) per
+# block. The 1p blocks are the three lower DP_SLICES; Mp is the unsliced
+# del_p < 0.6 cut (mdc.DP_CUTS_EXTRA).
+JOINT_SB_BLOCKS = [
+    ("1p", "lodp",   "1$\\mu$1p"),
+    ("1p", "middp",  "1$\\mu$1p"),
+    ("1p", "hidp",   "1$\\mu$1p"),
+    ("mp", "lt06dp", "1$\\mu$Mp"),
+]
+
+# Selection stages the joint comparison is made at:
+#   key: ({"1p": stage, "mp": stage}, file-name infix, figure-title stage name)
+JOINT_SB_STAGES = {
+    "pid":      ({"1p": "PID 1p", "mp": "PID Mp"}, "", "Signal Box"),
+    "twoprong": ({"1p": "Two Prong 1p", "mp": "Two Prong Mp"}, "_twoprong", "Two-Prong Stage"),
+}
+
+
+def run_joint_signalbox(detector, args, ctx=None, stage_key="pid"):
+    """Joint MC/data comparison of the plot variable over the four signal-box
+    spectra of JOINT_SB_BLOCKS at selection stage JOINT_SB_STAGES[stage_key],
+    with one systematic + data-stat covariance over the concatenated blocks
+    (cross-block correlations kept) and one combined chi2 / ndof, repeated on
+    each of the four panes."""
+    if detector != "SBND":
+        raise ValueError("the joint signal-box comparison is SBND-only (absolute "
+                         "normalization), not %r" % detector)
+    plotdir = args.plotdir
+    for sub in ("png", "pdf"):
+        os.makedirs(os.path.join(plotdir, sub), exist_ok=True)
+
+    var_y = args.plot_var
+    bins_y, label_y = _plotvar_spec(detector, var_y)
+    if args.gump_bins:
+        bins_y = GUMP_BINS
+
+    if ctx is None:
+        ctx = mdc.prepare_detector(detector, args)
+    log = ctx["log"]
+    df, ONdf, OFFdf = ctx["df"], ctx["ONdf"], ctx["OFFdf"]
+    OFF_w, POT = ctx["OFF_w"], ctx["POT"]
+
+    stages, infix, stage_title = JOINT_SB_STAGES[stage_key]
+    cuts4 = [mdc.dp_cutname(stages[m], tag) for m, tag, _ in JOINT_SB_BLOCKS]
+    nb = len(cuts4)
+    vars4 = [var_y]*nb
+    bins4 = [bins_y]*nb
+    sizes = [len(b) - 1 for b in bins4]
+    edges = np.cumsum([0] + sizes)
+    blk = [slice(edges[i], edges[i+1]) for i in range(nb)]
+
+    log("")
+    log("=" * 70)
+    log("JOINT SIGNAL-BOX COMPARISON at %s (1p in del_p slices + Mp del_p < 0.6)"
+        % stage_title)
+    log("  variable : %s  (%d bins x %d blocks)" % (var_y, len(bins_y) - 1, nb))
+    log("=" * 70)
+    for c in cuts4:
+        log("  %-20s: MC %9.1f   on-beam %6d" % (
+            c, float(df.loc[df[c], "glob_scale"].sum()), int(ONdf[c].sum())))
+    # the blocks are disjoint, so the data stat covariance is block diagonal
+    for frame in (df, ONdf, OFFdf):
+        m = np.array([np.asarray(frame[c], dtype=bool) for c in cuts4])
+        assert (m.sum(axis=0) <= 1).all(), "joint signal-box blocks overlap"
+
+    # ---- per-block plot data; the covariance comes from the joint call below ----
+    nosyst = syst.SystematicList([])
+    pds = []
+    for (m, tag, plabel), c in zip(JOINT_SB_BLOCKS, cuts4):
+        stage = stages[m]
+        lo, hi = dict((t, (l_, h_)) for t, l_, h_ in mdc.DP_SLICES + mdc.DP_CUTS_EXTRA)[tag]
+        rng = ("$\\delta p < %.1f$ GeV/c" % hi) if tag == "lt06dp" else mdc.dp_annotation(lo, hi)
+        note = "%s, %s" % (plabel, rng)
+        pds.append(mdc.make_plot_data(var_y, bins_y, c, "glob_scale", mdc.breakdown_mode,
+                                      False, mdc.mode_labels, mdc.mode_colors, label_y,
+                                      stage, fillna=-1, det=detector, syst=nosyst,
+                                      annotate=note))
+    NCV = np.concatenate([p["NMC_total"] for p in pds])
+
+    log("\nBuilding the joint %d-block (%d bin) systematic covariance..." % (nb, edges[-1]))
+    base = ctx["systematics_by_cut"][cuts4[0]].systs[0]
+    trig = syst.SelectionSystematic(df, [[c + updn for c in cuts4]
+                                         for updn in ("_trig_up", "_trig_dn")])
+    Csyst = syst.SystematicList([base, trig]).cov(vars4, cuts4, syst.ConcatBins(bins4),
+                                                  NCV, fillna=-1)
+
+    # every diagonal block must reproduce the single-cut covariance
+    for i, c in enumerate(cuts4):
+        ref = ctx["systematics_by_cut"][c].cov(var_y, c, bins_y, NCV[blk[i]], fillna=-1)
+        scale = max(np.abs(ref).max(), 1e-30)
+        d = np.abs(Csyst[blk[i], blk[i]] - ref).max()
+        log("  block %-20s vs the single-cut covariance: max |diff| = %.3g (rel %.2g)"
+            % (c, d, d/scale))
+        if d > 1e-6*scale:
+            log("  !! WARNING: joint block does not reproduce the 1-D covariance")
+
+    Cstat = data_stat_cov_blocks(df, OFFdf, OFF_w, list(zip(vars4, bins4, cuts4)))
+    for i in range(nb):
+        for j in range(nb):
+            if i != j and np.abs(Cstat[blk[i], blk[j]]).max() > 0:
+                log("  !! WARNING: data stat covariance has a cross term between blocks %d, %d" % (i, j))
+
+    # ---- fixed-width normalization (chi2 invariant) ----
+    ylabel = None
+    if args.per_mev:
+        bscale = [density_scale(b, args.per_mev) for b in bins4]
+        ylabel = ylabel_for(args.per_mev, POT)
+        D = np.diag(np.concatenate(bscale))
+        Csyst, Cstat = D @ Csyst @ D, D @ Cstat @ D
+        for p, s_ in zip(pds, bscale):
+            scale_plotdata(p, s_, ylabel)
+        NCV = np.concatenate([p["NMC_total"] for p in pds])
+        log("Normalizing variable-width bins to events / %g MeV" % args.per_mev)
+
+    ND = np.concatenate([p["NData"] for p in pds])
+    NON = np.concatenate([p["NON"] for p in pds])
+    Ctot = Csyst + Cstat
+
+    # ---- combined chi2 ----
+    chi2_j, ndof_j = mdc.f_chi2(NCV, ND, Ctot, NON=NON)
+    _, _, pval_j = mdc.chi2_ndof_pvalue({"chi2": chi2_j, "ndof": ndof_j, "areanorm": False})
+    log("")
+    for i, (c, p) in enumerate(zip(cuts4, pds)):
+        c2, nd = mdc.f_chi2(p["NMC_total"], p["NData"], Ctot[blk[i], blk[i]], NON=p["NON"])
+        log("  block-diagonal chi2 %-20s: %7.2f / %d" % (c, c2, nd))
+    log("  chi2 sum of blocks (no cross-block correlations): %.2f"
+        % sum(mdc.f_chi2(p["NMC_total"], p["NData"], Ctot[blk[i], blk[i]], NON=p["NON"])[0]
+              for i, p in enumerate(pds)))
+    log("  COMBINED chi2 (joint covariance)                : %.2f / %d   p = %.3g"
+        % (chi2_j, ndof_j, pval_j))
+
+    # band = systematic only (mcdata_comparison convention); the text on every
+    # pane is the combined chi2
+    for i, p in enumerate(pds):
+        p["cov"] = Csyst[blk[i], blk[i]]
+        p["cov_w_stat"] = Ctot[blk[i], blk[i]]
+        p["chi2"], p["ndof"] = chi2_j, ndof_j
+        p["title"] = ""
+
+    # ---- four-pane figure ----
+    from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
+    fig = plt.figure(figsize=(14, 11))
+    outer = GridSpec(2, 2, figure=fig, hspace=0.22, wspace=0.25)
+    for i, p in enumerate(pds):
+        inner = GridSpecFromSubplotSpec(2, 1, subplot_spec=outer[i // 2, i % 2],
+                                        height_ratios=[3, 1], hspace=0.05)
+        ax0 = fig.add_subplot(inner[0])
+        ax1 = fig.add_subplot(inner[1], sharex=ax0)
+        mdc.draw_ratio_axes(ax0, ax1, p)
+        plt.setp(ax0.get_xticklabels(), visible=False)
+        ax0.set_title("")
+        # the per-pane legends repeat; keep the stack legend only on the first
+        if i:
+            leg = ax0.get_legend()
+            if leg is not None:
+                leg.remove()
+    fig.suptitle("$\\bf{SBND}$ " + stage_title + ": 1$\\mu$1p ($\\delta p$ slices) + 1$\\mu$Mp "
+                 "($\\delta p < 0.6$ GeV/c), joint $\\chi^2$", fontsize=mdc.FONTSIZE+2, y=0.94)
+
+    tag = "_gump" if args.gump_bins else ""
+    detname = detector.replace(" ", "-")
+    stem = "%s_signalbox%s_%s_joint1pMp_absnorm%s" % (detname, infix, var_y, tag)
+    if not args.no_save:
+        fig.savefig(os.path.join(plotdir, "pdf", stem + ".pdf"), bbox_inches="tight")
+        fig.savefig(os.path.join(plotdir, "png", stem + ".png"), bbox_inches="tight")
+        log("Wrote %s.{pdf,png}" % stem)
+        npz = os.path.join(plotdir, "%s_signalbox%s_joint1pMp%s.npz" % (detname, infix, tag))
+        np.savez(npz, Csyst=Csyst, Cstat=Cstat, NCV=NCV, NData=ND, NON=NON,
+                 NDataErr=np.concatenate([p["NDataErr"] for p in pds]),
+                 bins=bins_y, cuts=np.array(cuts4), var=np.array(var_y), POT=POT,
+                 ylabel=np.array(ylabel or ""), chi2=np.array([chi2_j, ndof_j]))
+        log("Wrote %s" % npz)
+    plt.close(fig)
     return 0
 
 
@@ -812,14 +1004,21 @@ def parse_args(argv=None):
     p.add_argument("--dp-bins", action="store_true",
                    help="Run ONLY the del_p-sliced round: slice the comparison "
                         "into the del_p bins of mcdata_comparison.DP_SLICES (%s), "
-                        "build one joint 6-block covariance and constrain within "
-                        "each slice. Produces 9 figures tagged %s. By default "
+                        "build one joint 2N-block covariance and constrain within "
+                        "each slice. Produces 3N figures tagged %s. By default "
                         "both the inclusive and the sliced rounds run (one "
                         "detector load); see also --no-dp."
-                        % (", ".join("%s [%.1f,%.1f)" % s for s in mdc.DP_SLICES),
+                        % (", ".join("%s [%.1f,%.1f)" % s_ for s_ in mdc.DP_SLICES),
                            "/".join(t for t, _, _ in mdc.DP_SLICES)))
     p.add_argument("--no-dp", action="store_true",
                    help="Run only the inclusive round (skip the del_p slices)")
+    p.add_argument("--joint-only", action="store_true",
+                   help="Run ONLY the joint SBND signal-box comparison: 1p in the "
+                        "lodp/middp/hidp slices + Mp with del_p < 0.6, one "
+                        "covariance and one combined chi2 (four-pane figure), "
+                        "at both the PID and the two-prong stage")
+    p.add_argument("--no-joint", action="store_true",
+                   help="Skip the joint signal-box comparison")
     p.add_argument("--gump-bins", action="store_true",
                    help="Use the GUMP signal-box binning (%s) for both variables "
                         "instead of the mcdata_comparison binning. Implies "
@@ -875,6 +1074,12 @@ def main(argv=None):
     args = parse_args(argv)
     if args.replot_from:
         return replot(args.replot_from, args)
+    if args.joint_only:
+        ctx = mdc.prepare_detector(args.detector, args)
+        rc = 0
+        for k in JOINT_SB_STAGES:
+            rc = run_joint_signalbox(args.detector, args, ctx, stage_key=k) or rc
+        return rc
     if args.dp_bins:
         return run_dp(args.detector, args)
     # default: the inclusive round AND the del_p-sliced round (with its
@@ -883,6 +1088,9 @@ def main(argv=None):
     rc = run(args.detector, args, ctx)
     if not args.no_dp:
         rc = run_dp(args.detector, args, ctx) or rc
+    if not args.no_joint and args.detector == "SBND":
+        for k in JOINT_SB_STAGES:
+            rc = run_joint_signalbox(args.detector, args, ctx, stage_key=k) or rc
     return rc
 
 

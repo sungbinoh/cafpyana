@@ -15,6 +15,12 @@ main file main.tex unless --main is given) and works on paths relative to it.
            list the referenced images the manifest does not cover
   install  copy every manifest source onto its dest (--dry-run to preview)
 
+Paths are expanded through \\foreach loops (brace-aware: `a/{text, with, commas}`
+items stay whole), zero-argument macros (\\newcommand / \\providecommand / \\def,
+e.g. a figure-directory macro, also in \\input paths) and parameterized
+\\newcommand macros whose body holds an \\includegraphics (expanded at each call
+site; a macro that is never called contributes nothing, like a commented line).
+
 Typical:
   technote_figures.py list   --technote ../6973acd1e6f673f7a8b495e7 --table
   technote_figures.py unused --technote ... --keep-commented
@@ -82,6 +88,133 @@ def balanced(text, start):
     raise ValueError("unbalanced braces from offset %d" % start)
 
 
+def split_top(s, sep):
+    """Split s at sep only where the brace depth is 0."""
+    parts, depth, cur = [], 0, []
+    i = 0
+    while i < len(s):
+        c = s[i]
+        if c == "\\" and i + 1 < len(s):
+            cur.append(s[i:i + 2])
+            i += 2
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        if c == sep and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(c)
+        i += 1
+    parts.append("".join(cur))
+    return parts
+
+
+def strip_outer(s):
+    """'{abc}' -> 'abc' when the braces enclose the whole string."""
+    s = s.strip()
+    if s.startswith("{"):
+        try:
+            if balanced(s, 0) == len(s):
+                return s[1:-1].strip()
+        except ValueError:
+            pass
+    return s
+
+
+# ----------------------------------------------------------------------------
+# macros
+# ----------------------------------------------------------------------------
+RE_NEWCMD = re.compile(r"\\(newcommand|renewcommand|providecommand)\*?\s*"
+                       r"(?:\{\s*(\\[A-Za-z@]+)\s*\}|(\\[A-Za-z@]+))\s*"
+                       r"(?:\[(\d)\])?\s*(?:\[[^\]]*\])?\s*\{")
+RE_DEF = re.compile(r"\\def\s*(\\[A-Za-z@]+)\s*\{")
+
+
+class Macros:
+    """Zero-argument macros (name -> replacement) and parameterized macros
+    (name -> (nargs, body, defining file, body offset))."""
+
+    def __init__(self):
+        self.simple = {}
+        self.param = {}
+
+    def collect(self, text, path):
+        """Record the definitions in text; return [(start, end)] spans of the
+        parameterized definitions (their bodies are expanded at call sites)."""
+        spans = []
+        for m in RE_NEWCMD.finditer(text):
+            kind, name = m.group(1), m.group(2) or m.group(3)
+            try:
+                end = balanced(text, m.end() - 1)
+            except ValueError:
+                continue
+            body = text[m.end():end - 1]
+            if m.group(4) and int(m.group(4)) > 0:
+                self.param[name] = (int(m.group(4)), body, path, m.end())
+                spans.append((m.start(), end))
+            elif kind != "providecommand" or name not in self.simple:
+                self.simple[name] = body.strip()
+        for m in RE_DEF.finditer(text):
+            try:
+                end = balanced(text, m.end() - 1)
+            except ValueError:
+                continue
+            self.simple[m.group(1)] = text[m.end():end - 1].strip()
+        return spans
+
+    def expand(self, s):
+        """Substitute zero-argument macros (repeatedly, longest name first)."""
+        for _ in range(5):
+            new = s
+            for name in sorted(self.simple, key=len, reverse=True):
+                new = re.sub(re.escape(name) + r"(?![A-Za-z@])",
+                             lambda _m, v=self.simple[name]: v, new)
+            if new == s:
+                break
+            s = new
+        return s
+
+    def calls(self, text):
+        """[(name, pos, [args])] for every call of a parameterized macro."""
+        out = []
+        if not self.param:
+            return out
+        pat = re.compile(r"(%s)(?![A-Za-z@])"
+                         % "|".join(re.escape(n) for n in sorted(self.param, key=len, reverse=True)))
+        for m in pat.finditer(text):
+            nargs = self.param[m.group(1)][0]
+            k, args = m.end(), []
+            while len(args) < nargs:
+                while k < len(text) and text[k] in " \t\r\n":
+                    k += 1
+                if k < len(text) and text[k] == "[":  # optional argument: skip
+                    k = text.find("]", k) + 1
+                    continue
+                if k >= len(text) or text[k] != "{":
+                    break
+                try:
+                    end = balanced(text, k)
+                except ValueError:
+                    break
+                args.append(text[k + 1:end - 1])
+                k = end
+            if len(args) == nargs:
+                out.append((m.group(1), m.start(), args))
+        return out
+
+    def instantiate(self, name, args):
+        body = self.param[name][1]
+        return re.sub(r"#(\d)", lambda m: args[int(m.group(1)) - 1]
+                      if 0 < int(m.group(1)) <= len(args) else m.group(0), body)
+
+
+def in_spans(pos, spans):
+    return any(a <= pos < b for a, b in spans)
+
+
 def resolve_tex(root, name):
     p = os.path.join(root, name)
     if os.path.isfile(p):
@@ -91,11 +224,13 @@ def resolve_tex(root, name):
     return None
 
 
-def tex_tree(root, main):
+def tex_tree(root, main, macros=None):
     """Ordered list of .tex files reachable from main via \\input/\\include
-    (comments stripped before following)."""
+    (comments stripped before following). Macro definitions met on the way are
+    recorded in macros (a Macros), so \\input{\\FigDir/x} resolves."""
     order = []
     seen = set()
+    macros = Macros() if macros is None else macros
 
     def visit(path):
         if path in seen:
@@ -103,8 +238,9 @@ def tex_tree(root, main):
         seen.add(path)
         order.append(path)
         text = strip_comments(open(path, encoding="utf-8", errors="replace").read())
+        macros.collect(text, path)
         for m in RE_INCLUDE.finditer(text):
-            child = resolve_tex(root, m.group(1).strip())
+            child = resolve_tex(root, macros.expand(m.group(1).strip()))
             if child:
                 visit(child)
             else:
@@ -126,10 +262,10 @@ def foreach_loops(text):
         names = [v.strip() for v in re.findall(r"\\[A-Za-z@]+", m.group(1))]
         list_start = m.end() - 1
         list_end = balanced(text, list_start)
-        items = [s.strip() for s in text[list_start + 1:list_end - 1].split(",") if s.strip()]
+        items = [s.strip() for s in split_top(text[list_start + 1:list_end - 1], ",") if s.strip()]
         values = []
         for it in items:
-            parts = [p.strip() for p in it.split("/")] if len(names) > 1 else [it]
+            parts = [strip_outer(p) for p in split_top(it, "/")] if len(names) > 1 else [strip_outer(it)]
             if len(parts) != len(names):
                 parts = (parts + [""] * len(names))[:len(names)]
             values.append(tuple(parts))
@@ -203,20 +339,45 @@ def context_for(text, pos):
     return sec, (lab.group(1).strip() if lab else ""), caption
 
 
+def graphics_in(text, macros, skip_spans=()):
+    """[(pos, path, ctx_text, ctx_pos)] for every \\includegraphics in text,
+    \\foreach and macro expanded. Graphics inside skip_spans (parameterized
+    macro definitions) are skipped; they are produced at each call site instead,
+    with the instantiated body as the caption/label context."""
+    out = []
+    loops = foreach_loops(text)
+    for m in RE_GRAPHICS.finditer(text):
+        if in_spans(m.start(), skip_spans):
+            continue
+        for p in expand_macros(m.group(1), m.start(), loops):
+            out.append((m.start(), macros.expand(p).strip(), text, m.start()))
+    for name, pos, args in macros.calls(text):
+        if in_spans(pos, skip_spans):
+            continue
+        body = macros.instantiate(name, args)
+        body_loops = foreach_loops(body)
+        for m in RE_GRAPHICS.finditer(body):
+            for p in expand_macros(m.group(1), m.start(), body_loops):
+                for q in expand_macros(p, pos, loops):  # call inside a \foreach
+                    out.append((pos, macros.expand(q).strip(), body, m.start()))
+    return out
+
+
 def inventory(root, main):
     """List of dicts: path (as written, expanded), resolved (on-disk rel path
     or None), tex, section, label, caption."""
     refs = []
-    for tex in tex_tree(root, main):
-        raw = open(tex, encoding="utf-8", errors="replace").read()
-        text = strip_comments(raw)
-        loops = foreach_loops(text)
-        for m in RE_GRAPHICS.finditer(text):
-            sec, label, caption = context_for(text, m.start())
-            for p in expand_macros(m.group(1), m.start(), loops):
-                refs.append(dict(path=p.strip(), resolved=resolve_image(root, p),
-                                 tex=os.path.relpath(tex, root), section=sec,
-                                 label=label, caption=caption))
+    macros = Macros()
+    texs = tex_tree(root, main, macros)
+    for tex in texs:
+        text = strip_comments(open(tex, encoding="utf-8", errors="replace").read())
+        spans = Macros().collect(text, tex)  # parameterized definitions in this file
+        for pos, p, ctext, cpos in graphics_in(text, macros, spans):
+            sec = context_for(text, pos)[0]
+            _, label, caption = context_for(ctext, cpos)
+            refs.append(dict(path=p, resolved=resolve_image(root, p),
+                             tex=os.path.relpath(tex, root), section=sec,
+                             label=label, caption=caption))
     return refs
 
 
@@ -235,18 +396,29 @@ def protected_paths(root, main):
     non-\\input .tex files included), for --keep-commented. Macro-bearing paths
     are expanded against the loops of the raw file."""
     used = set()
-    for tex in all_tex_files(root):
-        raw = open(tex, encoding="utf-8", errors="replace").read()
-        # raw text: keep comments, but still need balanced-brace parsing
+    macros = Macros()
+    texs = all_tex_files(root)
+    raws = {}
+    for tex in texs:  # all definitions first: orphan files may call each other's macros
+        raws[tex] = open(tex, encoding="utf-8", errors="replace").read()
         try:
-            loops = foreach_loops(raw)
+            macros.collect(raws[tex], tex)
         except ValueError:
-            loops = []
-        for m in RE_GRAPHICS.finditer(raw):
-            for p in expand_macros(m.group(1), m.start(), loops):
-                r = resolve_image(root, p)
-                if r:
-                    used.add(os.path.normpath(r))
+            pass
+    for tex in texs:
+        raw = raws[tex]
+        # raw text: keep comments, but still need balanced-brace parsing.
+        # Graphics inside macro definitions count too (an uncalled macro is
+        # like a commented-out line).
+        try:
+            refs = graphics_in(raw, macros)
+        except ValueError:
+            refs = [(m.start(), macros.expand(m.group(1)), raw, m.start())
+                    for m in RE_GRAPHICS.finditer(raw)]
+        for _, p, _, _ in refs:
+            r = resolve_image(root, p)
+            if r:
+                used.add(os.path.normpath(r))
     return used
 
 

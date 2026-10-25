@@ -698,20 +698,16 @@ def main():
         assert not ((Idf["selected_trig_r2_up_" + s] | Idf["selected_trig_r4_up_" + s]) & ~Idf[sel]).any()
         assert not (Idf[sel] & ~(Idf["selected_trig_r2_dn_" + s] & Idf["selected_trig_r4_dn_" + s])).any()
 
-    # TRACK-SPLITTING SYSTEMATIC (ICARUS), notebook cell 48
-    fv = gc.ICARUSRun4FVCuts
-    TRACKSPLIT_PLANES = [
-        ("Z=0",          "z", 0.0),
-        ("East Cathode", "x", 0.5*(fv["C0"]["x"]["min"] + fv["C0"]["x"]["max"])),
-        ("West Cathode", "x", 0.5*(fv["C1"]["x"]["min"] + fv["C1"]["x"]["max"])),
-    ]
-    TRACKSPLIT_FRAC = {"Z=0": 0.1143, "East Cathode": 0.0446, "West Cathode": 0.0314}
+    # TRACK-SPLITTING SYSTEMATIC (ICARUS), notebook cell 48. Planes, fractions and
+    # run periods come from loaddf (SPLIT_REGIONS / SPLIT_FRAC / SPLIT_RUNS), the
+    # values measured by TrackSplittingCorrection_GUMPLE.py, as in
+    # mcdata_comparison_gumple.py.
     Isplit_systs = []
     I_TRACKSPLIT_NAMES = []
-    for name, dim, coord in TRACKSPLIT_PLANES:
-        sdf, crosses = syst.split_tracks(Idf, dim, coord, runs=[2, 4])
+    for name, (dim, coord) in loaddf.SPLIT_REGIONS.items():
+        sdf, crosses = syst.split_tracks(Idf, dim, coord, runs=loaddf.SPLIT_RUNS[name])
         add_selection(sdf)
-        Isplit_systs.append(syst.TrackSplittingSystematic(Idf, sdf, crosses, TRACKSPLIT_FRAC[name]))
+        Isplit_systs.append(syst.TrackSplittingSystematic(Idf, sdf, crosses, loaddf.SPLIT_FRAC[name]))
         I_TRACKSPLIT_NAMES.append("Trk. Split %s" % name)
 
     # BINDING-ENERGY SYSTEMATIC, notebook cell 50

@@ -647,10 +647,12 @@ SPLIT_REGIONS = {
 }
 
 # Fraction of the plane-crossing muons that split_tracks actually splits, per
-# region: the Run2+Run4 combined values measured by TrackSplittingCorrection.py
-# (TrackSplittingCorrection-2026-08-01.md), as used by the signal-box track-split
-# systematic.
-SPLIT_FRAC = {"Z=0": 0.0960, "East Cathode": 0.0447, "West Cathode": 0.0398}
+# region: the Run2+Run4 combined values (simple cosmic rejection stage) measured by
+# TrackSplittingCorrection_GUMPLE.py on sbn-rewgted-25 (2026-10-20,
+# plots-gumple-2026-10-20-rewgted25/tracksplit/tracksplit_summary.csv), as used by
+# the signal-box track-split systematic. Updated 2026-10-24 from the 8-01 reCAF
+# values (Z=0 0.0960, East 0.0447, West 0.0398).
+SPLIT_FRAC = {"Z=0": 0.1002, "East Cathode": 0.0292, "West Cathode": 0.0146}  # sync_calibrations.py 2026-10-25 from plots-gumple-2026-10-24-full
 
 # Run periods each plane applies to. The east cathode lies outside the Run 2 muon
 # fiducial volume (the East-East TPC was off in Run 2), so it has Run 4 crossers
