@@ -75,7 +75,7 @@ PSELS = list(PSEL_CUTS)
 PSEL_LABEL = {"1p": "1$\\mu$1p", "mp": "1$\\mu$Mp"}
 
 IRUN2_POT = 2e20
-IRUN4_POT = 3e20
+IRUN4_POT = 3.5e20
 IGOAL_POT = IRUN2_POT + IRUN4_POT
 SGOAL_POT = 1e20
 
