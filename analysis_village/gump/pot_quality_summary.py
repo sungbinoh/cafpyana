@@ -17,11 +17,15 @@ on-beam data samples:
     \\usepackage{booktabs})
   * pot_summary.csv / pot_summary.txt
 
-The cuts are those of dataquality.py (NB the FOM cut is applied only for the
-run sets in dataquality.FOM_DETECTORS -- SBND -- see the TODO there).
+The cuts are those of dataquality.py. The FOM cut is applied for the run sets in
+dataquality.FOM_DETECTORS, with the corrected FOM (dataquality.correct_fom, from the
+ROOT files in dataquality.FOM_FILES), which covers the full on-beam samples. The
+optional --unblinded-only restricts the bar charts and the beam-quality cutflow to
+the unblinded subsets (UNBLINDED: SBND FixedDev, ICARUS Run 2 unblind = 10%, ICARUS
+Run 4 unblind), as shown in the technote while the corrected FOM covered only those.
 
 Usage:
-    python pot_quality_summary.py --df-dir /path/to/sbn-rewgted-24/ --outdir OUT
+    python pot_quality_summary.py --df-dir /path/to/sbn-rewgted-24/ --outdir OUT [--unblinded-only]
 """
 import argparse
 import os
@@ -42,10 +46,24 @@ SAMPLES = {
              ("FixedDev", "SBND_SpringBNBData_FixedDev.df")],
     "ICARUS Run2": [("FullOnBeam", "ICARUS_SpringRun2BNB_FullOnBeam.df"),
                     ("unblind", "ICARUS_SpringRun2BNB_unblind.df")],
-    "ICARUS Run4": [("unblind", "ICARUS_SpringRun4BNB_unblind.df")],
+    "ICARUS Run4": [("ReCAF2026", "ICARUS_SpringRun4BNB_ReCAF2026.df"),
+                    ("unblind", "ICARUS_SpringRun4BNB_unblind.df")],
 }
 
 TITLES = {"SBND": "SBND Run 1", "ICARUS Run2": "ICARUS Run 2", "ICARUS Run4": "ICARUS Run 4"}
+
+# (run set, sample) of the unblinded subsets, for --unblinded-only
+UNBLINDED = {("SBND", "FixedDev"), ("ICARUS Run2", "unblind"), ("ICARUS Run4", "unblind")}
+
+# display names for the bar-chart titles and the cutflow table (default: "<title> <sample>")
+SAMPLE_TITLES = {("SBND", "FixedDev"): "SBND Run 1 FixedDev",
+                 ("ICARUS Run2", "unblind"): "ICARUS Run 2 10%",
+                 ("ICARUS Run4", "ReCAF2026"): "ICARUS Run 4",
+                 ("ICARUS Run4", "unblind"): "ICARUS Run 4 unblind"}
+
+
+def sample_title(det, label):
+    return SAMPLE_TITLES.get((det, label), "%s %s" % (TITLES[det], label))
 
 # run set -> (label, [on-beam files]) for the dq_tables "runs removed" table. With
 # several files (SBND) the table has one row per removed run and a separate POT
@@ -54,7 +72,7 @@ TITLES = {"SBND": "SBND Run 1", "ICARUS Run2": "ICARUS Run 2", "ICARUS Run4": "I
 DQ_TABLE_SAMPLES = {
     "SBND": ("FullOnBeam+FixedDev", ["SBND_SpringBNBData_FullOnBeam.df", "SBND_SpringBNBData_FixedDev.df"]),
     "ICARUS Run2": ("FullOnBeam", ["ICARUS_SpringRun2BNB_FullOnBeam.df"]),
-    "ICARUS Run4": ("unblind", ["ICARUS_SpringRun4BNB_unblind.df"]),
+    "ICARUS Run4": ("ReCAF2026", ["ICARUS_SpringRun4BNB_ReCAF2026.df"]),
 }
 
 # run sets whose "runs removed" table groups adjacent rows with the same reason
@@ -77,7 +95,7 @@ def bar_chart(det, label, fname, st, outbase):
                 ha="center", va="bottom", fontsize=11)
     ax.set_ylim(0, 1.25*vals[0] / 10**exp)
     ax.set_ylabel(r"POT [$\times 10^{%d}$]" % exp)
-    ax.set_title("%s: %s" % (TITLES[det], os.path.basename(fname).replace(".df", "")), fontsize=12)
+    ax.set_title(sample_title(det, label), fontsize=12)
     bqtext = ("intensity + horn current + FOM" if det in dq.FOM_DETECTORS
               else "intensity + horn current\n(FOM cut not applied)")
     ax.text(0.98, 0.97, "Beam quality: " + bqtext,
@@ -86,21 +104,6 @@ def bar_chart(det, label, fname, st, outbase):
     for ext in ("png", "pdf"):
         fig.savefig("%s.%s" % (outbase, ext))
     plt.close(fig)
-
-
-def extra_good_note(det, pers, names):
-    """Table note for runs added to the good-run list by hand."""
-    extra = sorted(dq.EXTRA_GOOD_RUNS.get(det, {}))
-    if not extra:
-        return ""
-    txt = []
-    for r in extra:
-        pots = ["%.2f$\\times 10^{17}$ POT in %s" % (p.pot_bq[r] / 1e17, tex_escape(n))
-                for p, n in zip(pers, names) if r in p.index]
-        txt.append("run %d%s" % (r, (" (%s, after the beam-quality cut)" % "; ".join(pots)) if pots else ""))
-    return ("Note: %s %s absent from the run list and %s been added to the good runs by hand; "
-            "%s not removed." % (", ".join(txt), "is" if len(extra) == 1 else "are",
-                                 "has" if len(extra) == 1 else "have", "it is" if len(extra) == 1 else "they are"))
 
 
 def _group_rows(bad, det):
@@ -156,10 +159,6 @@ def runs_cut_table(det, label, fnames, pers):
                      % (tex_escape(n) if npot > 1 else "Total", len(b_), len(p),
                         100*b_.pot_bq.sum()/tot if tot > 0 else 0., " & ".join(cells)))
     lines.append("\\hline")
-    # ICARUS tables carry no notes (removed at the user's request); SBND keeps the hand-added-run note
-    for note in (extra_good_note(det, pers, names),):
-        if note:
-            lines.append("\\multicolumn{%d}{p{0.95\\textwidth}}{\\footnotesize %s} \\\\" % (3 + npot, note))
     lines.append("\\end{longtable}")
     return lines
 
@@ -174,7 +173,7 @@ def bq_cutflow(fname, det):
     for k in dq._keys(fname, "bnb"):
         b = dq.spill_table(fname, int(k.split("_")[-1]), det)
         tor = b.TOR875.astype(float).where(b.valid, 0.)
-        inten = (b.TOR860 > 1e11) & (b.TOR875 > 1e11) & (b.LM875A > 1e-2) & (b.LM875B > 1e-2) & (b.LM875C > 1e-2)
+        inten = (b.TOR860 > 1e11) & (b.TOR875 > 1e11)
         horn = (b.THCURR >= 173) & (b.THCURR <= 175)
         fom = (b.FOM > 0.98) & (b.FOM <= 1)
         for name, m in (("all", np.ones(len(b), bool)), ("intensity", inten), ("horn", inten & horn),
@@ -186,10 +185,17 @@ def bq_cutflow(fname, det):
 
 def bq_table(cutflows):
     """LaTeX: the beam-quality criteria, and the cumulative spill / POT cutflow per sample."""
+    fomdets = sorted({d for d, _, _ in cutflows} & dq.FOM_DETECTORS)
+    fom_all = len(fomdets) == len({d for d, _, _ in cutflows})
+    fom_applied = "yes" if fom_all else "%s only" % ", ".join(TITLES[d] for d in fomdets)
+    fom_caption = ("The FOM requirement uses the corrected FOM from the beam-quality database, matched "
+                   "spill-by-spill to the data." if fom_all else
+                   "The FOM requirement is applied to %s only; for the other samples its row is shown "
+                   "for reference." % ", ".join(TITLES[d] for d in fomdets))
     # Two floats: the criteria (tab:beam_quality_cuts) and the cutflow
     # (tab:beam_quality_cutflow, cited from Samples.tex). The FOM footnote was
     # dropped on Overleaf in favour of the Samples.tex text, so it is not generated.
-    L = ["% Beam-quality cut summary (SBN SPINE numu-disappearance technical note, Sec. 6.1).",
+    L = ["% Beam-quality cut summary (good-beam definition of SBN-doc-49735-v1, data/good_beam_lists.md).",
          "% Generated by analysis_village/gump/pot_quality_summary.py. Cuts implemented in dataquality.beam_quality_cut.",
          "",
          "\\begin{table}[htbp]", "\\centering",
@@ -198,15 +204,14 @@ def bq_table(cutflows):
          "\\label{tab:beam_quality_cuts}",
          "\\begin{tabular}{l p{0.55\\textwidth} c}", "\\toprule",
          "Criterion & Requirement & Applied \\\\", "\\midrule",
-         "Beam intensity & TOR860 $> 10^{11}$ and TOR875 $> 10^{11}$ protons; LM875A, LM875B, LM875C $> 10^{-2}$ & yes \\\\",
+         "Beam intensity & TOR860 $> 10^{11}$ and TOR875 $> 10^{11}$ protons & yes \\\\",
          "Horn current & $173 \\le$ THCURR $\\le 175$~kA & yes \\\\",
-         "Figure of merit & $0.98 <$ FOM $\\le 1$ & %s only \\\\" % ", ".join(TITLES[d] for d in sorted(dq.FOM_DETECTORS)),
+         "Figure of merit & $0.98 <$ FOM $\\le 1$ & %s \\\\" % fom_applied,
          "\\bottomrule", "\\end{tabular}",
          "\\end{table}", "",
          "\\begin{table}[htbp]", "\\centering",
          "\\caption{Beam-quality cutflow: spills and POT surviving each cumulative criterion, as a fraction of all "
-         "stored spills and of all valid POT. The FOM requirement is applied to %s only; for the other samples "
-         "its row is shown for reference.}" % ", ".join(TITLES[d] for d in sorted(dq.FOM_DETECTORS)),
+         "stored spills and of all valid POT. %s}" % fom_caption,
          "\\label{tab:beam_quality_cutflow}",
          "\\begin{tabular}{l r r r r}", "\\toprule",
          "Selection & Spills & Spill frac. & POT & POT frac. \\\\"]
@@ -230,6 +235,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--df-dir", required=True)
     ap.add_argument("--outdir", required=True)
+    ap.add_argument("--unblinded-only", action="store_true",
+                    help="bar charts and beam-quality cutflow only for the UNBLINDED subsets")
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
@@ -237,8 +244,7 @@ def main():
     cutflows = []
     tex = ["% Data-quality (good-run) cut tables for SBND Run 1, ICARUS Run 2 and ICARUS Run 4.",
            "% Generated by analysis_village/gump/pot_quality_summary.py. Requires \\usepackage{longtable}.",
-           "% Prefilter categories NOT applied as cuts: " +
-           "; ".join("%s: %s" % (d, ", ".join(sorted(c))) for d, c in dq.IGNORED_PREFILTER.items()), "",
+           "% Good runs: data/run_lists.md", "",
            # The longtables below do not float, but the beam-quality tables before them do: a
            # deferred float (e.g. the cutflow) would otherwise print AFTER the first longtable
            # while keeping its lower table number. Flush pending floats first -- the same test
@@ -255,6 +261,8 @@ def main():
         tfiles = [os.path.join(args.df_dir, f) for f in tfiles]
         tex += runs_cut_table(det, tlabel, tfiles, [dq.per_run_spills(f, det) for f in tfiles]) + ["", "\\clearpage", ""]
         for i, (label, f) in enumerate(samples):
+            if args.unblinded_only and (det, label) not in UNBLINDED:
+                continue
             fname = os.path.join(args.df_dir, f)
             if not os.path.exists(fname):
                 print("MISSING %s -- skipped" % fname)
@@ -264,7 +272,7 @@ def main():
             bases = ["%s_%s" % (detname, label)] + (["%s" % detname] if i == 0 else [])
             for b in bases:
                 bar_chart(det, label, fname, st, os.path.join(args.outdir, b + "_pot"))
-            cutflows.append((det, "%s %s" % (TITLES[det], label), bq_cutflow(fname, det)))
+            cutflows.append((det, sample_title(det, label), bq_cutflow(fname, det)))
             rows.append(dict(detector=det, sample=label, file=f, **st))
     with open(os.path.join(args.outdir, "dq_tables.tex"), "w") as out:
         out.write("\n".join(tex) + "\n")
@@ -276,10 +284,9 @@ def main():
     tab["frac_dq"] = tab.pot_dq / tab.pot_initial
     tab.to_csv(os.path.join(args.outdir, "pot_summary.csv"), index=False)
     with open(os.path.join(args.outdir, "pot_summary.txt"), "w") as out:
-        out.write("Beam quality: TOR860,TOR875 > 1e11; LM875A/B/C > 1e-2; 173 <= THCURR <= 175 kA; "
-                  "0.98 < FOM <= 1 for %s only (TODO in dataquality.py)\n" % ", ".join(sorted(dq.FOM_DETECTORS)))
-        out.write("Data quality: good-run list data/run_lists.md; prefilter categories NOT applied: %s\n\n"
-                  % "; ".join("%s: %s" % (d, ", ".join(sorted(c))) for d, c in dq.IGNORED_PREFILTER.items()))
+        out.write("Beam quality: TOR860,TOR875 > 1e11; 173 <= THCURR <= 175 kA; "
+                  "0.98 < FOM <= 1 (corrected FOM) for %s\n" % ", ".join(sorted(dq.FOM_DETECTORS)))
+        out.write("Data quality: good-run lists data/run_lists.md\n\n")
         for r in rows:
             out.write("%-12s %-10s  initial %.4e  after BQ %.4e (%.1f%%)  after DQ %.4e (%.1f%%)  "
                       "[hdr.pot %.4e]  runs %d -> %d  spills %d -> %d -> %d\n"

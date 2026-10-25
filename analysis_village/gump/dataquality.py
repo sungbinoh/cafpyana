@@ -1,32 +1,44 @@
 """Beam-quality and data-quality (good-run) cuts for the GUMPLE data samples.
 
-Beam quality (per spill) follows Sec. 6.1 of the SBN SPINE numu-disappearance
-technical note (itself following the ICARUS single-detector analysis):
+Beam quality (per spill) follows the good-beam definition of data/good_beam_lists.md
+(SBN-doc-49735-v1):
 
-  1. beam intensity: TOR860 > 1e11 and TOR875 > 1e11 protons,
-                     LM875A, LM875B, LM875C > 1e-2
+  1. beam intensity: TOR860 > 1e11 and TOR875 > 1e11 protons
   2. horn current:   173 <= THCURR <= 175 kA
   3. figure of merit: 0.98 < FOM <= 1          -- run sets in FOM_DETECTORS, see below
 
+(The LM875A/B/C > 1e-2 loss-monitor requirement of the earlier SPINE tech-note
+definition is no longer applied, 2026-10-20.)
+
 The FOM is the CORRECTED one (FOM_best) from the beam-quality ROOT files in data/
-(beamqual_*_fom.root, written by bnb_fom_caf.py), joined to each bnb spill on the
+(FOM_FILES, written by bnb_fom_caf.py), joined to each bnb spill on the
 exact (spill_time_sec, spill_time_nsec) stamp as in match_fom.py. Spills those
 files do not cover keep the production FOM. See correct_fom().
 
 POT is counted as the sum of TOR875 over surviving spills (spills with a
 non-finite or non-positive TOR875 -- IFBeam query failures -- never count).
+TOR875 is the correct POT counter for both detectors. NB the POT quoted in
+data/good_beam_lists.md is the beam-quality files' `tor_used` (TOR860 for
+ICARUS), about 0.5% lower; ignore it -- those numbers are not a reference for
+the POT computed here.
 
 Data quality (per run) uses the good-run lists in data/run_lists.md (a copy of
 the conclusive prefiltered / tagged-bad / good lists for ICARUS Run 2, ICARUS
-Run 4 and SBND Run 1). A run is good iff it is in the "Good" list; the reason a
-run is cut is its prefilter category or the DQ metrics that tagged it. Prefilter
-categories listed in IGNORED_PREFILTER (ICARUS "No End Time") are not applied:
-runs removed only by them count as good. Runs in EXTRA_GOOD_RUNS (SBND 18255)
-are added to the good list by hand.
+Run 4 and SBND Run 1; 2026-10-20 version, with ICARUS Run 4 and SBND tagged on
+per-event DQ metrics and SBND covering the 1e20 and post-1e20 periods). A run is
+good iff it is in the "Good" list -- for SBND the combined "Good, SBND Run 1
+total" list. The reason a run is cut is its prefilter category or the DQ
+metrics that tagged it.
 
 Both cuts apply to DATA ONLY. The beam-quality cut needs spill information, so
 it applies to on-beam data only; the good-run cut applies to on-beam and
 off-beam data alike.
+
+Some productions (EXTERNAL_BEAM, e.g. the ICARUS Run 4 ReCAF2026 sample) carry
+no spill information at all: their bnb tables are empty and their hdr POT is 0.
+For those the per-spill table and each event's spill come from the
+beam-quality ROOT file instead (its bnbinfo and spill trees). See spill_table()
+and external_event_spill().
 """
 import functools
 import importlib.util
@@ -50,8 +62,8 @@ RUN_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data",
 RUN_SETS = {"SBND": "SBND Run 1", "ICARUS Run2": "ICARUS Run 2", "ICARUS Run4": "ICARUS Run 4"}
 
 # (prefiltered, tagged bad, good) run counts quoted in the summary table of
-# run_lists.md -- the parser is checked against them.
-_EXPECTED_COUNTS = {"ICARUS Run2": (500, 18, 229), "ICARUS Run4": (162, 9, 62), "SBND": (318, 7, 59)}
+# run_lists.md -- the parser is checked against them (SBND: the Run 1 total).
+_EXPECTED_COUNTS = {"ICARUS Run2": (500, 18, 229), "ICARUS Run4": (112, 12, 109), "SBND": (382, 9, 102)}
 
 # Header-documented hand-curated exception to the ICARUS Run 2 good list
 # (the other one, 9610, is voltage-tagged but kept, and so is in the Good list).
@@ -83,10 +95,15 @@ def parse_run_lists(fname=RUN_LIST_FILE):
         sec = [s for s in sections if s.startswith(heading + "\n")]
         assert len(sec) == 1, "run set %r not found in %s" % (heading, fname)
         sec = sec[0]
-        sub = {s.split("\n", 1)[0].strip(): s for s in re.split(r"^### ", sec, flags=re.M)[1:]}
-        pre = [v for k, v in sub.items() if k.startswith("Prefiltered")][0]
-        tag = [v for k, v in sub.items() if k.startswith("Tagged bad")][0]
-        good = [v for k, v in sub.items() if k.startswith("Good")][0]
+        # level-3 and level-4 subsections. SBND has one Prefiltered block, a
+        # Tagged bad / Good pair per period (1e20, post-1e20) and the combined
+        # "Good, SBND Run 1 total" list, which is the one applied.
+        sub = [(s.split("\n", 1)[0].strip(), s) for s in re.split(r"^#{3,4} ", sec, flags=re.M)[1:]]
+        pre = [v for k, v in sub if k.startswith("Prefiltered")]
+        tags = [v for k, v in sub if k.startswith("Tagged bad")]
+        good = [v for k, v in sub if k.startswith("Good, ")] or [v for k, v in sub if k.startswith("Good")]
+        assert len(pre) == 1 and len(tags) >= 1 and len(good) == 1, (det, [k for k, _ in sub])
+        pre, good = pre[0], good[0]
 
         reasons = {}
         # prefilter categories: **Category** (N) followed by a code block
@@ -101,12 +118,13 @@ def parse_run_lists(fname=RUN_LIST_FILE):
                     reasons[r] = ("Prefiltered", cat)
         n_pre = len(reasons)
 
-        # tagged: the "By run" table, rows "| run | nmetric | metrics |"
-        byrun = tag.split("**By metric**")[0]
+        # tagged: the "By run" tables, rows "| run | nmetric | metrics |"
         n_tag = 0
-        for r, _nm, metrics in re.findall(r"^\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(.+?)\s*\|\s*$", byrun, flags=re.M):
-            reasons[int(r)] = ("Tagged bad", metrics)
-            n_tag += 1
+        for tag in tags:
+            byrun = tag.split("**By metric**")[0]
+            for r, _nm, metrics in re.findall(r"^\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(.+?)\s*\|\s*$", byrun, flags=re.M):
+                reasons[int(r)] = ("Tagged bad", metrics)
+                n_tag += 1
 
         goodruns = set(_ints(re.search(r"```\n(.*?)```", good, flags=re.S).group(1)))
 
@@ -122,60 +140,45 @@ def parse_run_lists(fname=RUN_LIST_FILE):
         out[det] = dict(good=goodruns, reasons=reasons)
     return out
 
-# Prefilter categories NOT applied as a cut, per run set. ICARUS "No End Time" runs
-# (all in Run 4) are missing an end time in the run database -- a bookkeeping gap,
-# not a detector problem: in sbn-rewgted-24 they carry as much beam as the good
-# runs, at the same trigger and slice rates per POT. They are treated as good.
-IGNORED_PREFILTER = {"ICARUS Run2": {"No End Time"}, "ICARUS Run4": {"No End Time"}}
-
-def _apply_ignored(lists):
-    rescued = {}
-    for det, v in lists.items():
-        ign = IGNORED_PREFILTER.get(det, set())
-        rescued[det] = set()
-        for r, (cat, why) in list(v["reasons"].items()):
-            # rescue only runs whose every prefilter category is ignored
-            if cat == "Prefiltered" and set(why.split("; ")) <= ign:
-                rescued[det].add(r)
-                del v["reasons"][r]
-        v["good"] = v["good"] | rescued[det]
-    return rescued
-
-# Runs added to the good-run list by hand, per run set: {run: reason}. SBND 18255
-# (inside the SBND Run 1 range 18250-18412) is absent from every category of the
-# run list -- it was apparently never evaluated -- and looks like a normal physics
-# run in sbn-rewgted-24 (19.6 triggers / 1e15 POT, 99% of its POT passes beam
-# quality). It carries 74% of the SBND FixedDev POT.
-EXTRA_GOOD_RUNS = {"SBND": {18255: "Absent from the run list; physics-like, added to the good runs by hand"}}
-
 # Run sets the figure-of-merit cut, 0.98 < FOM <= 1, is applied to. The cut is
 # bounded on both sides so the failure flags -1/2/3/4/-999 and the ICARUS Run 4
 # +100 assumed-width tier of the production FOM are rejected (spills not covered
 # by FOM_FILES still carry the production value). With the corrected FOM the
 # ICARUS -999s (34% of the Run 2 POT in sbn-rewgted-24) and the Run 4 +100 tier
-# are gone, so the cut now applies to every run set.
-# NB the Run 2 beamqual file covers the _unblind sample only: ~90% of the Run 2
-# FullOnBeam spills keep the production FOM, and their -999s fail the cut (55.5%
-# of FullOnBeam spills pass beam quality, vs 81.5% for unblind). This POT loss is
-# accepted (2026-10-01) until a FullOnBeam beamqual file exists.
+# are gone, so the cut applies to every run set. A spill with no formable
+# corrected FOM (NaN) fails it. (With the *_fx files Run 2 runs 9941-9945, which
+# had no multiwire fits at all in the 2026-10-02 file, have a FOM again.)
 FOM_DETECTORS = {"SBND", "ICARUS Run2", "ICARUS Run4"}
 
-# Beam-quality ROOT files carrying the corrected FOM (FOM_best), per run set. The
-# SBND file covers runs 18255-18259 only (the FixedDev sample): FullOnBeam and
-# RollingDev spills are not matched and keep the production FOM.
+# Beam-quality ROOT files carrying the corrected FOM (FOM_best), per run set
+# (the *_fx files of the 2026-10 recalculation behind data/good_beam_lists.md,
+# shipped with sbn-rewgted-25 and linked into data/). The three SBND files are
+# disjoint -- the dev file holds the FixedDev spills (runs 18255, 18259),
+# part1/part2 the FullOnBeam ones; SBND RollingDev is not covered (keeps the
+# production FOM). The Run 2 full file contains every spill of the 10% (unblind)
+# sample, and the Run 4 full file covers the ReCAF2026 sample and the unblind one.
 _DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 FOM_FILES = {
-    "SBND": [os.path.join(_DATA_DIR, "beamqual_sbnd_run1dev_fom.root")],
-    "ICARUS Run2": [os.path.join(_DATA_DIR, "beamqual_run2_fom.root")],
-    "ICARUS Run4": [os.path.join(_DATA_DIR, "beamqual_run4_fom.root")],
+    "SBND": [os.path.join(_DATA_DIR, f) for f in
+             ("sbnd_run1_dev_fixed_fx.root", "sbnd_run1_part1_fixed_fx.root", "sbnd_run1_part2_fixed_fx.root")],
+    "ICARUS Run2": [os.path.join(_DATA_DIR, "icarus_run2_full_fixed_fx_hptg.root")],
+    "ICARUS Run4": [os.path.join(_DATA_DIR, "icarus_run4_full_fixed_fx.root")],
 }
 
+# On-beam productions that carry no spill information (empty bnb tables, NaN
+# evt spill_* columns, hdr POT 0), keyed by .df basename: the beam-quality ROOT
+# file to take the spills (bnbinfo tree) and each event's spill (spill tree)
+# from instead. ICARUS_SpringRun4BNB_ReCAF2026.df is the full Run 4 dataset
+# (2963936 triggers, 136 runs), exactly the triggered-event set of that file.
+EXTERNAL_BEAM = {
+    "ICARUS_SpringRun4BNB_ReCAF2026.df": os.path.join(_DATA_DIR, "icarus_run4_full_fixed_fx.root"),
+}
+
+def external_beam_file(fname):
+    """The EXTERNAL_BEAM ROOT file for the .df `fname`, or None."""
+    return EXTERNAL_BEAM.get(os.path.basename(fname))
+
 RUN_LISTS = parse_run_lists()
-RESCUED_RUNS = _apply_ignored(RUN_LISTS)
-for _det, _runs in EXTRA_GOOD_RUNS.items():
-    RUN_LISTS[_det]["good"] = RUN_LISTS[_det]["good"] | set(_runs)
-    for _r in _runs:
-        RUN_LISTS[_det]["reasons"].pop(_r, None)
 GOOD_RUNS = {det: v["good"] for det, v in RUN_LISTS.items()}
 
 def cut_reason(run, detector):
@@ -188,12 +191,13 @@ def cut_reason(run, detector):
 # so editing any of them busts the data caches.
 with open(RUN_LIST_FILE, "rb") as _f:
     import hashlib
+    _fsig = lambda p: (os.path.basename(p), os.path.getsize(p) if os.path.exists(p) else None)
     RUN_LIST_HASH = hashlib.sha256(_f.read() + repr((
-        sorted((d, sorted(c)) for d, c in IGNORED_PREFILTER.items()),
-        sorted((d, sorted(r)) for d, r in EXTRA_GOOD_RUNS.items()),
+        sorted((d, sorted(r)) for d, r in GOOD_RUNS.items()),
         sorted(FOM_DETECTORS),
-        sorted((d, [(os.path.basename(p), os.path.getsize(p) if os.path.exists(p) else None) for p in ps])
-               for d, ps in FOM_FILES.items()))).encode()).hexdigest()[:12]
+        "no LM875 cut",
+        sorted((d, [_fsig(p) for p in ps]) for d, ps in FOM_FILES.items()),
+        sorted((k, _fsig(p)) for k, p in EXTERNAL_BEAM.items()))).encode()).hexdigest()[:12]
 
 # ============================================================
 # Cuts
@@ -203,7 +207,7 @@ def data_quality_cut(runs, detector):
     return np.isin(np.asarray(runs), list(GOOD_RUNS[detector]))
 
 def beam_quality_cut(df, detector, prefix="spill_"):
-    """Per-spill beam-quality cut (tech note Sec. 6.1.2), on columns <prefix>TOR860 etc.
+    """Per-spill beam-quality cut (good_beam_lists.md), on columns <prefix>TOR860 etc.
 
     The FOM requirement is applied only for run sets in FOM_DETECTORS.
 
@@ -212,8 +216,7 @@ def beam_quality_cut(df, detector, prefix="spill_"):
     default prefix. NaN (no matched spill) fails.
     """
     v = lambda n: df[prefix + n]
-    intensity = (v("TOR860") > 1e11) & (v("TOR875") > 1e11) & \
-                (v("LM875A") > 1e-2) & (v("LM875B") > 1e-2) & (v("LM875C") > 1e-2)
+    intensity = (v("TOR860") > 1e11) & (v("TOR875") > 1e11)
     horn = (v("THCURR") >= 173) & (v("THCURR") <= 175)
     if detector in FOM_DETECTORS:
         fom = (v("FOM") > 0.98) & (v("FOM") <= 1)
@@ -221,7 +224,9 @@ def beam_quality_cut(df, detector, prefix="spill_"):
     return intensity & horn
 
 def valid_tor(bnb):
-    """Spills whose TOR875 can be counted towards POT."""
+    """Spills whose TOR875 can be counted towards POT. TOR875 is the correct
+    POT counter (not the TOR860-based `tor_used` behind the good_beam_lists.md
+    POT numbers, which are to be ignored)."""
     return np.isfinite(bnb.TOR875) & (bnb.TOR875 > 0)
 
 # ============================================================
@@ -237,7 +242,7 @@ def fom_lookup(detector):
         print("dataquality: no corrected FOM for %s (missing %s); keeping the production FOM"
               % (detector, missing or "FOM_FILES entry"))
         return None
-    stamp, values, _ = mf.load_lookup(paths, "bnbinfo", "FOM_best", [])
+    stamp, values, _ = mf.load_lookup(paths, "bnbinfo", "FOM_best", ["TOR875"])
     return stamp, values
 
 def correct_fom(bnb, detector, log=print):
@@ -246,6 +251,12 @@ def correct_fom(bnb, detector, log=print):
     Joined on the exact (spill_time_sec, spill_time_nsec) stamp, as in
     match_fom.py. Unmatched spills keep the production FOM; a matched spill with
     no formable FOM gets NaN (and so fails the FOM cut). Returns the matched mask.
+
+    The join is verified on TOR875 (and run, when present), which the
+    beam-quality files carry unaltered. The production FOM is NOT a join check:
+    the *_fx files' own `FOM` column no longer reproduces it bug-for-bug (e.g.
+    ~84% on ICARUS Run 4 unblind, where the 10% file gave 99.999%), so its
+    agreement is reported for information only.
     """
     lut = fom_lookup(detector)
     if lut is None or len(bnb) == 0:
@@ -259,14 +270,18 @@ def correct_fom(bnb, detector, log=print):
         ref = values["FOM"][idx[m]].astype(np.float64)
         both = np.isfinite(old) & np.isfinite(ref)
         repro = np.isclose(old[both], ref[both], atol=1e-4, rtol=0).mean() if both.any() else np.nan
-        msg = "corrected FOM: matched %d/%d spills (%.2f%%), production FOM reproduced %.4f%%" % (
-            m.sum(), len(bnb), 100*m.mean(), 100*repro)
+        tor = bnb.TOR875.to_numpy(dtype=np.float64)[m]
+        tref = values["TOR875"][idx[m]].astype(np.float64)
+        tboth = np.isfinite(tor) & np.isfinite(tref)
+        tor_ok = np.isclose(tor[tboth], tref[tboth], rtol=1e-5, atol=0).mean() if tboth.any() else np.nan
+        msg = "corrected FOM: matched %d/%d spills (%.2f%%), TOR875 agreement %.4f%% (production FOM reproduced %.2f%%)" % (
+            m.sum(), len(bnb), 100*m.mean(), 100*tor_ok, 100*repro)
         if "run" in bnb.columns:
             agree = (bnb.run.to_numpy()[m].astype(np.int64) == values["run"][idx[m]].astype(np.int64)).mean()
             msg += ", run agreement %.4f%%" % (100*agree)
             if agree < 1:
                 msg += "  <-- WRONG JOIN"
-        if repro < 0.999:
+        if tor_ok < 0.999:
             msg += "  <-- join or file mismatch"
         log(msg)
         fom = bnb.FOM.to_numpy(dtype=np.float64).copy()
@@ -276,16 +291,17 @@ def correct_fom(bnb, detector, log=print):
         log("corrected FOM: matched 0/%d spills; keeping the production FOM" % len(bnb))
     return m
 
-def event_spill_fom(bnb, hdr):
-    """The (corrected) FOM and TOR875 of each event's spill, indexed (__ntuple, entry),
-    with `mapped` False for events that have no spill row.
+def event_spill_fom(bnb, hdr, cols=("FOM", "TOR875")):
+    """The (corrected) FOM and TOR875 (or the bnb columns `cols`) of each event's
+    spill, indexed (__ntuple, entry), with `mapped` False for events that have no
+    spill row.
 
     The evt frame's spill_* columns carry the LAST bnb row of the event's
     (run, subrun, event) group -- checked on sbn-rewgted-24 SBND FixedDev and
     ICARUS Run 4 to hold for every event. `bnb` is a spill_table() of the same split.
     """
     last = bnb.drop_duplicates(["run", "subrun", "event"], keep="last")
-    last = last.set_index(["run", "subrun", "event"])[["FOM", "TOR875"]].assign(mapped=True)
+    last = last.set_index(["run", "subrun", "event"])[list(cols)].assign(mapped=True)
     key = pd.MultiIndex.from_frame(hdr[["run", "subrun", "evt"]].astype(np.int64))
     out = last.reindex(key)
     out.index = hdr.index
@@ -300,14 +316,91 @@ def _keys(fname, prefix):
         return sorted([k for k in f.keys() if re.fullmatch(prefix + r"_\d+", k)],
                       key=lambda k: int(k.split("_")[-1]))
 
+_BEAM_COLS = ["TOR860", "TOR875", "THCURR", "FOM_best", "run", "subrun", "spill_time_sec", "spill_time_nsec"]
+
+@functools.lru_cache(maxsize=None)
+def _external_spills(path):
+    """Every spill of an EXTERNAL_BEAM file (its bnbinfo tree), FOM = FOM_best.
+
+    Duplicate spill records (same exact time stamp) are kept once, preferring a
+    finite FOM_best -- the same resolution as match_fom.load_lookup -- so a
+    repeated record never counts its TOR875 twice.
+    """
+    import uproot
+    t = uproot.open(path)["bnbinfo"]
+    a = t.arrays(_BEAM_COLS, library="np")
+    stamp = mf.ns_stamp(a["spill_time_sec"], a["spill_time_nsec"])
+    order = np.lexsort((~np.isfinite(a["FOM_best"]), stamp))
+    srt = stamp[order]
+    keep = order[np.concatenate(([True], srt[1:] != srt[:-1]))]
+    keep.sort()
+    bnb = pd.DataFrame({k: a[k][keep] for k in _BEAM_COLS}).rename(columns={"FOM_best": "FOM"})
+    bnb["run"] = bnb.run.astype(int)
+    bnb["subrun"] = bnb.subrun.astype(int)
+    print("dataquality: %s: %d spills (%d duplicate records dropped)"
+          % (os.path.basename(path), len(bnb), len(stamp) - len(keep)))
+    return bnb
+
+@functools.lru_cache(maxsize=None)
+def _external_event_spills(path):
+    """Each triggered event's spill from an EXTERNAL_BEAM file (its spill tree),
+    indexed (run, subrun, evt). The tree repeats some events with identical
+    spill time and FOM_best (good_beam_lists.md); those are kept once."""
+    import uproot
+    t = uproot.open(path)["spill"]
+    cols = ["TOR860", "TOR875", "THCURR", "FOM_best", "run", "subrun", "evt"]
+    ev = pd.DataFrame(t.arrays(cols, library="np")).rename(columns={"FOM_best": "FOM"})
+    for c in ("run", "subrun", "evt"):
+        ev[c] = ev[c].astype(np.int64)
+    n = len(ev)
+    ev = ev.drop_duplicates(["run", "subrun", "evt"]).set_index(["run", "subrun", "evt"])
+    print("dataquality: %s: %d triggered events (%d duplicate records dropped)"
+          % (os.path.basename(path), len(ev), n - len(ev)))
+    return ev
+
+def external_event_spill(fname, hdr):
+    """The beam readings (TOR860, TOR875, THCURR, corrected FOM) of each event's
+    spill for an EXTERNAL_BEAM file, indexed like `hdr`, with `mapped` False
+    for events absent from the spill tree (these count as not good)."""
+    ev = _external_event_spills(external_beam_file(fname))
+    key = pd.MultiIndex.from_frame(hdr[["run", "subrun", "evt"]].astype(np.int64))
+    out = ev.reindex(key)
+    out.index = hdr.index
+    out["mapped"] = np.isfinite(out.TOR875.to_numpy(dtype=np.float64))
+    return out
+
+def _split_owner(fname, idf):
+    """(run, subrun) pairs whose spills split `idf` owns: those in its header
+    and in no earlier split's, so a subrun spread over splits counts once."""
+    seen = set()
+    for k in _keys(fname, "hdr"):
+        i = int(k.split("_")[-1])
+        rs = set(map(tuple, pd.read_hdf(fname, k)[["run", "subrun"]].drop_duplicates().astype(int).to_numpy()))
+        if i == idf:
+            return rs - seen
+        seen |= rs
+    return set()
+
 def spill_table(fname, idf, detector):
     """The per-spill bnb table of one split, with run/subrun, the corrected FOM
     (correct_fom) and the cut flags.
 
     bnb rows are indexed (__ntuple, entry, spill) with (__ntuple, entry) the
-    first_in_subrun header record that carries them.
+    first_in_subrun header record that carries them. For an EXTERNAL_BEAM file
+    the rows are instead the beam-quality file's spills of the (run, subrun)s
+    the split owns, already carrying the corrected FOM.
     """
     bnb = pd.read_hdf(fname, "bnb_%i" % idf)
+    ext = external_beam_file(fname)
+    if ext is not None and len(bnb) == 0:
+        allsp = _external_spills(ext)
+        own = pd.MultiIndex.from_tuples(sorted(_split_owner(fname, idf)), names=["run", "subrun"])
+        bnb = allsp[pd.MultiIndex.from_frame(allsp[["run", "subrun"]]).isin(own)].copy()
+        print("[%s idf=%i] spills from %s: %d (%d runs)"
+              % (os.path.basename(fname), idf, os.path.basename(ext), len(bnb), bnb.run.nunique()))
+        bnb["valid"] = valid_tor(bnb)
+        bnb["bq"] = beam_quality_cut(bnb, detector, prefix="") & bnb.valid
+        return bnb
     hdr = pd.read_hdf(fname, "hdr_%i" % idf)
     rs = hdr[["run", "subrun"]]
     bnb = bnb.join(rs, on=["__ntuple", "entry"])
@@ -364,7 +457,8 @@ def _read_all(fname, prefix):
 def _with_run(tab, hdr):
     return tab.join(hdr[["run"]], on=["__ntuple", "entry"]) if "run" not in tab.columns else tab
 
-def data_norm(detector, onbeam, offbeam_files, log=print, beam_quality=True, data_quality=True):
+def data_norm(detector, onbeam, offbeam_files, log=print, beam_quality=True, data_quality=True,
+              runs=None):
     """Gate counts, POT and off-beam weight for the on-beam file `onbeam`, after cuts.
 
     The same normalization mcdata_comparison_gumple.compute_norm always did, with
@@ -377,10 +471,18 @@ def data_norm(detector, onbeam, offbeam_files, log=print, beam_quality=True, dat
       * gates OFF = the usual off-beam counts restricted to good runs.
       * NEVT_ON / NEVT_OFF (triggers) likewise, with the beam-quality spill fraction
         applied to NEVT_ON.
+
+    runs, if given, restricts everything (on- and off-beam) to those run numbers,
+    e.g. to normalize one time-ordered slice of a run period.
     """
+    def in_runs(r):
+        return np.ones(len(r), bool) if runs is None else np.isin(np.asarray(r), list(runs))
+
     hdr_on = _read_all(onbeam, "hdr")
     per = per_run_spills(onbeam, detector)
     good_on = data_quality_cut(hdr_on.run, detector) if data_quality else np.ones(len(hdr_on), bool)
+    good_on &= in_runs(hdr_on.run)
+    per = per[in_runs(per.index)]
     pr = per[per.good] if data_quality else per
     bq_frac = (pr.nspill_bq.sum() / pr.nspill.sum()) if beam_quality else 1.
     pot = float(pr.pot_bq.sum() if beam_quality else pr.pot.sum())
@@ -389,11 +491,13 @@ def data_norm(detector, onbeam, offbeam_files, log=print, beam_quality=True, dat
     for f in offbeam_files:
         h = _read_all(f, "hdr")
         good = data_quality_cut(h.run, detector) if data_quality else np.ones(len(h), bool)
+        good &= in_runs(h.run)
         offs.append((f, h, good))
 
     if "ICARUS" in detector:
         trig_on = _with_run(_read_all(onbeam, "trig"), hdr_on)
         tgood = data_quality_cut(trig_on.run, detector) if data_quality else np.ones(len(trig_on), bool)
+        tgood &= in_runs(trig_on.run)
         # (1-1/200.) / (1-1/40.): gate-loss corrections, as before
         gate_corr = (1.-1/200.) if detector == "ICARUS Run2" else (1.-1/40.)
         ngates_ON = float(trig_on.gate_delta[tgood].sum())*bq_frac*gate_corr
@@ -401,6 +505,7 @@ def data_norm(detector, onbeam, offbeam_files, log=print, beam_quality=True, dat
         for f, h, good in offs:
             t = _with_run(_read_all(f, "trig"), h)
             tg = data_quality_cut(t.run, detector) if data_quality else np.ones(len(t), bool)
+            tg &= in_runs(t.run)
             ngates_OFF += float(t.gate_delta[tg].sum())*(1-1/20.)
         off_w = ngates_ON / ngates_OFF
     else:
