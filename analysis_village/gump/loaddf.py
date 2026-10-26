@@ -776,6 +776,25 @@ MC_PE_SCALE_UNC = {"SBND": 0.029, "ICARUS Run2": 0.097, "ICARUS Run4": 0.076}
 # Run number (the Run column) -> detector key of the two dicts above
 RUN_DETECTOR = {1: "SBND", 2: "ICARUS Run2", 4: "ICARUS Run4"}
 
+# Off-beam exposure (load(..., offbeampot=True)): the off-beam gates divided by the
+# on-beam gates per 5e12 POT, so that POT_ON / OFFPOT reproduces the off-beam weight
+# OFF_w of dataquality.data_norm. ICARUS counts off-beam gates as data_norm does
+# (trig.gate_delta x (1 - 1/20)); for SBND the (1 - 0.0754) of data_norm's OFF_w is
+# folded into the constant, which is 5e12 x ngates_ON / POT x (1 - 0.0754).
+# Calibrated 2026-10-26 with dataquality.data_norm (BQ + DQ cuts on) on sbn-rewgted-25,
+# on-beam samples SBND_SpringBNBData_FixedDev.df, ICARUS_SpringRun2BNB_unblind.df and
+# ICARUS_SpringRun4BNB_ReCAF2026_unblind.df: 5e12 x ngates_ON / POT = 1.01852 / 1.26636 / 1.03029.
+# These are run-period averages for those samples and cuts; another on-beam sample,
+# run range or cut set moves them by up to ~10%. If the off-beam weight needs to be
+# precise, override them -- or better, take OFF_w and POT from
+# dataquality.data_norm for the on-beam sample actually used, as
+# mcdata_comparison_gumple.compute_norm and signalbox_systematics_gumple do.
+OFFBEAM_GATES_PER_5e12POT = {
+    "SBND": 0.9417223829061503,
+    "ICARUS Run2": 1.2663596208044372,
+    "ICARUS Run4": 1.0302865530348173,
+}
+
 def _mc_pot_scale(detector, ismc):
     return SBND_MC_POT_SCALE if (ismc and detector == "SBND") else 1.
 
@@ -806,6 +825,9 @@ def load_one(fname, idf,
             _is_data = (mcname % idf) not in _f
         data_cut_key = dict(beam_quality=beam_quality, data_quality=data_quality,
                             run_list=dq.RUN_LIST_HASH) if _is_data else dict(mc_pe_scale=MC_PE_SCALE[detector])
+        # the cached off-beam POT depends on the gates/POT constant (on-beam unchanged)
+        if offbeampot:
+            data_cut_key["offbeam_gates_per_5e12pot"] = OFFBEAM_GATES_PER_5e12POT[detector]
         cache_hash = _cache_key(fname, idf, **data_cut_key, detector=detector, include_syst=include_syst,
             nuniv=nuniv, spline=spline, xsec_univ=xsec_univ, xsec_spline=xsec_spline, reweight_aFF=reweight_aFF, pot_univ=pot_univ,
             flux_univ=flux_univ, sep_flux_univ=sep_flux_univ, g4_univ=g4_univ,
@@ -956,16 +978,11 @@ def load_one(fname, idf,
 
     # LOAD POT
     if offbeampot:
+        N_GATES_ON_PER_5e12POT = OFFBEAM_GATES_PER_5e12POT[detector]
         if detector == "SBND":
-            N_GATES_ON_PER_5e12POT = 1.05104
             pot = hdr.noffbeambnb.sum()/N_GATES_ON_PER_5e12POT*5e12
-        elif detector == "ICARUS Run4":
+        else:
             trig = pd.read_hdf(fname, "trig_%i" % idf)
-            N_GATES_ON_PER_5e12POT = 1.0631936867739828
-            pot = trig.gate_delta.sum()*(1-1/20.)/N_GATES_ON_PER_5e12POT*5e12
-        elif detector == "ICARUS Run2":
-            trig = pd.read_hdf(fname, "trig_%i" % idf)
-            N_GATES_ON_PER_5e12POT = 1.3886218026202426
             pot = trig.gate_delta.sum()*(1-1/20.)/N_GATES_ON_PER_5e12POT*5e12
     elif not ismc and (beam_quality or data_quality or dq.external_beam_file(fname) is not None):
         # sum of TOR875 over the spills passing the data cuts (an EXTERNAL_BEAM

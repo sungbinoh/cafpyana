@@ -150,12 +150,16 @@ def selected_events(fname, detector, offbeam=False):
 
 
 def _gate_delta_per_run(fname):
-    """sum trig.gate_delta per run (ICARUS gate counting), over all splits."""
+    """sum trig.gate_delta per run (ICARUS gate counting), over all splits, without
+    the duplicated (run, evt) events that loaddf drops (dq.dup_events)."""
+    hdrs = {int(k.split("_")[-1]): pd.read_hdf(fname, k) for k in dq._keys(fname, "hdr")}
+    dup = dq.dup_events(pd.concat(hdrs.values()))
     rows = []
-    for k in dq._keys(fname, "trig"):
-        idf = int(k.split("_")[-1])
-        t = dq._with_run(pd.read_hdf(fname, "trig_%i" % idf), pd.read_hdf(fname, "hdr_%i" % idf))
+    for idf, h in hdrs.items():
+        h["_dup"], dup = dup[:len(h)], dup[len(h):]
+        t = dq._with_run(pd.read_hdf(fname, "trig_%i" % idf), h)
         assert not t.run.isna().any(), "trig rows without a header record in %s split %i" % (fname, idf)
+        t = t[~t._dup.astype(bool)]
         rows.append(pd.DataFrame({"run": t.run.astype(int).to_numpy(), "gd": t.gate_delta.astype(float).to_numpy()}))
     return pd.concat(rows).groupby("run").gd.sum()
 
@@ -192,6 +196,7 @@ def per_run_offbeam_gates(fname, detector):
         g = _gate_delta_per_run(fname) * ICARUS_OFF_GATE_CORR
     else:
         h = dq._read_all(fname, "hdr")
+        h = h[~dq.dup_events(h)]
         g = h.groupby("run").noffbeambnb.sum().astype(float) / (1. - SBND_F_FACTOR)
     return g[dq.data_quality_cut(g.index, detector)].rename("ngates_off")
 

@@ -58,6 +58,7 @@ import matplotlib.colors as mcolors
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
 import gumple_cuts as gc
+import dataquality as dq
 import loaddf
 import syst
 
@@ -78,6 +79,16 @@ IRUN2_POT = 2e20
 IRUN4_POT = 3.5e20
 IGOAL_POT = IRUN2_POT + IRUN4_POT
 SGOAL_POT = 1e20
+
+
+def offbeam_exposure(detector, onbeam, offbeam):
+    """POT-equivalent exposure of the off-beam sample `offbeam`, POT_ON / OFF_w from
+    dataquality.data_norm: its gates over the on-beam gates per POT, with the same
+    BQ/DQ cuts and duplicate-event removal as the loaded frames. The on-beam sample
+    only sets that gates/POT ratio (its events are never loaded here), so it is the
+    one mcdata_comparison_gumple.detector_files pairs with the off-beam stream."""
+    norm = dq.data_norm(detector, onbeam, [offbeam], log=lambda m: print("  [%s off-beam norm] %s" % (detector, m)))
+    return norm["POT"] / norm["OFF_w"]
 
 FONTSIZE = 14
 
@@ -503,6 +514,7 @@ def main():
     print("SBND CV: %i files" % len(SCV_FILES), flush=True)
     SDIRT_FILE = DF_DIR + "SBND_SpringLowEMC.df"
     SBEAMOFF_FILE = DF_DIR + "SBND_SpringBNBOffData.df"
+    SBEAMON_FILE = DF_DIR + "SBND_SpringBNBData_FixedDev.df"  # off-beam normalization only
     # NB no SBND SCE sample in the detector set (0xSCE / 2xSCE deliberately unused)
     SDETVARS = [
         ([DF_DIR + "SBND_SpringMC_Nom2.df"], [DF_DIR + "SBND_SpringMC_DENT2.df"]),
@@ -517,14 +529,18 @@ def main():
     IRUN4_DIRT_FILES = [DF_DIR + "ICARUSRun4_Spring_Overlay_Dirt.df"]
     IRUN2_BEAMOFF_FILE = DF_DIR + "ICARUS_SpringRun2BNBOff_unblind.df"
     IRUN4_BEAMOFF_FILE = DF_DIR + "ICARUS_SpringRun4BNBOff_ReCAF2026.df"
+    # on-beam samples, for the off-beam normalization only
+    IRUN2_BEAMON_FILE = DF_DIR + "ICARUS_SpringRun2BNB_unblind.df"
+    IRUN4_BEAMON_FILE = DF_DIR + "ICARUS_SpringRun4BNB_ReCAF2026_unblind.df"
     # no ICARUS *_Overlay_Nom.df: the detvar CV partner is the rewgt CV sample
     IRUN2_DETVARS = [(IRUN2_CV_FILES, [DF_DIR + "ICARUSRun2_Spring_Overlay_%s.df" % v]) for v in ["SCE", "WMXThXW", "WMYZ"]]
     IRUN4_DETVARS = [(IRUN4_CV_FILES, [DF_DIR + "ICARUSRun4_Spring_Overlay_%s.df" % v]) for v in ["SCE", "WMXThXW", "WMYZ"]]
     IDETVAR_NAMES = ["SCE", "WM $X\\theta_{xw}$", "WM $YZ$"]
 
-    for f in (SCV_FILES + [SDIRT_FILE, SBEAMOFF_FILE] + [x for p in SDETVARS for l in p for x in l] +
+    for f in (SCV_FILES + [SDIRT_FILE, SBEAMOFF_FILE, SBEAMON_FILE] + [x for p in SDETVARS for l in p for x in l] +
               IRUN2_CV_FILES + IRUN4_CV_FILES + IRUN2_DIRT_FILES + IRUN4_DIRT_FILES +
-              [IRUN2_BEAMOFF_FILE, IRUN4_BEAMOFF_FILE] + [x for p in IRUN2_DETVARS + IRUN4_DETVARS for x in p[1]]):
+              [IRUN2_BEAMOFF_FILE, IRUN4_BEAMOFF_FILE, IRUN2_BEAMON_FILE, IRUN4_BEAMON_FILE] +
+              [x for p in IRUN2_DETVARS + IRUN4_DETVARS for x in p[1]]):
         assert os.path.exists(f), f
 
     # --- load -----------------------------------------------------------------
@@ -545,10 +561,13 @@ def main():
     loaddf.scale_pot(Idirt_r4, Idirtpot_r4, IRUN4_POT)
     Idirt = pd.concat([Idirt_r2, Idirt_r4]).reset_index(drop=True)
 
-    Ioffbeam_r2, _, Ioffbeampot_r2 = loaddf.load(IRUN2_BEAMOFF_FILE, detector="ICARUS Run2", offbeampot=True,
-                                                 preselection=FVICARUSRun2, include_syst=False, load_truth=False, match_Enu=False)
-    Ioffbeam_r4, _, Ioffbeampot_r4 = loaddf.load(IRUN4_BEAMOFF_FILE, detector="ICARUS Run4", offbeampot=True,
-                                                 preselection=FVICARUSRun4, include_syst=False, load_truth=False, match_Enu=False)
+    # off-beam: exposure from dataquality.data_norm, not loaddf's approximate off-beam POT
+    Ioffbeam_r2, _, _ = loaddf.load(IRUN2_BEAMOFF_FILE, detector="ICARUS Run2", offbeampot=True,
+                                    preselection=FVICARUSRun2, include_syst=False, load_truth=False, match_Enu=False)
+    Ioffbeam_r4, _, _ = loaddf.load(IRUN4_BEAMOFF_FILE, detector="ICARUS Run4", offbeampot=True,
+                                    preselection=FVICARUSRun4, include_syst=False, load_truth=False, match_Enu=False)
+    Ioffbeampot_r2 = offbeam_exposure("ICARUS Run2", IRUN2_BEAMON_FILE, IRUN2_BEAMOFF_FILE)
+    Ioffbeampot_r4 = offbeam_exposure("ICARUS Run4", IRUN4_BEAMON_FILE, IRUN4_BEAMOFF_FILE)
     loaddf.scale_pot(Ioffbeam_r2, Ioffbeampot_r2, IRUN2_POT)
     loaddf.scale_pot(Ioffbeam_r4, Ioffbeampot_r4, IRUN4_POT)
     Ioffbeam = pd.concat([Ioffbeam_r2, Ioffbeam_r4]).reset_index(drop=True)
@@ -557,8 +576,9 @@ def main():
     Sdf, _, Spot = loaddf.loadl(SCV_FILES, njob=min(len(SCV_FILES), 6), detector="SBND",
                                 preselection=FVSBND, reweight_aFF=True, pot_univ=True)
     Sdirt, _, Sdirtpot = loaddf.load(SDIRT_FILE, detector="SBND", preselection=FVSBND, include_syst=False)
-    Soffbeam, _, Soffbeampot = loaddf.load(SBEAMOFF_FILE, detector="SBND", preselection=FVSBND, offbeampot=True,
-                                           include_syst=False, load_truth=False, match_Enu=False)
+    Soffbeam, _, _ = loaddf.load(SBEAMOFF_FILE, detector="SBND", preselection=FVSBND, offbeampot=True,
+                                 include_syst=False, load_truth=False, match_Enu=False)
+    Soffbeampot = offbeam_exposure("SBND", SBEAMON_FILE, SBEAMOFF_FILE)
     print("SBND loaded (%.0f s)" % (time.time() - t0), flush=True)
 
     def load_detvar(detvar, detector):

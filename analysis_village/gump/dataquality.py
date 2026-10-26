@@ -455,7 +455,18 @@ def _read_all(fname, prefix):
     return pd.concat([pd.read_hdf(fname, k) for k in _keys(fname, prefix)])
 
 def _with_run(tab, hdr):
-    return tab.join(hdr[["run"]], on=["__ntuple", "entry"]) if "run" not in tab.columns else tab
+    """Join hdr's run (and its _dup flag, when set) onto a per-event table such as trig."""
+    cols = [c for c in ("run", "_dup") if c in hdr.columns and c not in tab.columns]
+    return tab.join(hdr[cols], on=["__ntuple", "entry"]) if cols else tab
+
+def dup_events(hdr):
+    """Mask of the hdr rows whose (run, evt) occurs more than once -- every copy,
+    which is what loaddf.load drops (keep=False, within and across splits; pass the
+    hdr of all splits). Their gates must go too, or the off-beam weight counts
+    exposure whose events are missing from the frame. E.g. the pre-ReCAF
+    ICARUS_SpringRun4BNBOff_unblind.df has two CAF files ingested twice: 15780 of
+    324032 triggers, 4.9% of the gates."""
+    return hdr.duplicated(["run", "evt"], keep=False).to_numpy()
 
 def data_norm(detector, onbeam, offbeam_files, log=print, beam_quality=True, data_quality=True,
               runs=None):
@@ -471,6 +482,11 @@ def data_norm(detector, onbeam, offbeam_files, log=print, beam_quality=True, dat
       * gates OFF = the usual off-beam counts restricted to good runs.
       * NEVT_ON / NEVT_OFF (triggers) likewise, with the beam-quality spill fraction
         applied to NEVT_ON.
+      * events duplicated in (run, evt) (dup_events) are dropped from every count,
+        as loaddf.load drops them from the frames: off-beam their gates are removed
+        trigger by trigger; on-beam the gates (ICARUS) likewise, while the
+        spill-based POT and SBND gates are scaled by the surviving fraction of
+        triggers, the same uniform-exposure assumption loaddf makes for its POT.
 
     runs, if given, restricts everything (on- and off-beam) to those run numbers,
     e.g. to normalize one time-ordered slice of a run period.
@@ -479,25 +495,28 @@ def data_norm(detector, onbeam, offbeam_files, log=print, beam_quality=True, dat
         return np.ones(len(r), bool) if runs is None else np.isin(np.asarray(r), list(runs))
 
     hdr_on = _read_all(onbeam, "hdr")
+    hdr_on["_dup"] = dup_events(hdr_on)
+    keep_on = 1. - hdr_on._dup.mean()
     per = per_run_spills(onbeam, detector)
     good_on = data_quality_cut(hdr_on.run, detector) if data_quality else np.ones(len(hdr_on), bool)
-    good_on &= in_runs(hdr_on.run)
+    good_on &= in_runs(hdr_on.run) & ~hdr_on._dup.to_numpy()
     per = per[in_runs(per.index)]
     pr = per[per.good] if data_quality else per
     bq_frac = (pr.nspill_bq.sum() / pr.nspill.sum()) if beam_quality else 1.
-    pot = float(pr.pot_bq.sum() if beam_quality else pr.pot.sum())
+    pot = float(pr.pot_bq.sum() if beam_quality else pr.pot.sum())*keep_on
 
     offs = []
     for f in offbeam_files:
         h = _read_all(f, "hdr")
+        h["_dup"] = dup_events(h)
         good = data_quality_cut(h.run, detector) if data_quality else np.ones(len(h), bool)
-        good &= in_runs(h.run)
+        good &= in_runs(h.run) & ~h._dup.to_numpy()
         offs.append((f, h, good))
 
     if "ICARUS" in detector:
         trig_on = _with_run(_read_all(onbeam, "trig"), hdr_on)
         tgood = data_quality_cut(trig_on.run, detector) if data_quality else np.ones(len(trig_on), bool)
-        tgood &= in_runs(trig_on.run)
+        tgood &= in_runs(trig_on.run) & ~trig_on._dup.fillna(False).to_numpy(dtype=bool)
         # (1-1/200.) / (1-1/40.): gate-loss corrections, as before
         gate_corr = (1.-1/200.) if detector == "ICARUS Run2" else (1.-1/40.)
         ngates_ON = float(trig_on.gate_delta[tgood].sum())*bq_frac*gate_corr
@@ -505,11 +524,11 @@ def data_norm(detector, onbeam, offbeam_files, log=print, beam_quality=True, dat
         for f, h, good in offs:
             t = _with_run(_read_all(f, "trig"), h)
             tg = data_quality_cut(t.run, detector) if data_quality else np.ones(len(t), bool)
-            tg &= in_runs(t.run)
+            tg &= in_runs(t.run) & ~t._dup.fillna(False).to_numpy(dtype=bool)
             ngates_OFF += float(t.gate_delta[tg].sum())*(1-1/20.)
         off_w = ngates_ON / ngates_OFF
     else:
-        ngates_ON = float(pr.nspill_bq.sum() if beam_quality else pr.nspill.sum())
+        ngates_ON = float(pr.nspill_bq.sum() if beam_quality else pr.nspill.sum())*keep_on
         ngates_OFF = float(sum(h.noffbeambnb[good].sum() for _, h, good in offs))
         f_factor = 0.0754
         off_w = (1. - f_factor) * ngates_ON / ngates_OFF
@@ -524,8 +543,12 @@ def data_norm(detector, onbeam, offbeam_files, log=print, beam_quality=True, dat
         % (len(per), int(per.good.sum()), bq_frac))
     log("  on-beam POT: initial %.4e  after BQ %.4e  after BQ+DQ %.4e"
         % (per.pot.sum(), per.pot_bq.sum(), per[per.good].pot_bq.sum()))
+    if keep_on < 1.:
+        log("  on-beam: %d duplicated (run, evt) triggers dropped; POT/gates x %.5f"
+            % (int(hdr_on._dup.sum()), keep_on))
     for f, h, good in offs:
-        log("  off-beam %s: %d/%d triggers in good runs" % (os.path.basename(f), int(good.sum()), len(h)))
+        log("  off-beam %s: %d/%d triggers in good runs (%d duplicated (run, evt) triggers dropped)"
+            % (os.path.basename(f), int(good.sum()), len(h), int(h._dup.sum())))
     log("ngates_ON = %r, ngates_OFF = %r, OFF_w = %r" % (ngates_ON, ngates_OFF, off_w))
     log("POT = %r" % pot)
     log("N GATES ON / 5e12 POT")
