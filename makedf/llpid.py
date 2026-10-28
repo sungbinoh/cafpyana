@@ -62,6 +62,9 @@ EULER = 0.5772156649015329
 
 
 def likelihood(hitdfs, dedxname="dedx", rrcorr=True, params=None, hyps=HYPS):
+    """Function to run the full likelihood analysis, with/without rr corrections, and all parameters in config"""
+
+    #Set parameters and read in data from planes/tracks
     params = LLPID_PARAMS if params is None else params
     frames = [hitdfs] if isinstance(hitdfs, pd.DataFrame) else list(hitdfs)
 
@@ -70,19 +73,20 @@ def likelihood(hitdfs, dedxname="dedx", rrcorr=True, params=None, hyps=HYPS):
     if len(tracks) == 0:
         return pd.DataFrame({c: pd.Series(dtype=float) for c in cols}).set_axis(tracks)
 
-    planes = [_prepare_plane(df, tracks, _plane_of(df, i, len(frames)), dedxname, params)
-              for i, df in enumerate(frames)]
+    planes = [_prepare_plane(df, tracks, _plane_of(df, i, len(frames)), dedxname, params)  for i, df in enumerate(frames)]
+    
+    # one rr_max per track over all planes, so a reversed fit flips every plane about the same point
+    rr_max = np.nanmax([_per_track_max(h, h["rr"]) for h in planes], axis=0)
+    for h in planes:
+        h["rr_max"] = rr_max[h["tid"]]
+
     n_hits = sum(h["n_usable"] for h in planes)
 
     out = {}
 
+    #Always produce bare likelihood
     tables_bare = _load_tables(params["tables_bare"])
     ell0 = {hyp: _ell_at_zero(planes, tables_bare, hyp) for hyp in hyps}
-
-    if rrcorr:
-        tables = _load_tables(params["tables"])
-        priors, dl_min = _load_priors(params["prior_file"])
-        fits = _fit_dl(planes, tables, priors, dl_min, n_hits, params, hyps)
 
     for hyp in hyps:
         out["ell0_" + hyp] = ell0[hyp]
@@ -90,19 +94,26 @@ def likelihood(hitdfs, dedxname="dedx", rrcorr=True, params=None, hyps=HYPS):
         out["nhits_" + hyp] = n_hits
 
     if rrcorr:
+        tables = _load_tables(params["tables"])
+        priors, dl_min = _load_priors(params["prior_file"])
+        fits = _fit_dl(planes, tables, priors, dl_min, n_hits, params, hyps)
+
         for hyp in hyps:
             out["ell_" + hyp] = fits[hyp]["cost"]
         for name in ("dl", "flip", "fitok", "flattened", "onedge"):
             for hyp in hyps:
                 out[name + "_" + hyp] = fits[hyp][name]
 
-
+    # Append version tag into the output dataframe
     out["version"] = llpid_version
     return pd.DataFrame(out, index=tracks)[cols]
 
 
-def rr_corr(hitdf, lldf, par, rr_floor=0.3):
-    """Per-hit residual range after the dL fit, for one plane's hits and one hypothesis."""
+
+# Potentially unnecessary function
+def rr_corr(hitdf, lldf, par, rr_floor=0.3, rr_max=None):
+    """Per-hit residual range after the dL fit, for one plane's hits and one hypothesis.
+    rr_max: per-track max rr over all planes (Series on the track index), the point the fit flips about"""
     hyp = PAR_TO_HYP.get(par, par)
     trk = hitdf.index.droplevel(-1)
     dl = np.nan_to_num(lldf["dl_" + hyp].reindex(trk).to_numpy(float), nan=0.0)
@@ -110,11 +121,15 @@ def rr_corr(hitdf, lldf, par, rr_floor=0.3):
     flip = np.where(pd.isna(flip), False, flip).astype(bool)
 
     rr = hitdf.rr.to_numpy(float)
-    rr_max = hitdf.rr.groupby(level=list(range(hitdf.index.nlevels-1))).transform("max").to_numpy(float)
-    # a flipped track measures its range from the other end
+    if rr_max is None:
+        rr_max = hitdf.rr.groupby(level=list(range(hitdf.index.nlevels-1))).transform("max").to_numpy(float)
+    else:
+        rr_max = rr_max.reindex(trk).to_numpy(float)
+
     return pd.Series(np.maximum(np.where(flip, rr_max - rr, rr) + dl, rr_floor), index=hitdf.index, name="rr_corr_" + hyp)
 
 def _columns(rrcorr, hyps):
+    """Adds in extra columns for output dataframe"""
     cols = ["ell0_" + h for h in hyps]
     cols += ["nhits_" + h for h in hyps]
     if rrcorr:
@@ -145,8 +160,8 @@ def _pdf_params(KE, mass, pitch):
         delta = 2.0 * np.log(10.0) * y - 5.2146 + 0.19559 * np.clip(3.0 - y, 0, None) ** 3
         delta = np.where(y < 0.2, 0.0, delta)
 
-        mean_dedx = (RHO_AR * K_COEF * (Z_AR / A_AR) / beta2) * (
-            0.5 * np.log(2.0 * M_E * bg2 * w_max / I_AR ** 2) - beta2 - delta / 2.0)
+        # Bethe-Bloch
+        mean_dedx = (RHO_AR * K_COEF * (Z_AR / A_AR) / beta2) * (0.5 * np.log(2.0 * M_E * bg2 * w_max / I_AR ** 2) - beta2 - delta / 2.0)
 
         mpv_shift = (1.0 - EULER + beta2 + np.log(kappa)) * xi_per_cm + mean_dedx
 
@@ -155,7 +170,10 @@ def _pdf_params(KE, mass, pitch):
 
 
 def _hit_pdf(dedx, pitch, KE, mass, table):
-    "Returns the hit likelihood pdf(dE/dx | KE, mass, pitch) for one plane's hits under one hypothesis."
+    """
+    Returns the hit likelihood pdf(dE/dx | KE, mass, pitch) for one plane's hits under one hypothesis.
+        Currently, using reconstructed PDF from MC; future work is needed to merge these with analytic Vavilov theory
+    """
     xi_per_cm, kappa, beta2, mpv_shift = _pdf_params(KE, mass, pitch)
     lam = np.clip((dedx - mpv_shift) / xi_per_cm, -50.0, 100.0)
 
@@ -168,11 +186,27 @@ def _hit_pdf(dedx, pitch, KE, mass, table):
     return np.clip(_lookup_binned(lam, kap, bet, table) / jac, 1e-12, None).reshape(shape)
 
 
+# def _lookup_binned(lam, kappa, beta2, table):
+#     """Lookup the binned PDF given the (kappa, beta2), then return the PDF at the lambda position (landau parameter)"""
+#     idx = tuple(np.clip(np.searchsorted(e, x, side="right") - 1, 0, len(e) - 2)
+#                 for e, x in zip(table["edges"], (lam, kappa, beta2)))
+#     return table["vav_pdf"][idx]
+
 def _lookup_binned(lam, kappa, beta2, table):
-    """pdf of the bin each hit falls in; values outside the edges take the first/last bin"""
-    idx = tuple(np.clip(np.searchsorted(e, x, side="right") - 1, 0, len(e) - 2)
-                for e, x in zip(table["edges"], (lam, kappa, beta2)))
-    return table["vav_pdf"][idx]
+    """PDF at (lambda, kappa, beta2): nearest bin in lambda and kappa, linear between bin centres in beta2,
+    so the likelihood has no step at the beta2 bin edges for the dL scan to lock onto"""
+    e_lam, e_kap, e_b2 = table["edges"]
+    i_lam = np.clip(np.searchsorted(e_lam, lam, side="right") - 1, 0, len(e_lam) - 2)
+    i_kap = np.clip(np.searchsorted(e_kap, kappa, side="right") - 1, 0, len(e_kap) - 2)
+    c_b2 = 0.5 * (e_b2[1:] + e_b2[:-1])
+    j = np.clip(np.searchsorted(c_b2, beta2, side="right") - 1, 0, len(c_b2) - 2)
+    w = np.clip((beta2 - c_b2[j]) / (c_b2[j + 1] - c_b2[j]), 0.0, 1.0)
+    pdf = table["vav_pdf"]
+    n = table["n"]
+    w = np.where(n[i_kap, j + 1] > 0, w, 0.0)
+    w = np.where(n[i_kap, j] > 0, w, 1.0)
+
+    return (1.0 - w) * pdf[i_lam, i_kap, j] + w * pdf[i_lam, i_kap, j + 1]
 
 
 
@@ -184,6 +218,7 @@ def _lookup_binned(lam, kappa, beta2, table):
 _KE_CACHE = {}
 
 def _ke_table(hyp, ke_max=4000.0, step=0.05):
+    """Apply CSDA to construct the KE <--> rr connection"""
     if hyp in _KE_CACHE:
         return _KE_CACHE[hyp]
     mass = MASS[hyp]
@@ -202,9 +237,11 @@ def _ke_table(hyp, ke_max=4000.0, step=0.05):
     return _KE_CACHE[hyp]
 
 def _ke_from_rr(table, rr):
+    """Evaluate the KE from a given rr"""
     return np.interp(np.clip(rr, 1e-3, None), table["range"], table["ke"])
 
 def _rr_from_ke(table, ke):
+    """Evaluate the rr from a given KE"""
     return np.interp(ke, table["ke"], table["range"])
 
 ##############################
@@ -271,13 +308,23 @@ def _per_track_max(hits, values):
     return out
 
 def _rank_within_track(hits, mask):
+    """Need to order hits in track in order to ignore first and last hits"""
     c = np.cumsum(mask) - mask
     return c - c[hits["first"][hits["tid"]]]
 
 def _usable_hits(hits, params):
+    """
+    Counts the number of usable hits after applying some cleaning up: 
+        All values are not NaN
+        dE/dx is within bounded region
+        Remove first and last n hits (set in parameters) ignoring reconstruction errors from Pandora
+        Pitch isn't too high (set in parameters)
+
+    """
     rr, dedx, pitch = hits["rr"], hits["dedx"], hits["pitch"]
     finite = np.isfinite(dedx) & np.isfinite(pitch) & np.isfinite(rr)
 
+    # We don't want to cut out high dE/dx from the Bragg Peak, so keep a small window near the ends which ignore dE/dx cut
     free = params["dedx_max_free_rr"]
     near_an_end = (rr < free) | (rr > hits["rr_max"] - free)
     in_window = (dedx > params["dedx_min"]) & ((dedx < params["dedx_max"]) | near_an_end)
@@ -322,8 +369,8 @@ def _ell_at_zero(planes, tables, hyp):
 ##############################
 # THE dL (TLE) FIT
 ##############################
-# dL = range the particle still had past its last hit.  Per hypothesis and per
-# direction: a coarse scan, a fine scan around its minimum, then
+# dL = range the particle still had past its last hit.  Per hypothesis and per direction: 
+#       a coarse scan, a fine scan around its minimum, then
 #   flattened  the well's edges never rise flat_abs above its floor -> dE/dx does not
 #              determine dL, keep dL = 0
 #   on edge    the minimum sits at scan_max -> runaway, keep dL = 0
@@ -359,14 +406,15 @@ def _fit_dl(planes, tables, priors, dl_min, n_hits, params, hyps):
     fits = {}
     for hyp in hyps:
         flipped = _orientation(best[hyp], params) if params["allow_flip"] else np.zeros(n_tracks, bool)
-        fits[hyp] = _apply_orientation(best[hyp], flipped, enough, params)
+        fits[hyp] = _apply_orientation(best[hyp], flipped & enough, enough, params)
+
 
     if params["allow_flip"] and params["orient_shared"]:
         fwd = np.nanmin([best[hyp][False]["cost"] for hyp in hyps], axis=0)
         rev = np.nanmin([best[hyp][True]["cost"] for hyp in hyps], axis=0)
         shared = ((fwd - rev) > params["flip_margin"]) & np.isfinite(fwd) & np.isfinite(rev)
         for hyp in hyps:
-            fits[hyp] = _apply_orientation(best[hyp], shared, enough, params)
+            fits[hyp] = _apply_orientation(best[hyp], shared & enough, enough, params)
     return fits
 
 def _scan(planes, tables, hyp, coarse, fine, prior, n_tracks, flipped):
@@ -468,7 +516,28 @@ def _table_path(fname):
     return path
 
 
-def _load_tables(spec):
+# def _load_tables(spec):
+#     if spec in _TABLE_CACHE:
+#         return _TABLE_CACHE[spec]
+
+#     which, _, fname = spec.partition("@")
+#     which = which[2:].lstrip("_") or "all"
+#     z = np.load(_table_path(fname))
+#     edges = (z["lam_edges"], z["kap_edges"], z["beta2_edges"])
+#     def template(tag):
+#         return {"edges": edges, "vav_pdf": np.ascontiguousarray(z["pdf_" + tag])}
+
+#     planes = [int(p) for p in z["planes"]]
+#     if which == "bysp":
+#         tables = {pl: {hyp: template(f"{pl}_{hyp}") for hyp in HYPS} for pl in planes}
+#     else:
+#         tables = {pl: template(f"{pl}_{which}") for pl in planes}
+
+#     _TABLE_CACHE[spec] = tables
+#     return tables
+
+
+def _load_tables(spec, n_min=100):
     if spec in _TABLE_CACHE:
         return _TABLE_CACHE[spec]
 
@@ -476,12 +545,19 @@ def _load_tables(spec):
     which = which[2:].lstrip("_") or "all"
     z = np.load(_table_path(fname))
     edges = (z["lam_edges"], z["kap_edges"], z["beta2_edges"])
-    def template(tag):
-        return {"edges": edges, "vav_pdf": np.ascontiguousarray(z["pdf_" + tag])}
+    def template(tag, pooled=None):
+        pdf, n = z["pdf_" + tag].copy(), z["n_" + tag].copy()
+        if pooled is not None:
+            # (kappa, beta2) cells this species barely reaches: the lambda pdf depends on (kappa, beta2),
+            # not on the species, so take the species-pooled pdf there
+            sparse = (n < n_min) & (z["n_" + pooled] >= n_min)
+            pdf[:, sparse] = z["pdf_" + pooled][:, sparse]
+            n[sparse] = z["n_" + pooled][sparse]
+        return {"edges": edges, "vav_pdf": np.ascontiguousarray(pdf), "n": n}
 
     planes = [int(p) for p in z["planes"]]
     if which == "bysp":
-        tables = {pl: {hyp: template(f"{pl}_{hyp}") for hyp in HYPS} for pl in planes}
+        tables = {pl: {hyp: template(f"{pl}_{hyp}", pooled=f"{pl}_all") for hyp in HYPS} for pl in planes}
     else:
         tables = {pl: template(f"{pl}_{which}") for pl in planes}
 

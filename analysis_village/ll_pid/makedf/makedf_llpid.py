@@ -35,8 +35,6 @@ def make_pandora_llpid_df_calo_update(f, **trkArgs):
     return make_pandora_llpid_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=True, requireFiducial=False, updatecalo=True, **trkArgs)
 
 def make_pandora_llpid_df(f, updatecalo=False, variation="cv", rrcorr=True, **pandoraArgs):
-    # make_pandora_df plus the llpid columns under pfp.trk.llpid, e.g. df.pfp.trk.llpid.ell_mu
-    # updatecalo: redo dedx for the chi2pid and the llpid alike
     pandoradf = make_pandora_df(f, updatecalo=updatecalo, **pandoraArgs)
 
     # only fit the tracks that survived make_pandora_df's cuts
@@ -52,6 +50,13 @@ def make_pandora_llpid_df(f, updatecalo=False, variation="cv", rrcorr=True, **pa
 
     lldf.columns = pd.MultiIndex.from_tuples([("pfp", "trk", "llpid", c) for c in lldf.columns])
     pandoradf = multicol_merge(pandoradf, lldf, left_index=True, right_index=True, how="left", validate="one_to_one")
+    
+    # Bring in the BCFM branches
+    bfmdf = loadbranches(f["recTree"], barycenterFMbranches).rec
+    pandoradf = multicol_merge(bfmdf, pandoradf, left_index=True, right_index=True, how="right", validate="one_to_many")
+
+
+
     return pandoradf
 
 
