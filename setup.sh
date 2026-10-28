@@ -29,7 +29,7 @@ if [[ $machine == *icarus* ]]; then
   mkdir -p $CAFPYANA_TMP_SCRATCH
 fi
 if [[ $machine == *jupyter* ]]; then
-  echo "working on a sbnd machine"
+  echo "working on a sbnd machine - jupyter"
   source "${SPACK_ROOT}"
   export CAFPYANA_GRID_OUT_DIR="/pnfs/sbnd/scratch/users/$USER/cafpyana_out"
   export CAFPYANA_TMP_SCRATCH="/scratch/7DayLifetime/$USER/tmp_failover"

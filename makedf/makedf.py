@@ -218,6 +218,10 @@ def make_opflashdf(f):
     opflashdf = loadbranches(f["recTree"], opflashbranches).rec.opflashes
     return opflashdf
 
+def make_bcfmdf(f):
+    bcfmdf = loadbranches(f["recTree"], barycenterFMbranches).rec
+    return bcfmdf
+
 def make_trkdf(f, scoreCut=False, requiret0=False, requireCosmic=False, mcs=False, det="SBND", updatecalo=None):
     trkdf = loadbranches(f["recTree"], trkbranches)
     if scoreCut:
