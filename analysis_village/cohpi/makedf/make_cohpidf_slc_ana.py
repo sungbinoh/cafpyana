@@ -24,8 +24,12 @@ def InFV_nohiyz_trk(data):
 ## -- truth level flags
 def Signal(df): # definition
     is_fv = InFV_nohiyz(df.position)
-    is_1pi0p0n = (df.nmu_27MeV == 1) & (df.npi_30MeV == 1) & (df.np_20MeV == 0) & (df.npi0 == 0) & (df.nn_0MeV == 0)
-    return is_fv & is_1pi0p0n
+    ## is_1pi0p0n = (df.nmu_27MeV == 1) & (df.npi_30MeV == 1) & (df.np_20MeV == 0) & (df.npi0 == 0) & (df.nn_0MeV == 0) -- signal def used until Nu26
+
+    ## updating the signal definition to true CCCOH and have mu & pi above enegy threshold
+    is_1mu1pi_th = (df.nmu_27MeV == 1) & (df.npi_30MeV == 1)
+    is_cccoh = (df.iscc) & (df.genie_mode == 3)
+    return is_fv & is_1mu1pi_th & is_cccoh
 
 def is_contained(trk_df):
     start_in = InFV_nohiyz_trk(trk_df.pfp.trk.start)
@@ -230,6 +234,48 @@ def make_cohpidf_slc(f):
     is_long_dirz_pass = longdf.pfp.trk.dir.z > 0.7
     is_short_dirz_pass = shortdf.pfp.trk.dir.z > 0.5
 
+    long_start_x = longdf.pfp.trk.start.x
+    long_start_y = longdf.pfp.trk.start.y
+    long_start_z = longdf.pfp.trk.start.z
+    short_start_x = shortdf.pfp.trk.start.x
+    short_start_y = shortdf.pfp.trk.start.y
+    short_start_z = shortdf.pfp.trk.start.z
+
+    long_end_x = longdf.pfp.trk.end.x
+    long_end_y = longdf.pfp.trk.end.y
+    long_end_z = longdf.pfp.trk.end.z
+    short_end_x = shortdf.pfp.trk.end.x
+    short_end_y = shortdf.pfp.trk.end.y
+    short_end_z = shortdf.pfp.trk.end.z
+
+    long_start_x = make_slc_var(long_start_x)
+    long_start_y = make_slc_var(long_start_y)
+    long_start_z = make_slc_var(long_start_z)
+    short_start_x = make_slc_var(short_start_x)
+    short_start_y = make_slc_var(short_start_y)
+    short_start_z = make_slc_var(short_start_z)
+
+    long_end_x = make_slc_var(long_end_x)
+    long_end_y = make_slc_var(long_end_y)
+    long_end_z = make_slc_var(long_end_z)
+    short_end_x = make_slc_var(short_end_x)
+    short_end_y = make_slc_var(short_end_y)
+    short_end_z = make_slc_var(short_end_z)
+
+    slcdf['long_start_x'] = long_start_x
+    slcdf['long_start_y'] = long_start_y
+    slcdf['long_start_z'] = long_start_z
+    slcdf['short_start_x'] = short_start_x
+    slcdf['short_start_y'] = short_start_y
+    slcdf['short_start_z'] = short_start_z
+
+    slcdf['long_end_x'] = long_end_x
+    slcdf['long_end_y'] = long_end_y
+    slcdf['long_end_z'] = long_end_z
+    slcdf['short_end_x'] = short_end_x
+    slcdf['short_end_y'] = short_end_y
+    slcdf['short_end_z'] = short_end_z
+
     long_dirx = longdf.pfp.trk.dir.x
     long_diry = longdf.pfp.trk.dir.y
     long_dirz = longdf.pfp.trk.dir.z
@@ -404,7 +450,7 @@ def make_cohpidf_slc(f):
     #### (9) last moment evt selection
     slcdf = slcdf[(slcdf.is_not_clear_cosmic) & (slcdf.is_fv)]
 
-    #print(slcdf)
+    #print(slcdf.columns)
     return slcdf
 
 def make_cohpi_nudf(f):
@@ -461,6 +507,8 @@ def make_cohpi_nudf(f):
         'true_cos_theta_mu': mu_cos_theta_series,
         'true_cos_theta_pi': cpi_cos_theta_series,
         'true_t': true_t_series,
+        'genie_mode': genie_mode,
+        'iscc': is_cc,
         'nuint_categ': nuint_categ
     })
 
