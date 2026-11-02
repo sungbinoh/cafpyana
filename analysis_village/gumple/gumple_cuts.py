@@ -193,6 +193,13 @@ def _fv_cut(df, inx=10, iny=10, inzfront=10, inzback=50):
 
     return pd.Series(np_mask, index=df.index) 
 
+# Flash-PE threshold per detector, read by flash_cut(). Module-level so a driver
+# can override it (e.g. mcdata_comparison_gumple.py --run4-flash-pe).
+# Set (2026-10-24) to the lower edge of the flash PE scale fits
+# (flashpe_fit_gumple.py), which exclude the PE below it; was 2000 / 5000 / 1000.
+# NB keep in sync with the technote (tab:trigger-systematic, Event Selection cut table).
+FLASH_PE_THRESHOLD = {"SBND": 2000., "ICARUS Run2": 4000., "ICARUS Run4": 2000.}
+
 def flash_cut(df):
     det_col = "detector"
     if det_col not in df.columns:
@@ -219,11 +226,11 @@ def flash_cut(df):
     ]
 
     choices = [
-        df.flash_maxpe > 2000.0,  # SBND
-        df.flash_maxpe > 5000.0,  # ICARUS Run2
-        df.flash_maxpe > 1000.0,  # ICARUS Run4
-        ((df.flash_maxpe > 5000.0) & (df.Run == 2))
-        | ((df.flash_maxpe > 1000.0) & (df.Run == 4)),  # ICARUS (Generic)
+        df.flash_maxpe > FLASH_PE_THRESHOLD["SBND"],  # SBND
+        df.flash_maxpe > FLASH_PE_THRESHOLD["ICARUS Run2"],  # ICARUS Run2
+        df.flash_maxpe > FLASH_PE_THRESHOLD["ICARUS Run4"],  # ICARUS Run4
+        ((df.flash_maxpe > FLASH_PE_THRESHOLD["ICARUS Run2"]) & (df.Run == 2))
+        | ((df.flash_maxpe > FLASH_PE_THRESHOLD["ICARUS Run4"]) & (df.Run == 4)),  # ICARUS (Generic)
     ]
 
     np_mask = np.select(conditions, choices, default=False)
@@ -233,7 +240,9 @@ def flash_cut(df):
 def cosmic_cut(df):
     return (df["mu_p_opening_angle_deg"] < _det_cut_th(df.detector, "max_opening_angle")) & (df["crthit"] == 0)
 
-# BNB spill beam quality (SBN SPINE numu-dis technote, DocDB 49387 Sec. 6.1.2).
+# BNB spill beam quality (good-beam definition of SBN-doc-49735-v1; the LM875A/B/C
+# > 1e-2 requirement of the SPINE numu-dis technote, DocDB 49387 Sec. 6.1.2, is
+# no longer applied, 2026-10-20).
 # Applies to the spill_<var> columns of the evt df (prefix="spill_") or to the
 # per-spill "bnb" df (prefix=""). The FOM upper bound is what rejects the
 # failure flags stored in FOM (-999, -1, 0, 2, 3, 4, and the +100 assumed-width
@@ -241,8 +250,7 @@ def cosmic_cut(df):
 # so only apply this to data. Not part of any selection chain.
 def beam_quality_cut(df, prefix="spill_"):
     v = lambda name: df[prefix + name]
-    intensity = (v("TOR860") > 1e11) & (v("TOR875") > 1e11) & \
-        (v("LM875A") > 1e-2) & (v("LM875B") > 1e-2) & (v("LM875C") > 1e-2)
+    intensity = (v("TOR860") > 1e11) & (v("TOR875") > 1e11)
     horn = (v("THCURR") >= 173) & (v("THCURR") <= 175)
     fom = (v("FOM") > 0.98) & (v("FOM") <= 1)
     return intensity & horn & fom

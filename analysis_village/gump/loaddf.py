@@ -647,10 +647,12 @@ SPLIT_REGIONS = {
 }
 
 # Fraction of the plane-crossing muons that split_tracks actually splits, per
-# region: the Run2+Run4 combined values measured by TrackSplittingCorrection.py
-# (TrackSplittingCorrection-2026-08-01.md), as used by the signal-box track-split
-# systematic.
-SPLIT_FRAC = {"Z=0": 0.0960, "East Cathode": 0.0447, "West Cathode": 0.0398}
+# region: the Run2+Run4 combined values (simple cosmic rejection stage) measured by
+# TrackSplittingCorrection_GUMPLE.py on sbn-rewgted-25 (2026-10-20,
+# plots-gumple-2026-10-20-rewgted25/tracksplit/tracksplit_summary.csv), as used by
+# the signal-box track-split systematic. Updated 2026-10-24 from the 8-01 reCAF
+# values (Z=0 0.0960, East 0.0447, West 0.0398).
+SPLIT_FRAC = {"Z=0": 0.1002, "East Cathode": 0.0292, "West Cathode": 0.0146}  # sync_calibrations.py 2026-10-25 from plots-gumple-2026-10-24-full
 
 # Run periods each plane applies to. The east cathode lies outside the Run 2 muon
 # fiducial volume (the East-East TPC was off in Run 2), so it has Run 4 crossers
@@ -755,6 +757,47 @@ def _apply_variations(df, shift_binding_E, split_tracks,
 
 _DETECTOR_RUN = {"SBND": 1, "ICARUS Run2": 2, "ICARUS Run4": 4}
 
+# Flat factor on the POT of every SBND MC sample (2026-10-20): the MC POT is
+# scaled down by 3%, i.e. the SBND MC prediction at fixed data POT goes up by
+# 1/0.97. Applied to the returned POT only, after the cache, so cached entries
+# keep the raw POT.
+SBND_MC_POT_SCALE = 0.97
+
+# MC PE scale factors, applied to the MC flash_maxpe in load_one (flash_sumpe is
+# left unscaled). CV = the all-trigger fit (flashpe_fit_gumple.py --schema flashonly,
+# every triggered event); the trigger-systematic uncertainty is |all-trigger -
+# Contained-stage fit (--schema gumple)|. From plots-gumple-2026-10-24-rewgted25/
+# flashpe_fit/trigger_scale_summary.tsv:
+#   all-trigger 0.647 / 0.574 / 0.369, Contained 0.618 / 0.477 / 0.293.
+# NB: keep in sync with tab:trigger-systematic in the technote (see
+# technote/figure_manifest.tsv). The scale enters the MC cache key.
+MC_PE_SCALE = {"SBND": 0.647, "ICARUS Run2": 0.574, "ICARUS Run4": 0.369}
+MC_PE_SCALE_UNC = {"SBND": 0.029, "ICARUS Run2": 0.097, "ICARUS Run4": 0.076}
+# Run number (the Run column) -> detector key of the two dicts above
+RUN_DETECTOR = {1: "SBND", 2: "ICARUS Run2", 4: "ICARUS Run4"}
+
+# Off-beam exposure (load(..., offbeampot=True)): the off-beam gates divided by the
+# on-beam gates per 5e12 POT, so that POT_ON / OFFPOT reproduces the off-beam weight
+# OFF_w of dataquality.data_norm. ICARUS counts off-beam gates as data_norm does
+# (trig.gate_delta x (1 - 1/20)); for SBND the (1 - 0.0754) of data_norm's OFF_w is
+# folded into the constant, which is 5e12 x ngates_ON / POT x (1 - 0.0754).
+# Calibrated 2026-10-26 with dataquality.data_norm (BQ + DQ cuts on) on sbn-rewgted-25,
+# on-beam samples SBND_SpringBNBData_FixedDev.df, ICARUS_SpringRun2BNB_unblind.df and
+# ICARUS_SpringRun4BNB_ReCAF2026_unblind.df: 5e12 x ngates_ON / POT = 1.01852 / 1.26636 / 1.03029.
+# These are run-period averages for those samples and cuts; another on-beam sample,
+# run range or cut set moves them by up to ~10%. If the off-beam weight needs to be
+# precise, override them -- or better, take OFF_w and POT from
+# dataquality.data_norm for the on-beam sample actually used, as
+# mcdata_comparison_gumple.compute_norm and signalbox_systematics_gumple do.
+OFFBEAM_GATES_PER_5e12POT = {
+    "SBND": 0.9417223829061503,
+    "ICARUS Run2": 1.2663596208044372,
+    "ICARUS Run4": 1.0302865530348173,
+}
+
+def _mc_pot_scale(detector, ismc):
+    return SBND_MC_POT_SCALE if (ismc and detector == "SBND") else 1.
+
 def load_one(fname, idf,
     detector=None, # One of SBND, ICARUS, ICARUS Run4
     include_syst=True, nuniv=100, spline=False, xsec_univ=False, xsec_spline=False,# systematic handling
@@ -762,7 +805,7 @@ def load_one(fname, idf,
     pot_spline=False, detvar_spline=False, spline_dir="rwt_outputs",
     load_truth=True, load_crt=False, load_evtrec=False, match_Enu=True, # load extra information
     offbeampot=False, # POT handling
-    data_quality=False, beam_quality=False,# POT handling
+    data_quality=True, beam_quality=True, # data-only cuts: good-run list (on- and off-beam) and per-spill beam quality (on-beam), see dataquality.py
     preselection=None, # apply preselection cut
     shift_binding_E=False, split_tracks=None, # variations applied to the output df (see _apply_variations)
     shift_fraction=None, split_fraction=None, # fraction of events each variation is applied to (None -> BE_FRACTION / SPLIT_FRAC)
@@ -776,11 +819,15 @@ def load_one(fname, idf,
     # Check cache
     if cache_dir is not None:
         # The data cuts only enter the key for data files (no mcnu key in the
-        # GUMPLE productions), so MC cache entries are unchanged by them.
+        # GUMPLE productions), so MC cache entries are unchanged by them. The MC
+        # PE scale (applied before caching) enters the key for MC files only.
         with h5py.File(fname, "r") as _f:
             _is_data = (mcname % idf) not in _f
         data_cut_key = dict(beam_quality=beam_quality, data_quality=data_quality,
-                            run_list=dq.RUN_LIST_HASH) if _is_data else {}
+                            run_list=dq.RUN_LIST_HASH) if _is_data else dict(mc_pe_scale=MC_PE_SCALE[detector])
+        # the cached off-beam POT depends on the gates/POT constant (on-beam unchanged)
+        if offbeampot:
+            data_cut_key["offbeam_gates_per_5e12pot"] = OFFBEAM_GATES_PER_5e12POT[detector]
         cache_hash = _cache_key(fname, idf, **data_cut_key, detector=detector, include_syst=include_syst,
             nuniv=nuniv, spline=spline, xsec_univ=xsec_univ, xsec_spline=xsec_spline, reweight_aFF=reweight_aFF, pot_univ=pot_univ,
             flux_univ=flux_univ, sep_flux_univ=sep_flux_univ, g4_univ=g4_univ,
@@ -799,6 +846,8 @@ def load_one(fname, idf,
                 raise err 
             with h5py.File(cache_file, "r") as cf:
                 pot = float(cf.attrs["pot"])
+            if detector == "SBND":
+                pot *= _mc_pot_scale(detector, pd.read_hdf(fname, hdrname % idf).ismc.iloc[0] == 1)
             return _apply_variations(df, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot
 
     df =  pd.read_hdf(fname, evtname % idf)
@@ -806,13 +855,7 @@ def load_one(fname, idf,
     ismc = hdr.ismc.iloc[0] == 1
 
     # apply the scaled pe flash
-    if ismc: # Scale PE for MC-only
-        # Best-fit MC PE scale factors from the data/MC fits in FlashMCDataComparison.ipynb
-        if detector == "SBND": pe_scale = 0.642
-        elif detector == "ICARUS Run2": pe_scale = 0.632
-        elif detector == "ICARUS Run4": pe_scale = 0.358
-    else:
-        pe_scale = 1.0
+    pe_scale = MC_PE_SCALE[detector] if ismc else 1.0 # Scale PE for MC-only
 
     if "ICARUS" in detector:
         df["flash_maxpe"] = df["flash_maxpe_cryo0"] * pe_scale
@@ -835,7 +878,17 @@ def load_one(fname, idf,
             # beam-quality files keep the production value.
             with h5py.File(fname, "r") as _f:
                 _has_bnb = ("bnb_%i" % idf) in _f
-            if _has_bnb:
+            if dq.external_beam_file(fname) is not None:
+                # No spill information in the production (see dq.EXTERNAL_BEAM):
+                # fill every spill_* column the cut reads from the beam-quality
+                # file. Events absent from its spill tree stay NaN and fail.
+                spill = dq.external_event_spill(fname, hdr).reindex(df.index.droplevel(-1))
+                has = spill.mapped.eq(True).to_numpy()
+                print(f"[{os.path.basename(fname)} idf={idf}] spill info from "
+                      f"{os.path.basename(dq.external_beam_file(fname))}: {has.sum()}/{len(df)} slices mapped to a spill")
+                for c in ["TOR860", "TOR875", "THCURR", "FOM"]:
+                    df["spill_" + c] = spill[c].to_numpy(dtype=np.float64)
+            elif _has_bnb:
                 spill = dq.event_spill_fom(dq.spill_table(fname, idf, detector), hdr)
                 spill = spill.reindex(df.index.droplevel(-1))
                 has = spill.mapped.eq(True).to_numpy()
@@ -925,19 +978,15 @@ def load_one(fname, idf,
 
     # LOAD POT
     if offbeampot:
+        N_GATES_ON_PER_5e12POT = OFFBEAM_GATES_PER_5e12POT[detector]
         if detector == "SBND":
-            N_GATES_ON_PER_5e12POT = 1.05104
             pot = hdr.noffbeambnb.sum()/N_GATES_ON_PER_5e12POT*5e12
-        elif detector == "ICARUS Run4":
+        else:
             trig = pd.read_hdf(fname, "trig_%i" % idf)
-            N_GATES_ON_PER_5e12POT = 1.0631936867739828
             pot = trig.gate_delta.sum()*(1-1/20.)/N_GATES_ON_PER_5e12POT*5e12
-        elif detector == "ICARUS Run2":
-            trig = pd.read_hdf(fname, "trig_%i" % idf)
-            N_GATES_ON_PER_5e12POT = 1.3886218026202426
-            pot = trig.gate_delta.sum()*(1-1/20.)/N_GATES_ON_PER_5e12POT*5e12
-    elif not ismc and (beam_quality or data_quality):
-        # sum of TOR875 over the spills passing the data cuts
+    elif not ismc and (beam_quality or data_quality or dq.external_beam_file(fname) is not None):
+        # sum of TOR875 over the spills passing the data cuts (an EXTERNAL_BEAM
+        # file has hdr POT 0, so it always takes this branch)
         pot = dq.split_onbeam_pot(fname, idf, detector, beam_quality=beam_quality, data_quality=data_quality)
     else:
         pot = hdr.pot.sum()
@@ -1062,6 +1111,7 @@ def load_one(fname, idf,
     if not include_syst:
         if cache_dir is not None:
             _write_cache(cache_file, df, match, pot)
+        pot *= _mc_pot_scale(detector, ismc)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
@@ -1321,6 +1371,7 @@ def load_one(fname, idf,
         mrg.drop(columns=drops, inplace=True, errors='ignore')
     if cache_dir is not None:
         _write_cache(cache_file, mrg, match, pot)
+    pot *= _mc_pot_scale(detector, ismc)
 
     mrg["total_pot_1e20"] = pot/1e20
     return _apply_variations(mrg, shift_binding_E, split_tracks, shift_fraction, split_fraction), match, pot

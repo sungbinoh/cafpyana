@@ -69,11 +69,11 @@ MC_PE_SCALE = 0.642
 FONTSIZE = 14
 MC_COLOR = "#95af8b"
 
-PLOTVARS = ["mu_len", "mu_costh", "nu_E_calo", "del_p"]
+PLOTVARS = ["mu_len", "mu_costh", "nu_E_calo", "del_p", "crlongtrkdiry"]
 PLOTBINS = [np.linspace(0, 500, 21), np.linspace(-1, 1, 21), np.linspace(0, 2, 21),
-            np.linspace(0, 1, 11)]
+            np.linspace(0, 1, 11), np.linspace(-1, 0.3, 14)]
 PLOTLABELS = ["Muon Candidate Length [cm]", "Muon Candidate $\\cos\\theta$",
-              "Reco. Neutrino Energy [GeV]", "$\\delta p$ [GeV/c]"]
+              "Reco. Neutrino Energy [GeV]", "$\\delta p$ [GeV/c]", "CRLongTrkDirY"]
 
 
 # ----------------------------------------------------------------------------

@@ -1,13 +1,30 @@
 # figure_manifest.tsv -- <source relative to PLOTBASE> <TAB> <destination relative to the technote root>
 # Consumed by technote_figures.py check/install (see README.md). One row per regenerated technote figure.
 # Sources: evtsel/ = mcdata_comparison_gumple.py, pid/nominal/ = nb/MCDataComparisonPID-GUMPLE.ipynb,
-#          tracksplit/ = TrackSplittingCorrection_GUMPLE.py, signalbox/ = nb/SignalBoxSystematics-GUMPLE.ipynb,
-#          corsika/ = offbeam_cosmicmc_gumple.py, selection/ = selection_plots_gumple.py,
-#          constraint/ = mcdata_constraint_gumple.py (SBND absolute-norm + CC-QE constraint)
+#          tracksplit/ = TrackSplittingCorrection_GUMPLE.py, signalbox/{1p,mp,joint}/ = signalbox_systematics_gumple.py (2026-09-29; was the notebook, flat signalbox/),
+#          corsika/ = offbeam_cosmicmc_gumple.py, selection/1p/ = selection_plots_gumple.py (1p of its {1p,np,mp} subdirs),
+#          constraint/ = mcdata_constraint_gumple.py (SBND absolute-norm + CC-QE constraint),
+#          pot/ = pot_quality_summary.py, stability/ = selection_stability_gumple.py,
+#          cvwgt/ = cvweight_impact_gumple.py, flashpe_vs_trueE/ = flashpe_vs_trueE_gumple.py,
+#          evtsel_n-1/ = nminus1_gumple.py (N-1 cut comparisons; mode breakdowns only, no mu_trackScore, n_pfp or max_far_shw_len),
+#          sbndtracksplit/ = TrackSplittingCorrection_SBND_GUMPLE.py (SBND APA gap; simple stage only)
+#          flashpe_fit/{flashonly,gumple}/ = flashpe_fit_gumple.py (run_gumple_serial step flashfit; flashonly = all-trigger fit
+#              on <df-dir>-flashonly/, gumple = Contained-stage fit)
+# NB CALIBRATION ORDER: flashfit and tracksplit MEASURE loaddf.MC_PE_SCALE{,_UNC} and loaddf.SPLIT_FRAC, which every other
+#    step uses -- make_technote_plots.sh runs them first and sync_calibrations.py checks loaddf against them (stops on a
+#    mismatch unless --update-code / --allow-stale). See README "Phases".
+# NB TABLE SYNC (flashpe_fit/ rows): Sections/Systematic Uncertainties.tex, tab:trigger-systematic, quotes the scale factors
+#    shown in these figures (all-trigger CV, Contained, trigger syst. = |difference|) and the flash-PE thresholds
+#    (gumple_cuts.FLASH_PE_THRESHOLD). Whenever the flashpe_fit/ figures are re-installed, the table must be updated by hand
+#    from <PLOTBASE>/flashpe_fit/trigger_scale_table.tex; the driver does not edit tex.
+# NOT COVERED (external, no producer in this repo; `check` lists them): 1D_scan, cut_stuff/updated_eff + cumulative_efficiencies_final
+#    (collaborator, 2026-10-20), DENT_eff/, AutoPlotter/, MAPLE_*/, conservative_flux/, SensitivityStudies/, FakeData*/,
+#    Proton-Energy-Resolution/, SCE-Detvar/, chi2_particleID_profiles, icarus_{,no_}sce, unblinding_full.
 corsika/pdf/SBND_pid1p_del_p_wnorm.pdf	Figures/CORSIKA-Sytematic/SBND_pid1p_del_p_wnorm.pdf
 corsika/pdf/SBND_pid1p_mu_costh_wnorm.pdf	Figures/CORSIKA-Sytematic/SBND_pid1p_mu_costh_wnorm.pdf
 corsika/pdf/SBND_pid1p_mu_len_wnorm.pdf	Figures/CORSIKA-Sytematic/SBND_pid1p_mu_len_wnorm.pdf
 corsika/pdf/SBND_pid1p_nu_E_calo_wnorm.pdf	Figures/CORSIKA-Sytematic/SBND_pid1p_nu_E_calo_wnorm.pdf
+corsika/pdf/SBND_pid1p_crlongtrkdiry_wnorm.pdf	Figures/CORSIKA-Sytematic/SBND_pid1p_crlongtrkdiry_wnorm.pdf
 evtsel/pdf/ICARUS-Run2_contained_crlongtrkdiry.pdf	Figures/MC-Data-Comparisons/ICARUS-Run2-Area-Norm/ICARUS-Run2_contained_crlongtrkdiry.pdf
 evtsel/pdf/ICARUS-Run2_contained_del_p.pdf	Figures/MC-Data-Comparisons/ICARUS-Run2-Area-Norm/ICARUS-Run2_contained_del_p.pdf
 evtsel/pdf/ICARUS-Run2_contained_mu_chi2_of_mu_cand.pdf	Figures/MC-Data-Comparisons/ICARUS-Run2-Area-Norm/ICARUS-Run2_contained_mu_chi2_of_mu_cand.pdf
@@ -145,6 +162,32 @@ constraint/pdf/SBND_pid1p_nu_E_calo_constrained_by_nu_E_ccqe.pdf	Figures/MC-Data
 constraint/pdf/SBND_pid1p_nu_E_calo_constrained_by_nu_E_ccqe_lodp.pdf	Figures/MC-Data-Comparisons/SBND-Abs/SBND_pid1p_nu_E_calo_constrained_by_nu_E_ccqe_lodp.pdf
 constraint/pdf/SBND_pid1p_nu_E_calo_constrained_by_nu_E_ccqe_middp.pdf	Figures/MC-Data-Comparisons/SBND-Abs/SBND_pid1p_nu_E_calo_constrained_by_nu_E_ccqe_middp.pdf
 constraint/pdf/SBND_pid1p_nu_E_calo_constrained_by_nu_E_ccqe_hidp.pdf	Figures/MC-Data-Comparisons/SBND-Abs/SBND_pid1p_nu_E_calo_constrained_by_nu_E_ccqe_hidp.pdf
+constraint/pdf/SBND_signalbox_nu_E_calo_joint1pMp_absnorm.pdf	Figures/MC-Data-Comparisons/SBND-Abs/SBND_signalbox_nu_E_calo_joint1pMp_absnorm.pdf
+evtsel_n-1/pdf/ICARUS-Run2_n-1-1p_crthit_f.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run2_n-1-1p_crthit_f.pdf
+evtsel_n-1/pdf/ICARUS-Run2_n-1-1p_flash_maxpe.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run2_n-1-1p_flash_maxpe.pdf
+evtsel_n-1/pdf/ICARUS-Run2_n-1-1p_mu_p_opening_angle_deg.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run2_n-1-1p_mu_p_opening_angle_deg.pdf
+evtsel_n-1/pdf/ICARUS-Run2_n-1-1p_prot_chi2_of_mu_cand.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run2_n-1-1p_prot_chi2_of_mu_cand.pdf
+evtsel_n-1/pdf/ICARUS-Run2_n-1-1p_prot_chi2_of_prot_cand.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run2_n-1-1p_prot_chi2_of_prot_cand.pdf
+evtsel_n-1/pdf/ICARUS-Run2_n-1-mp_flash_maxpe.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run2_n-1-mp_flash_maxpe.pdf
+evtsel_n-1/pdf/ICARUS-Run2_n-1-mp_prot_chi2_of_mu_cand.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run2_n-1-mp_prot_chi2_of_mu_cand.pdf
+evtsel_n-1/pdf/ICARUS-Run2_n-1-mp_prot_chi2_of_prot_cand.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run2_n-1-mp_prot_chi2_of_prot_cand.pdf
+evtsel_n-1/pdf/ICARUS-Run4_n-1-1p_crthit_f.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run4_n-1-1p_crthit_f.pdf
+evtsel_n-1/pdf/ICARUS-Run4_n-1-1p_flash_maxpe.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run4_n-1-1p_flash_maxpe.pdf
+evtsel_n-1/pdf/ICARUS-Run4_n-1-1p_mu_p_opening_angle_deg.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run4_n-1-1p_mu_p_opening_angle_deg.pdf
+evtsel_n-1/pdf/ICARUS-Run4_n-1-1p_prot_chi2_of_mu_cand.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run4_n-1-1p_prot_chi2_of_mu_cand.pdf
+evtsel_n-1/pdf/ICARUS-Run4_n-1-1p_prot_chi2_of_prot_cand.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run4_n-1-1p_prot_chi2_of_prot_cand.pdf
+evtsel_n-1/pdf/ICARUS-Run4_n-1-mp_flash_maxpe.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run4_n-1-mp_flash_maxpe.pdf
+evtsel_n-1/pdf/ICARUS-Run4_n-1-mp_prot_chi2_of_mu_cand.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run4_n-1-mp_prot_chi2_of_mu_cand.pdf
+evtsel_n-1/pdf/ICARUS-Run4_n-1-mp_prot_chi2_of_prot_cand.pdf	Figures/MC-Data-Comparisons/N-1/ICARUS-Run4_n-1-mp_prot_chi2_of_prot_cand.pdf
+evtsel_n-1/pdf/SBND_n-1-1p_flash_maxpe.pdf	Figures/MC-Data-Comparisons/N-1/SBND_n-1-1p_flash_maxpe.pdf
+evtsel_n-1/pdf/SBND_n-1-1p_mu_chi2_of_mu_cand.pdf	Figures/MC-Data-Comparisons/N-1/SBND_n-1-1p_mu_chi2_of_mu_cand.pdf
+evtsel_n-1/pdf/SBND_n-1-1p_mu_p_opening_angle_deg.pdf	Figures/MC-Data-Comparisons/N-1/SBND_n-1-1p_mu_p_opening_angle_deg.pdf
+evtsel_n-1/pdf/SBND_n-1-1p_prot_chi2_of_mu_cand.pdf	Figures/MC-Data-Comparisons/N-1/SBND_n-1-1p_prot_chi2_of_mu_cand.pdf
+evtsel_n-1/pdf/SBND_n-1-1p_prot_chi2_of_prot_cand.pdf	Figures/MC-Data-Comparisons/N-1/SBND_n-1-1p_prot_chi2_of_prot_cand.pdf
+evtsel_n-1/pdf/SBND_n-1-mp_flash_maxpe.pdf	Figures/MC-Data-Comparisons/N-1/SBND_n-1-mp_flash_maxpe.pdf
+evtsel_n-1/pdf/SBND_n-1-mp_mu_chi2_of_mu_cand.pdf	Figures/MC-Data-Comparisons/N-1/SBND_n-1-mp_mu_chi2_of_mu_cand.pdf
+evtsel_n-1/pdf/SBND_n-1-mp_prot_chi2_of_mu_cand.pdf	Figures/MC-Data-Comparisons/N-1/SBND_n-1-mp_prot_chi2_of_mu_cand.pdf
+evtsel_n-1/pdf/SBND_n-1-mp_prot_chi2_of_prot_cand.pdf	Figures/MC-Data-Comparisons/N-1/SBND_n-1-mp_prot_chi2_of_prot_cand.pdf
 pid/nominal/pdf/ICARUS-Run2_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_bkdwnpdg_dedx_nosmear.pdf	Figures/PID-MC-Data/ICARUS-Run2_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_bkdwnpdg_dedx_nosmear.pdf
 pid/nominal/pdf/ICARUS-Run2_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_bkdwnpdg_dedx_smear1x.pdf	Figures/PID-MC-Data/ICARUS-Run2_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_bkdwnpdg_dedx_smear1x.pdf
 pid/nominal/pdf/ICARUS-Run2_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_bkdwnpdg_dedx_smear2x.pdf	Figures/PID-MC-Data/ICARUS-Run2_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_bkdwnpdg_dedx_smear2x.pdf
@@ -170,9 +213,19 @@ pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_
 pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_dedx_nosmear.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_dedx_nosmear.pdf
 pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_dedx_smear1x.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_dedx_smear1x.pdf
 pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_dedx_smear2x.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_dedx_smear2x.pdf
+pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_nominal_muthetadrift0.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_nominal_muthetadrift0.pdf
+pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_nominal_muthetadrift1.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_nominal_muthetadrift1.pdf
+pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_nominal_muthetadrift2.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_nominal_muthetadrift2.pdf
+pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_nominal_muthetadrift3.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_nominal_muthetadrift3.pdf
+pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_nominal_muthetadrift4.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_mu_cand_bkdwnpdg_nominal_muthetadrift4.pdf
 pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_dedx_nosmear.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_dedx_nosmear.pdf
 pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_dedx_smear1x.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_dedx_smear1x.pdf
 pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_dedx_smear2x.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_dedx_smear2x.pdf
+pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift0.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift0.pdf
+pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift1.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift1.pdf
+pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift2.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift2.pdf
+pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift3.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift3.pdf
+pid/nominal/pdf/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift4.pdf	Figures/PID-MC-Data/ICARUS-Run4_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift4.pdf
 pid/nominal/pdf/SBND_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_bkdwnpdg_dedx_nosmear.pdf	Figures/PID-MC-Data/SBND_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_bkdwnpdg_dedx_nosmear.pdf
 pid/nominal/pdf/SBND_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_bkdwnpdg_dedx_smear1x.pdf	Figures/PID-MC-Data/SBND_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_bkdwnpdg_dedx_smear1x.pdf
 pid/nominal/pdf/SBND_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_bkdwnpdg_dedx_smear2x.pdf	Figures/PID-MC-Data/SBND_nominal_simplecosrej_trkqual_nop_mu_chi2_of_mu_cand_bkdwnpdg_dedx_smear2x.pdf
@@ -197,32 +250,33 @@ pid/nominal/pdf/SBND_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkd
 pid/nominal/pdf/SBND_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift2.pdf	Figures/PID-MC-Data/SBND_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift2.pdf
 pid/nominal/pdf/SBND_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift3.pdf	Figures/PID-MC-Data/SBND_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift3.pdf
 pid/nominal/pdf/SBND_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift4.pdf	Figures/PID-MC-Data/SBND_nominal_simplecosrej_trkqual_nop_prot_chi2_of_prot_cand_bkdwnpdg_nominal_pthetadrift4.pdf
-signalbox/pdf/ICARUS_altsamples.pdf	Figures/Signal-Box-Systematics/ICARUS_altsamples.pdf
-signalbox/pdf/ICARUS_mu_chi2_of_mu_cand_variations.pdf	Figures/Signal-Box-Systematics/ICARUS_mu_chi2_of_mu_cand_variations.pdf
-signalbox/pdf/ICARUS_mu_chi2_of_prot_cand_variations.pdf	Figures/Signal-Box-Systematics/ICARUS_mu_chi2_of_prot_cand_variations.pdf
-signalbox/pdf/ICARUS_prot_chi2_of_mu_cand_variations.pdf	Figures/Signal-Box-Systematics/ICARUS_prot_chi2_of_mu_cand_variations.pdf
-signalbox/pdf/ICARUS_prot_chi2_of_prot_cand_variations.pdf	Figures/Signal-Box-Systematics/ICARUS_prot_chi2_of_prot_cand_variations.pdf
-signalbox/pdf/ICARUS_signalbox_systematics.pdf	Figures/Signal-Box-Systematics/ICARUS_signalbox_systematics.pdf
-signalbox/pdf/ICARUS_signalbox_systematics_trueE_uncorr.pdf	Figures/Signal-Box-Systematics/ICARUS_signalbox_systematics_trueE_uncorr.pdf
-signalbox/pdf/ICARUS_signalbox_systematics_uncorr.pdf	Figures/Signal-Box-Systematics/ICARUS_signalbox_systematics_uncorr.pdf
-signalbox/pdf/SBND_altsamples.pdf	Figures/Signal-Box-Systematics/SBND_altsamples.pdf
-signalbox/pdf/SBND_mu_chi2_of_mu_cand_variations.pdf	Figures/Signal-Box-Systematics/SBND_mu_chi2_of_mu_cand_variations.pdf
-signalbox/pdf/SBND_mu_chi2_of_prot_cand_variations.pdf	Figures/Signal-Box-Systematics/SBND_mu_chi2_of_prot_cand_variations.pdf
-signalbox/pdf/SBND_prot_chi2_of_mu_cand_variations.pdf	Figures/Signal-Box-Systematics/SBND_prot_chi2_of_mu_cand_variations.pdf
-signalbox/pdf/SBND_prot_chi2_of_prot_cand_variations.pdf	Figures/Signal-Box-Systematics/SBND_prot_chi2_of_prot_cand_variations.pdf
-signalbox/pdf/SBND_signalbox_systematics.pdf	Figures/Signal-Box-Systematics/SBND_signalbox_systematics.pdf
-signalbox/pdf/SBND_signalbox_systematics_trueE_uncorr.pdf	Figures/Signal-Box-Systematics/SBND_signalbox_systematics_trueE_uncorr.pdf
-signalbox/pdf/SBND_signalbox_systematics_uncorr.pdf	Figures/Signal-Box-Systematics/SBND_signalbox_systematics_uncorr.pdf
-signalbox/pdf/condconstraint_signalbox_systematics.pdf	Figures/Signal-Box-Systematics/condconstraint_signalbox_systematics.pdf
-signalbox/pdf/condconstraint_signalbox_systematics_trueE.pdf	Figures/Signal-Box-Systematics/condconstraint_signalbox_systematics_trueE.pdf
-signalbox/pdf/detector_correlation.pdf	Figures/Signal-Box-Systematics/detector_correlation.pdf
-signalbox/pdf/flux_correlation.pdf	Figures/Signal-Box-Systematics/flux_correlation.pdf
-signalbox/pdf/g4_correlation.pdf	Figures/Signal-Box-Systematics/g4_correlation.pdf
-signalbox/pdf/ratio_signalbox_systematics.pdf	Figures/Signal-Box-Systematics/ratio_signalbox_systematics.pdf
-signalbox/pdf/ratio_signalbox_systematics_trueE.pdf	Figures/Signal-Box-Systematics/ratio_signalbox_systematics_trueE.pdf
-signalbox/pdf/xsec_correlation.pdf	Figures/Signal-Box-Systematics/xsec_correlation.pdf
-tracksplit/pdf/ICARUS-Run2_gump_west_f_vs_theta.pdf	Figures/Track-Splitting/ICARUS-Run2_gump_west_f_vs_theta.pdf
-tracksplit/pdf/ICARUS-Run2_gump_z0_f_vs_theta.pdf	Figures/Track-Splitting/ICARUS-Run2_gump_z0_f_vs_theta.pdf
+signalbox/1p/pdf/ICARUS_altsamples.pdf	Figures/Signal-Box-Systematics/1p/ICARUS_altsamples.pdf
+signalbox/1p/pdf/ICARUS_mu_chi2_of_mu_cand_variations.pdf	Figures/Signal-Box-Systematics/1p/ICARUS_mu_chi2_of_mu_cand_variations.pdf
+signalbox/1p/pdf/ICARUS_mu_chi2_of_prot_cand_variations.pdf	Figures/Signal-Box-Systematics/1p/ICARUS_mu_chi2_of_prot_cand_variations.pdf
+signalbox/1p/pdf/ICARUS_prot_chi2_of_mu_cand_variations.pdf	Figures/Signal-Box-Systematics/1p/ICARUS_prot_chi2_of_mu_cand_variations.pdf
+signalbox/1p/pdf/ICARUS_prot_chi2_of_prot_cand_variations.pdf	Figures/Signal-Box-Systematics/1p/ICARUS_prot_chi2_of_prot_cand_variations.pdf
+signalbox/1p/pdf/ICARUS_signalbox_systematics.pdf	Figures/Signal-Box-Systematics/1p/ICARUS_signalbox_systematics.pdf
+signalbox/1p/pdf/ICARUS_signalbox_systematics_trueE_uncorr.pdf	Figures/Signal-Box-Systematics/1p/ICARUS_signalbox_systematics_trueE_uncorr.pdf
+signalbox/1p/pdf/ICARUS_signalbox_systematics_uncorr.pdf	Figures/Signal-Box-Systematics/1p/ICARUS_signalbox_systematics_uncorr.pdf
+signalbox/1p/pdf/ICARUSr2_Trig_variations.pdf	Figures/Signal-Box-Systematics/1p/ICARUSr2_Trig_variations.pdf
+signalbox/1p/pdf/ICARUSr4_Trig_variations.pdf	Figures/Signal-Box-Systematics/1p/ICARUSr4_Trig_variations.pdf
+signalbox/1p/pdf/SBND_Trig_variations.pdf	Figures/Signal-Box-Systematics/1p/SBND_Trig_variations.pdf
+signalbox/1p/pdf/SBND_altsamples.pdf	Figures/Signal-Box-Systematics/1p/SBND_altsamples.pdf
+signalbox/1p/pdf/SBND_mu_chi2_of_mu_cand_variations.pdf	Figures/Signal-Box-Systematics/1p/SBND_mu_chi2_of_mu_cand_variations.pdf
+signalbox/1p/pdf/SBND_mu_chi2_of_prot_cand_variations.pdf	Figures/Signal-Box-Systematics/1p/SBND_mu_chi2_of_prot_cand_variations.pdf
+signalbox/1p/pdf/SBND_prot_chi2_of_mu_cand_variations.pdf	Figures/Signal-Box-Systematics/1p/SBND_prot_chi2_of_mu_cand_variations.pdf
+signalbox/1p/pdf/SBND_prot_chi2_of_prot_cand_variations.pdf	Figures/Signal-Box-Systematics/1p/SBND_prot_chi2_of_prot_cand_variations.pdf
+signalbox/1p/pdf/SBND_signalbox_systematics.pdf	Figures/Signal-Box-Systematics/1p/SBND_signalbox_systematics.pdf
+signalbox/1p/pdf/SBND_signalbox_systematics_trueE_uncorr.pdf	Figures/Signal-Box-Systematics/1p/SBND_signalbox_systematics_trueE_uncorr.pdf
+signalbox/1p/pdf/SBND_signalbox_systematics_uncorr.pdf	Figures/Signal-Box-Systematics/1p/SBND_signalbox_systematics_uncorr.pdf
+signalbox/1p/pdf/condconstraint_signalbox_systematics.pdf	Figures/Signal-Box-Systematics/1p/condconstraint_signalbox_systematics.pdf
+signalbox/1p/pdf/condconstraint_signalbox_systematics_trueE.pdf	Figures/Signal-Box-Systematics/1p/condconstraint_signalbox_systematics_trueE.pdf
+signalbox/1p/pdf/ratio_signalbox_systematics.pdf	Figures/Signal-Box-Systematics/1p/ratio_signalbox_systematics.pdf
+signalbox/1p/pdf/ratio_signalbox_systematics_trueE.pdf	Figures/Signal-Box-Systematics/1p/ratio_signalbox_systematics_trueE.pdf
+signalbox/joint/pdf/joint_detector_correlation.pdf	Figures/Signal-Box-Systematics/joint/joint_detector_correlation.pdf
+signalbox/joint/pdf/joint_flux_correlation.pdf	Figures/Signal-Box-Systematics/joint/joint_flux_correlation.pdf
+signalbox/joint/pdf/joint_g4_correlation.pdf	Figures/Signal-Box-Systematics/joint/joint_g4_correlation.pdf
+signalbox/joint/pdf/joint_xsec_correlation.pdf	Figures/Signal-Box-Systematics/joint/joint_xsec_correlation.pdf
 tracksplit/pdf/ICARUS-Run2_simple_west_muend_zoom.pdf	Figures/Track-Splitting/ICARUS-Run2_simple_west_muend_zoom.pdf
 tracksplit/pdf/ICARUS-Run2_simple_west_muend_zoom_th0.pdf	Figures/Track-Splitting/ICARUS-Run2_simple_west_muend_zoom_th0.pdf
 tracksplit/pdf/ICARUS-Run2_simple_west_muend_zoom_th1.pdf	Figures/Track-Splitting/ICARUS-Run2_simple_west_muend_zoom_th1.pdf
@@ -233,18 +287,91 @@ tracksplit/pdf/ICARUS-Run2_simple_z0_muend_zoom_th0.pdf	Figures/Track-Splitting/
 tracksplit/pdf/ICARUS-Run2_simple_z0_muend_zoom_th1.pdf	Figures/Track-Splitting/ICARUS-Run2_simple_z0_muend_zoom_th1.pdf
 tracksplit/pdf/ICARUS-Run2_simple_z0_muend_zoom_th2.pdf	Figures/Track-Splitting/ICARUS-Run2_simple_z0_muend_zoom_th2.pdf
 tracksplit/pdf/ICARUS-Run2_simple_z0_muend_zoom_th3.pdf	Figures/Track-Splitting/ICARUS-Run2_simple_z0_muend_zoom_th3.pdf
+tracksplit/pdf/ICARUS-Run4_simple_east_f_vs_theta.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_east_f_vs_theta.pdf
 tracksplit/pdf/ICARUS-Run4_simple_east_muend_zoom.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_east_muend_zoom.pdf
+tracksplit/pdf/ICARUS-Run4_simple_east_muend_zoom_th0.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_east_muend_zoom_th0.pdf
+tracksplit/pdf/ICARUS-Run4_simple_east_muend_zoom_th1.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_east_muend_zoom_th1.pdf
+tracksplit/pdf/ICARUS-Run4_simple_east_muend_zoom_th2.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_east_muend_zoom_th2.pdf
+tracksplit/pdf/ICARUS-Run4_simple_east_muend_zoom_th3.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_east_muend_zoom_th3.pdf
 tracksplit/pdf/ICARUS-Run4_simple_west_muend_zoom.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_west_muend_zoom.pdf
+tracksplit/pdf/ICARUS-Run4_simple_west_muend_zoom_th0.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_west_muend_zoom_th0.pdf
+tracksplit/pdf/ICARUS-Run4_simple_west_muend_zoom_th1.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_west_muend_zoom_th1.pdf
+tracksplit/pdf/ICARUS-Run4_simple_west_muend_zoom_th2.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_west_muend_zoom_th2.pdf
+tracksplit/pdf/ICARUS-Run4_simple_west_muend_zoom_th3.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_west_muend_zoom_th3.pdf
 tracksplit/pdf/ICARUS-Run4_simple_z0_muend_zoom.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_z0_muend_zoom.pdf
+tracksplit/pdf/ICARUS-Run4_simple_z0_muend_zoom_th0.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_z0_muend_zoom_th0.pdf
+tracksplit/pdf/ICARUS-Run4_simple_z0_muend_zoom_th1.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_z0_muend_zoom_th1.pdf
+tracksplit/pdf/ICARUS-Run4_simple_z0_muend_zoom_th2.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_z0_muend_zoom_th2.pdf
+tracksplit/pdf/ICARUS-Run4_simple_z0_muend_zoom_th3.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_z0_muend_zoom_th3.pdf
+tracksplit/pdf/tracksplit_simple_west_f_vs_theta_run2run4.pdf	Figures/Track-Splitting/tracksplit_simple_west_f_vs_theta_run2run4.pdf
+tracksplit/pdf/tracksplit_simple_z0_f_vs_theta_run2run4.pdf	Figures/Track-Splitting/tracksplit_simple_z0_f_vs_theta_run2run4.pdf
 tracksplit/pdf/tracksplit_summary_simple.pdf	Figures/Track-Splitting/tracksplit_summary_simple.pdf
-selection/png/cut_breakdown_cosmic.png	Figures/cut_stuff/cosmic_cut.png
-selection/png/signalbox_del_p_near_far.png	Figures/cut_stuff/del_p_ratio.png
-selection/png/signalbox_nu_E_calo_hidp_near_far.png	Figures/cut_stuff/e_reco_hi_delp.png
-selection/png/signalbox_nu_E_calo_lodp_near_far.png	Figures/cut_stuff/e_reco_low_delp.png
-selection/png/signalbox_nu_E_calo_middp_near_far.png	Figures/cut_stuff/e_reco_med_delp.png
-selection/png/signalbox_nu_E_calo_near_far.png	Figures/cut_stuff/e_reco_ratio.png
-selection/png/efficiency.png	Figures/cut_stuff/eff.png
-selection/png/cut_breakdown_mu_cand.png	Figures/cut_stuff/mu_cand.png
-selection/png/cut_breakdown_mu_len.png	Figures/cut_stuff/mu_len.png
-selection/png/cut_breakdown_p_cand.png	Figures/cut_stuff/p_cand.png
-selection/png/cut_breakdown_track_score.png	Figures/cut_stuff/track_score.png
+tracksplit/pdf/ICARUS-Run2_simple_z0_muend_split.pdf	Figures/Track-Splitting/ICARUS-Run2_simple_z0_muend_split.pdf
+tracksplit/pdf/ICARUS-Run2_simple_west_muend_split.pdf	Figures/Track-Splitting/ICARUS-Run2_simple_west_muend_split.pdf
+tracksplit/pdf/ICARUS-Run4_simple_z0_muend_split.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_z0_muend_split.pdf
+tracksplit/pdf/ICARUS-Run4_simple_west_muend_split.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_west_muend_split.pdf
+tracksplit/pdf/ICARUS-Run4_simple_east_muend_split.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_east_muend_split.pdf
+tracksplit/pdf/ICARUS-Run4_simple_z0_muend_split_eastcryo.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_z0_muend_split_eastcryo.pdf
+tracksplit/pdf/ICARUS-Run4_simple_z0_muend_split_westcryo.pdf	Figures/Track-Splitting/ICARUS-Run4_simple_z0_muend_split_westcryo.pdf
+selection/1p/png/cut_breakdown_cosmic.png	Figures/cut_stuff/cosmic_cut.png
+selection/1p/png/signalbox_del_p_near_far.png	Figures/cut_stuff/del_p_ratio.png
+selection/1p/png/signalbox_nu_E_calo_hidp_near_far.png	Figures/cut_stuff/e_reco_hi_delp.png
+selection/1p/png/signalbox_nu_E_calo_lodp_near_far.png	Figures/cut_stuff/e_reco_low_delp.png
+selection/1p/png/signalbox_nu_E_calo_middp_near_far.png	Figures/cut_stuff/e_reco_med_delp.png
+selection/1p/png/signalbox_nu_E_calo_near_far.png	Figures/cut_stuff/e_reco_ratio.png
+selection/1p/png/cut_breakdown_mu_cand.png	Figures/cut_stuff/mu_cand.png
+selection/1p/png/cut_breakdown_mu_len.png	Figures/cut_stuff/mu_len.png
+selection/1p/png/cut_breakdown_p_cand.png	Figures/cut_stuff/p_cand.png
+selection/1p/png/cut_breakdown_track_score.png	Figures/cut_stuff/track_score.png
+pot/SBND_pot.pdf	Figures/DataQuality/SBND_pot.pdf
+pot/ICARUS-Run2_pot.pdf	Figures/DataQuality/ICARUS-Run2_pot.pdf
+pot/ICARUS-Run4_pot.pdf	Figures/DataQuality/ICARUS-Run4_pot.pdf
+stability/pdf/SBND_stability_date.pdf	Figures/DataQuality/SBND_stability_date.pdf
+stability/pdf/SBND_1p_stability_date.pdf	Figures/DataQuality/SBND_1p_stability_date.pdf
+stability/pdf/SBND_Mp_stability_date.pdf	Figures/DataQuality/SBND_Mp_stability_date.pdf
+stability/pdf/ICARUS-Run2_stability_date.pdf	Figures/DataQuality/ICARUS-Run2_stability_date.pdf
+stability/pdf/ICARUS-Run2_1p_stability_date.pdf	Figures/DataQuality/ICARUS-Run2_1p_stability_date.pdf
+stability/pdf/ICARUS-Run2_Mp_stability_date.pdf	Figures/DataQuality/ICARUS-Run2_Mp_stability_date.pdf
+stability/pdf/ICARUS-Run4_stability_date.pdf	Figures/DataQuality/ICARUS-Run4_stability_date.pdf
+stability/pdf/ICARUS-Run4_1p_stability_date.pdf	Figures/DataQuality/ICARUS-Run4_1p_stability_date.pdf
+stability/pdf/ICARUS-Run4_Mp_stability_date.pdf	Figures/DataQuality/ICARUS-Run4_Mp_stability_date.pdf
+stability/pdf/ICARUS-West-Run2+4_stability_date.pdf	Figures/DataQuality/ICARUS-West-Run2+4_stability_date.pdf
+stability/pdf/ICARUS-West-Run2+4_1p_stability_date.pdf	Figures/DataQuality/ICARUS-West-Run2+4_1p_stability_date.pdf
+stability/pdf/ICARUS-West-Run2+4_Mp_stability_date.pdf	Figures/DataQuality/ICARUS-West-Run2+4_Mp_stability_date.pdf
+cvwgt/pdf/ICARUS_1p_cvwgt_impact.pdf	Figures/CV-Weights/ICARUS_1p_cvwgt_impact.pdf
+cvwgt/pdf/ICARUS_mp_cvwgt_impact.pdf	Figures/CV-Weights/ICARUS_mp_cvwgt_impact.pdf
+cvwgt/pdf/SBND_1p_cvwgt_impact.pdf	Figures/CV-Weights/SBND_1p_cvwgt_impact.pdf
+cvwgt/pdf/SBND_mp_cvwgt_impact.pdf	Figures/CV-Weights/SBND_mp_cvwgt_impact.pdf
+signalbox/joint/pdf/condconstraint_joint_ICARUS1p.pdf	Figures/Signal-Box-Systematics/joint/condconstraint_joint_ICARUS1p.pdf
+signalbox/joint/pdf/condconstraint_joint_ICARUS1p_trueE.pdf	Figures/Signal-Box-Systematics/joint/condconstraint_joint_ICARUS1p_trueE.pdf
+signalbox/joint/pdf/condconstraint_joint_ICARUSMp.pdf	Figures/Signal-Box-Systematics/joint/condconstraint_joint_ICARUSMp.pdf
+signalbox/joint/pdf/condconstraint_joint_ICARUSMp_trueE.pdf	Figures/Signal-Box-Systematics/joint/condconstraint_joint_ICARUSMp_trueE.pdf
+signalbox/mp/pdf/ICARUS_signalbox_systematics.pdf	Figures/Signal-Box-Systematics/mp/ICARUS_signalbox_systematics.pdf
+signalbox/mp/pdf/ICARUS_signalbox_systematics_trueE_uncorr.pdf	Figures/Signal-Box-Systematics/mp/ICARUS_signalbox_systematics_trueE_uncorr.pdf
+signalbox/mp/pdf/ICARUS_signalbox_systematics_uncorr.pdf	Figures/Signal-Box-Systematics/mp/ICARUS_signalbox_systematics_uncorr.pdf
+signalbox/mp/pdf/SBND_signalbox_systematics.pdf	Figures/Signal-Box-Systematics/mp/SBND_signalbox_systematics.pdf
+signalbox/mp/pdf/SBND_signalbox_systematics_trueE_uncorr.pdf	Figures/Signal-Box-Systematics/mp/SBND_signalbox_systematics_trueE_uncorr.pdf
+signalbox/mp/pdf/SBND_signalbox_systematics_uncorr.pdf	Figures/Signal-Box-Systematics/mp/SBND_signalbox_systematics_uncorr.pdf
+signalbox/mp/pdf/condconstraint_signalbox_systematics.pdf	Figures/Signal-Box-Systematics/mp/condconstraint_signalbox_systematics.pdf
+signalbox/mp/pdf/condconstraint_signalbox_systematics_trueE.pdf	Figures/Signal-Box-Systematics/mp/condconstraint_signalbox_systematics_trueE.pdf
+signalbox/mp/pdf/ratio_signalbox_systematics.pdf	Figures/Signal-Box-Systematics/mp/ratio_signalbox_systematics.pdf
+signalbox/mp/pdf/ratio_signalbox_systematics_trueE.pdf	Figures/Signal-Box-Systematics/mp/ratio_signalbox_systematics_trueE.pdf
+flashpe_fit/flashonly/pdf/ICARUS-Run2_flash_totalpe.pdf	Figures/Trigger-Systematic/AllTriggers/ICARUS-Run2_flash_totalpe.pdf
+flashpe_fit/flashonly/pdf/ICARUS-Run4_flash_totalpe.pdf	Figures/Trigger-Systematic/AllTriggers/ICARUS-Run4_flash_totalpe.pdf
+flashpe_fit/flashonly/pdf/SBND_flash_totalpe.pdf	Figures/Trigger-Systematic/AllTriggers/SBND_flash_totalpe.pdf
+flashpe_fit/gumple/pdf/ICARUS-Run2_flash_totalpe.pdf	Figures/Trigger-Systematic/Contained/ICARUS-Run2_flash_totalpe.pdf
+flashpe_fit/gumple/pdf/ICARUS-Run4_flash_totalpe.pdf	Figures/Trigger-Systematic/Contained/ICARUS-Run4_flash_totalpe.pdf
+flashpe_fit/gumple/pdf/SBND_flash_totalpe.pdf	Figures/Trigger-Systematic/Contained/SBND_flash_totalpe.pdf
+flashpe_vs_trueE/pdf/ICARUS-Run2_trueE_vs_flashpe.pdf	Figures/Trigger-Systematic/ICARUS-Run2_trueE_vs_flashpe.pdf
+flashpe_vs_trueE/pdf/ICARUS-Run4_trueE_vs_flashpe.pdf	Figures/Trigger-Systematic/ICARUS-Run4_trueE_vs_flashpe.pdf
+flashpe_vs_trueE/pdf/SBND_trueE_vs_flashpe.pdf	Figures/Trigger-Systematic/SBND_trueE_vs_flashpe.pdf
+sbndtracksplit/pdf/SBND_simple_east_apa_muend_zoom_th0.pdf	Figures/Track-Splitting/SBND_simple_east_apa_muend_zoom_th0.pdf
+sbndtracksplit/pdf/SBND_simple_east_apa_muend_zoom_th1.pdf	Figures/Track-Splitting/SBND_simple_east_apa_muend_zoom_th1.pdf
+sbndtracksplit/pdf/SBND_simple_east_apa_muend_zoom_th2.pdf	Figures/Track-Splitting/SBND_simple_east_apa_muend_zoom_th2.pdf
+sbndtracksplit/pdf/SBND_simple_east_apa_muend_zoom_th3.pdf	Figures/Track-Splitting/SBND_simple_east_apa_muend_zoom_th3.pdf
+sbndtracksplit/pdf/SBND_simple_west_apa_muend_zoom_th0.pdf	Figures/Track-Splitting/SBND_simple_west_apa_muend_zoom_th0.pdf
+sbndtracksplit/pdf/SBND_simple_west_apa_muend_zoom_th1.pdf	Figures/Track-Splitting/SBND_simple_west_apa_muend_zoom_th1.pdf
+sbndtracksplit/pdf/SBND_simple_west_apa_muend_zoom_th2.pdf	Figures/Track-Splitting/SBND_simple_west_apa_muend_zoom_th2.pdf
+sbndtracksplit/pdf/SBND_simple_west_apa_muend_zoom_th3.pdf	Figures/Track-Splitting/SBND_simple_west_apa_muend_zoom_th3.pdf
+sbndtracksplit/pdf/SBND_tracksplit_simple_f_vs_theta_tpc.pdf	Figures/Track-Splitting/SBND_tracksplit_simple_f_vs_theta_tpc.pdf
+sbndtracksplit/pdf/SBND_tracksplit_summary_tpc.pdf	Figures/Track-Splitting/SBND_tracksplit_summary_tpc.pdf
