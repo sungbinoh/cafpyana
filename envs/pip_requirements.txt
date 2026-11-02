@@ -20,3 +20,4 @@ xrootd
 fsspec-xrootd
 multiprocess
 more-itertools
+lightgbm==4.7.0

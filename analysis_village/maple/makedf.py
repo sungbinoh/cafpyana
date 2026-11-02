@@ -72,6 +72,7 @@ from makedf import chi2pid
 from analysis_village.gump.kinematics import *
 import analysis_village.gumple.gumple_cuts as gmpl
 from analysis_village.maple import chi2pid_cafana
+from analysis_village.maple.coltopo import coltopo_scores
 from makedf.branches import (
     crtpmtbranches, shwbranches, trkbranch,
     mcbranches, mcprimbranches, mcprimvisEbranches, trueparticlebranches,
@@ -1159,12 +1160,15 @@ def _mu_endhits(trkhitdf, mu_ilocs, rr_max=MU_ENDHIT_RR_MAX):
 # Main evt builder
 # =====================================================================
 def make_maple_evt_df(f, selection="none", do_calo_syst=True, use_chi2=True, do_alt_chi2=False,
-                      do_cafana_chi2=False, do_ind_chi2=False, save_mu_endhits=False):
+                      do_cafana_chi2=False, do_ind_chi2=False, save_mu_endhits=False, do_coltopo=True):
     # use_chi2: muon-candidate selection behavior -- True (default) picks the
     # legacy-GUMP min-chi2u/chi2p-ratio track (len > 40 cm), False the
     # longest chi2-free base-mask track (see _find_candidates).
     # save_mu_endhits: also stash the muon candidate's last-25cm hit positions
     # for make_maple_mu_endhit_df (which must follow this builder in DFS).
+    # do_coltopo: add the muon candidate's end-point topology BDT score
+    # coltopo_trkscore (and the ang2_med-shifted coltopo_trkscore_a2shift, MC
+    # only), computed from the same end hits (see coltopo.py).
     # Get a slice level df (S) a pfp level df (P) and some meta-data
     S, P, DETECTOR, RUN, ismc = fetch_info(f)
 
@@ -1194,7 +1198,7 @@ def make_maple_evt_df(f, selection="none", do_calo_syst=True, use_chi2=True, do_
     S, mu_ilocs = fetch_candidates(S, P, do_calo_syst, use_chi2=use_chi2, do_alt_chi2=do_alt_chi2,
                                    do_cafana_chi2=do_cafana_chi2, do_ind_chi2=do_ind_chi2,
                                    return_mu_ilocs=True)
-    if save_mu_endhits:
+    if save_mu_endhits or do_coltopo:
         mu_endhits = _mu_endhits(trkhitdf, mu_ilocs)
     del trkhitdf
 
@@ -1252,10 +1256,18 @@ def make_maple_evt_df(f, selection="none", do_calo_syst=True, use_chi2=True, do_
     else:
         raise ValueError("selection must be 'none', 'presel', or 'full'")
 
-    if save_mu_endhits:
-        # keep only the hits of slices surviving the selection; one file at a
-        # time per process, so drop anything left over from a previous file
+    if save_mu_endhits or do_coltopo:
+        # keep only the hits of slices surviving the selection
         keep = mu_endhits.index.droplevel(-1).isin(S.index)
+    if do_coltopo:
+        # slices without a muon candidate (or without end hits) get NaN
+        C = coltopo_scores(mu_endhits[keep], DETECTOR, ismc)
+        S = S.copy()
+        for c in C.columns:
+            S[c] = C[c].reindex(S.index).to_numpy()
+    if save_mu_endhits:
+        # one file at a time per process, so drop anything left over from a
+        # previous file
         _MU_ENDHIT_CACHE.clear()
         _MU_ENDHIT_CACHE[f.file_path] = mu_endhits[keep]
 
