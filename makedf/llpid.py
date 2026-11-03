@@ -62,7 +62,7 @@ EULER = 0.5772156649015329
 
 
 def likelihood(hitdfs, dedxname="dedx", rrcorr=True, params=None, hyps=HYPS):
-    """Function to run the full likelihood analysis, with/without rr corrections, and all parameters in config"""
+    """Function to run the full likelihood analysis, with/without rr corrections, and all parameters in config dict."""
 
     #Set parameters and read in data from planes/tracks
     params = LLPID_PARAMS if params is None else params
@@ -75,10 +75,13 @@ def likelihood(hitdfs, dedxname="dedx", rrcorr=True, params=None, hyps=HYPS):
 
     planes = [_prepare_plane(df, tracks, _plane_of(df, i, len(frames)), dedxname, params)  for i, df in enumerate(frames)]
     
-    # one rr_max per track over all planes, so a reversed fit flips every plane about the same point
-    rr_max = np.nanmax([_per_track_max(h, h["rr"]) for h in planes], axis=0)
+    # one rr_max per track shared by all planes, so a reversed fit flips every plane about the same point.
+    # median of the per-plane maxima: one plane with stray hits past the track end can't move it
+    rr_max = np.nanmedian([_per_track_max(h, h["rr"]) for h in planes], axis=0)
     for h in planes:
         h["rr_max"] = rr_max[h["tid"]]
+        h["usable"] = _usable_hits(h, params)          # usable depends on rr_max (end windows), recompute
+        h["n_usable"] = _per_track_sum(h, h["usable"])
 
     n_hits = sum(h["n_usable"] for h in planes)
 
