@@ -2,10 +2,10 @@
 """Truth-level look at the NC Delta -> N gamma signal and the NC pi0 background.
 
 Input: .df files (or directories of them) with an "mcnu" table: one row per
-true neutrino with the make_ncdeltawc_truthdf columns. Tables from
-configs/wc_candidates_mc.py (make_truth.py) also have photon gaps, the pi0
-decay photons and the leading proton; their pages are added when those
-columns exist. Only neutrinos with a true vertex in the active volume count.
+true neutrino with the make_ncdeltawc_truthdf columns, e.g. from
+configs/wc_candidates_mc.py. Tables made by make_truth.py also have photon
+gaps, the pi0 decay photons and the leading proton; their page is added when
+those columns exist. Only neutrinos with a true vertex in the active volume count.
 
   signal   cuts.is_signal, and a clean final state: exactly one photon above
            20 MeV, no charged pion above 30 MeV KE (0 pi0 is in is_signal)
@@ -131,19 +131,19 @@ def page_kinematics(pdf, S, pcol_label):
 def page_photons(pdf, S):
     """make_truth.py columns: gaps, pi0 photons, leading proton."""
     fig, axs = plt.subplots(2, 3, figsize=(14, 8))
-    hist(axs[0, 0], S, "g1_gap", np.linspace(0, 100, 41), "signal photon conversion gap [cm]", names=["1g0p", "1g1p"])
+    hist(axs[0, 0], S, "true_g1_gap", np.linspace(0, 100, 41), "signal photon conversion gap [cm]", names=["1g0p", "1g1p"])
     axs[0, 0].set_title("Signal photon gap (converts in TPC)", loc="left")
-    hist(axs[0, 1], S, ["pi0_g1_gap", "pi0_g2_gap"], np.linspace(0, 100, 41), "pi0 photon gap [cm]",
+    hist(axs[0, 1], S, ["true_pi0_g1_gap", "true_pi0_g2_gap"], np.linspace(0, 100, 41), "pi0 photon gap [cm]",
          names=["NC1pi0 0p", "NC1pi0 1p"])
     axs[0, 1].set_title("pi0 photon gap (both photons, converts in TPC)", loc="left")
-    hist(axs[0, 2], S, "pi0_g2_E", np.linspace(0, 400, 41), "pi0 sub-leading photon E [MeV]", scale=1000.,
+    hist(axs[0, 2], S, "true_pi0_g2_E", np.linspace(0, 400, 41), "pi0 sub-leading photon E [MeV]", scale=1000.,
          names=["NC1pi0 0p", "NC1pi0 1p"])
     axs[0, 2].set_title("pi0 sub-leading photon energy", loc="left")
-    hist(axs[1, 0], S, "pi0_open", np.linspace(0, 180, 37), "pi0 opening angle [deg]", names=["NC1pi0 0p", "NC1pi0 1p"])
+    hist(axs[1, 0], S, "true_pi0_open", np.linspace(0, 180, 37), "pi0 opening angle [deg]", names=["NC1pi0 0p", "NC1pi0 1p"])
     axs[1, 0].set_title("pi0 opening angle", loc="left")
-    hist(axs[1, 1], S, "pi0_asym", np.linspace(0, 1, 26), "pi0 (E1 - E2) / (E1 + E2)", names=["NC1pi0 0p", "NC1pi0 1p"])
+    hist(axs[1, 1], S, "true_pi0_asym", np.linspace(0, 1, 26), "pi0 (E1 - E2) / (E1 + E2)", names=["NC1pi0 0p", "NC1pi0 1p"])
     axs[1, 1].set_title("pi0 energy asymmetry", loc="left")
-    hist(axs[1, 2], S, "p1_KE", np.linspace(0, 600, 31), "leading proton KE [MeV]", scale=1000.,
+    hist(axs[1, 2], S, "true_p1_KE", np.linspace(0, 600, 31), "leading proton KE [MeV]", scale=1000.,
          names=["1g1p", "NC1pi0 1p"])
     axs[1, 2].set_title("Leading proton KE (1p samples)", loc="left")
     fig.tight_layout()
@@ -155,16 +155,16 @@ def summary(S, pot):
     print("POT %.3g" % pot)
     for name, d in S.items():
         print("  %-10s %7d  (%.1f per 1e20 POT)" % (name, len(d), len(d) / pot * 1e20))
-    if "g1_gap" in S["1g0p"]:
+    if "true_g1_gap" in S["1g0p"]:
         for name in ["1g0p", "1g1p"]:
-            g = S[name].g1_gap
+            g = S[name].true_g1_gap
             print("  %s gap: median %.1f cm, < 3 cm %.0f%%, lost/out of TPC %.0f%%" % (
                 name, g.median(), 100 * (g < 3).mean(), 100 * g.isna().mean()))
         for name in ["NC1pi0 0p", "NC1pi0 1p"]:
             d = S[name]
             print("  %s: E2 < 30 MeV %.0f%%, open < 20 deg %.0f%%, a photon leaves TPC %.0f%%" % (
-                name, 100 * (d.pi0_g2_E < 0.03).mean(), 100 * (d.pi0_open < 20).mean(),
-                100 * ((d.pi0_g1_lost > 0) | (d.pi0_g2_lost > 0)).mean()))
+                name, 100 * (d.true_pi0_g2_E < 0.03).mean(), 100 * (d.true_pi0_open < 20).mean(),
+                100 * ((d.true_pi0_g1_lost > 0) | (d.true_pi0_g2_lost > 0)).mean()))
 
 
 def main():
@@ -188,7 +188,7 @@ def main():
     out = os.path.join(args.outdir, "truth_study.pdf")
     with PdfPages(out) as pdf:
         figs = [page_topology(pdf, m, sig_all), page_kinematics(pdf, S, plab)]
-        if "g1_gap" in m:
+        if "true_g1_gap" in m:
             figs.append(page_photons(pdf, S))
         for i, fig in enumerate(figs):
             fig.savefig(os.path.join(args.outdir, "truth_%02d.png" % i), dpi=130)

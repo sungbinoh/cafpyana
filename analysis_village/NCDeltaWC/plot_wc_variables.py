@@ -37,7 +37,6 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-from analysis_village.NCDeltaWC.make_wc_candidates import make_wc_candidate_df  # noqa: E402
 
 COLOR = "#2a78d6"
 INK2 = "#52514e"
@@ -151,18 +150,51 @@ group("Segments and charge points", [
     ("shw_len_max", "Longest shower-like segment [cm]; NaN = no shower segment"),
     ("n_charge_points", "T_rec_charge fitted 3D points of the candidate"),
 ])
-group("MC truth (T_match level 3, T_truth_nu, T_pf)", [
+group("MC truth match (T_match level 3, T_pf)", [
     ("tmatch_idx", "Matched true neutrino (row of T_truth_nu = rec.mc.nu); -1 = none"),
     ("tmatch_iou_n", "Point IoU with the matched true interaction; partners ranked by this"),
     ("tmatch_iou_q", "Charge IoU with the matched true interaction"),
-    ("true_pdg", "Matched neutrino PDG: +-12 nue, +-14 numu"),
-    ("true_ccnc", "Matched neutrino: 0 = CC, 1 = NC"),
-    ("true_mode", "GENIE mode (0 QE, 1 RES, 2 DIS, 3 COH, 10 MEC)"),
-    ("true_E", "Matched neutrino true energy [GeV]"),
-    ("true_vtx_x true_vtx_y true_vtx_z", "Matched neutrino true vertex [cm]"),
     ("pf_n_nodes", "Nodes in the candidate's T_pf particle-flow tree"),
     ("pf_n_primary", "Primary nodes (depth 0)"),
     ("pf_n_pseudo", "Inferred pseudo-particles (photon of a gap shower, neutron of a detached proton)"),
+])
+group("Matched true neutrino (rec.mc.nu, GENIE)", [
+    ("true_pdg", "Neutrino PDG: +-12 nue, +-14 numu"),
+    ("true_iscc", "1 = CC"),
+    ("true_isnc", "1 = NC"),
+    ("true_genie_mode", "GENIE mode (0 QE, 1 RES, 2 DIS, 3 COH, 10 MEC)"),
+    ("true_resnum", "GENIE resonance; 0 = Delta(1232) (only meaningful for RES)"),
+    ("true_E", "True neutrino energy [GeV]"),
+    ("true_w", "Hadronic invariant mass W [GeV]"),
+    ("true_vtx_x true_vtx_y true_vtx_z", "True vertex [cm]"),
+    ("true_npi0", "Primary pi0s"),
+    ("true_ngamma", "Primary photons, any energy (incl. ~3-9 MeV nuclear de-excitation)"),
+    ("true_ngamma_20MeV true_ngamma_100MeV", "Primary photons above 20 / 100 MeV"),
+    ("true_leading_gamma_E", "Most energetic primary photon energy [GeV]"),
+    ("true_np", "Primary protons, any energy"),
+    ("true_np_20MeV true_np_35MeV true_np_50MeV", "Primary protons above 20 / 35 / 50 MeV kinetic energy"),
+    ("true_nn", "Primary neutrons"),
+    ("true_npi_30MeV", "Primary charged pions above 30 MeV kinetic energy"),
+    ("true_nmu_27MeV", "Primary muons above 27 MeV kinetic energy"),
+])
+group("Matched true photons, pi0 and proton (make_truth.py)", [
+    ("true_g1_E true_g2_E", "Leading / 2nd primary photon (> 20 MeV) energy [GeV]"),
+    ("true_g1_costh true_g2_costh", "Primary photon direction, cos(angle to beam)"),
+    ("true_g1_gap true_g2_gap", "Distance from creation to conversion [cm]; NaN unless made and ending in the TPC"),
+    ("true_g1_conv true_g2_conv", "1 = trajectory ends in pair conversion (0: photoabsorption)"),
+    ("true_g1_lost true_g2_lost", "1 = made in the TPC but leaves before it ends"),
+    ("true_p1_KE", "Leading primary proton kinetic energy [GeV]"),
+    ("true_p1_len", "Leading proton in-TPC track length [cm]"),
+    ("true_p1_costh", "Leading proton cos(angle to beam)"),
+    ("true_p1_cos_gp", "cos(angle) between leading photon and leading proton"),
+    ("true_pi0_E", "Leading primary pi0 total energy [GeV]"),
+    ("true_pi0_g1_E true_pi0_g2_E", "pi0 decay photons, leading / sub-leading energy [GeV]"),
+    ("true_pi0_g1_costh true_pi0_g2_costh", "pi0 decay photon cos(angle to beam)"),
+    ("true_pi0_g1_gap true_pi0_g2_gap", "pi0 decay photon conversion distance [cm]; NaN unless made and ending in the TPC"),
+    ("true_pi0_g1_conv true_pi0_g2_conv", "pi0 decay photon ends in pair conversion"),
+    ("true_pi0_g1_lost true_pi0_g2_lost", "pi0 decay photon leaves the TPC before it ends"),
+    ("true_pi0_open", "pi0 decay photon opening angle [deg]"),
+    ("true_pi0_asym", "pi0 energy asymmetry (E1 - E2) / (E1 + E2)"),
 ])
 
 
@@ -182,6 +214,8 @@ def read(files):
                 n = int(st["split"].n_split.iloc[0]) if "/split" in keys else 1
                 parts += [st["%s_%d" % (KEY, j)] for j in range(n) if "/%s_%d" % (KEY, j) in keys]
         else:
+            # imported here: makedf.makedf needs CVMFS, and .df inputs do not
+            from analysis_village.NCDeltaWC.make_wc_candidates import make_wc_candidate_df
             parts.append(make_wc_candidate_df(uproot.open(p)))
     return pd.concat(parts).reset_index() if parts else pd.DataFrame()
 

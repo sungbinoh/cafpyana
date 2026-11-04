@@ -6,16 +6,17 @@ columns it extends with:
 
   * true_np_35MeV, true_nn: proton count above the WC proton threshold,
     neutron count
-  * g1_* / g2_*: the two most energetic GENIE-primary photons. E [GeV],
+  * true_g1_* / true_g2_*: the two most energetic GENIE-primary photons. E [GeV],
     costh (to the beam, z), gap [cm], conv (end process is pair
     conversion), lost (born in the TPC, but it leaves before it ends)
-  * p1_*: the most energetic primary proton. KE [GeV], len [cm] (in-TPC
+  * true_p1_*: the most energetic primary proton. KE [GeV], len [cm] (in-TPC
     track length, NaN if it starts outside the TPC), costh,
     and cos_gp, the angle to g1
-  * pi0_*: the most energetic primary pi0 and its two decay photons
-    (Geant4 daughters, so from rec.true_particles). pi0_E, pi0_g1_* /
-    pi0_g2_* (leading / sub-leading photon, same leaves as g1_*),
-    pi0_open (opening angle, deg), pi0_asym = (E1 - E2) / (E1 + E2)
+  * true_pi0_*: the most energetic primary pi0 and its two decay photons
+    (Geant4 daughters, so from rec.true_particles). true_pi0_E,
+    true_pi0_g1_* / true_pi0_g2_* (leading / sub-leading photon, same leaves
+    as true_g1_*), true_pi0_open (opening angle, deg), true_pi0_asym =
+    (E1 - E2) / (E1 + E2)
 
 gap = distance from where the photon is made (the vertex, or the pi0 decay
 point, ~1e-6 cm from it) to where its trajectory ends: the pair conversion
@@ -124,4 +125,4 @@ def make_ncdeltawc_truthkinedf(f):
     cosop = (pg1[["dir_x", "dir_y", "dir_z"]] * pg2[["dir_x", "dir_y", "dir_z"]].reindex(pg1.index)).sum(axis=1, min_count=3)
     N["pi0_open"] = np.degrees(np.arccos(cosop.clip(-1, 1))).reindex(N.index)
     N["pi0_asym"] = (N.pi0_g1_E - N.pi0_g2_E) / (N.pi0_g1_E + N.pi0_g2_E)
-    return N
+    return N.rename(columns=lambda c: c if c.startswith("true_") or c in ("detector", "Run") else "true_" + c)

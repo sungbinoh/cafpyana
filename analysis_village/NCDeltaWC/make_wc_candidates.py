@@ -13,18 +13,22 @@ Everything Wire-Cell writes about a candidate in one row, for selection work:
     leading energies. The unclear-link leftover showers (== 3) are counted
     apart, n_unclear / E_unclear; kine_reco_Enu includes both.
   * segments (T_segment) and charge points (T_rec_charge): counts, lengths
-  * MC only: the matched true neutrino (true_*, from T_truth_nu via
-    tmatch_idx) and the T_pf tree size (pf_*). On data these columns are
-    absent.
+  * MC only: the matched true neutrino, every true_* column of
+    make_truth.make_ncdeltawc_truthkinedf (GENIE truth, photon gaps, pi0
+    decay photons, leading proton), joined on tmatch_idx; NaN for
+    candidates with no match (tmatch_idx < 0). Also the T_pf tree size
+    (pf_*). On data these columns are absent.
 
-Events without a candidate have no row; for efficiency denominators use a
-truth table (e.g. make_ncdeltawc_nudf).
+Events without a candidate have no row; for efficiency denominators use the
+truth table itself (the mcnu table of configs/wc_candidates_mc.py).
 """
 
 import numpy as np
 import pandas as pd
 
 from makedf import wirecell as wc
+
+from analysis_village.NCDeltaWC.make_truth import make_ncdeltawc_truthkinedf
 
 LEVELS = wc.WC_NU_LEVELS
 PID = {"em": 11, "muon": 13, "pion": 211, "proton": 2212, "nopid": 0}
@@ -108,9 +112,9 @@ def make_wc_candidate_df(f):
     D = D.join(_particles(f, D.index)).join(_segments(f, D.index)).join(_charge(f, D.index))
 
     if "tmatch_idx" in D:
-        t = wc.make_wc_truthnudf(f)[["pdg", "ccnc", "mode", "E", "vtx_x", "vtx_y", "vtx_z"]]
+        t = make_ncdeltawc_truthkinedf(f).drop(columns=["detector", "Run"])
         t.index.names = ["entry", "tmatch_idx"]
-        D = D.join(t.add_prefix("true_"), on=["entry", "tmatch_idx"])
+        D = D.join(t, on=["entry", "tmatch_idx"])
 
         pf = wc.make_wc_tabledf(f, "T_pf", ["nu_index", "depth", "is_pseudo"])
         pf = pf.reset_index("row", drop=True).set_index("nu_index", append=True)
