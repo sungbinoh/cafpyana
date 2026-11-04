@@ -44,6 +44,9 @@ directly from Python instead of the CLI: loading the data is the slow part.
 - **Units:** energies and momenta in **GeV**, lengths in cm, as in the CAF.
   The exceptions are per-length quantities, which keep the conventional
   MeV/cm: `shw_dedx_*` and `trk_pida`. Cut thresholds follow the same rule.
+- **PID columns:** `*_razzle_*` (shower e/gamma/other), `*_razzled_*` (PFP
+  e/mu/gamma/pi/p), `*_cnn_*` (hit-level CNN) and `shw_selvar_*` (shower
+  shape). Reconstructed, so usable in cuts; sentinel-bearing.
 - One row per slice. `shw_*` columns describe the leading primary shower and
   `trk_*` the leading primary track; NaN means none. `n_shw`, `n_trk` count
   primary showers and tracks; `n_nonprim_shw` counts non-primary showers.

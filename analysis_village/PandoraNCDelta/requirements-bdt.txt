@@ -1,0 +1,10 @@
+# BDT extras, on top of requirements.txt. Install with:
+#   pip install -r requirements-bdt.txt
+#   pip install --no-deps xgboost cloudpickle
+# xgboost is installed --no-deps on purpose: on Linux it declares
+# nvidia-nccl-cu12 (a few hundred MB of CUDA) unconditionally, and there is no
+# GPU here. CPU training is what we want for this sample size anyway.
+scikit-learn
+# --no-deps, see above:
+#   xgboost
+#   cloudpickle

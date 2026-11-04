@@ -83,6 +83,38 @@ def calo_energy(hitdf, dedxname="dedx"):
 
 
 # ---------------------------------------------------------------------------
+# PFP PID and shower shape
+# ---------------------------------------------------------------------------
+# Not in cafpyana's shared pfp branch list, so loaded here. razzled and
+# cnnscore run on every PFP; razzle is sentinel below its 50 MeV best-plane
+# energy threshold (sbncode sbn_pid.fcl) and selVars where the density fit
+# fails. These are the labels the CAF stage adds on top of reco2
+# (sbndcode cafmakerjob_sbnd.fcl, path runprod).
+RAZZLE_COLS = ["bestScore", "electronScore", "photonScore", "otherScore", "pdg"]
+SELVAR_COLS = ["densityGradient", "densityGradientPower", "trackLength", "trackWidth"]
+RAZZLED_COLS = ["bestScore", "electronScore", "muonScore", "photonScore",
+                "pionScore", "protonScore", "pdg"]
+CNN_COLS = ["shower", "track", "michel", "endmichel", "noise", "nclusters"]
+
+PFP_PID_BRANCHES = (["rec.slc.reco.pfp.shw.razzle." + c for c in RAZZLE_COLS]
+                    + ["rec.slc.reco.pfp.shw.selVars." + c for c in SELVAR_COLS]
+                    + ["rec.slc.reco.pfp.razzled." + c for c in RAZZLED_COLS]
+                    + ["rec.slc.reco.pfp.cnnscore." + c for c in CNN_COLS])
+
+# razzle and selVars describe a shower; razzled and cnnscore describe any PFP.
+TRK_PID_PREFIXES = ("razzled_", "cnn_")
+
+
+def _pid_table(f):
+    """Flat razzle / selVars / razzled / cnnscore columns, one row per PFP."""
+    p = loadbranches(f["recTree"], PFP_PID_BRANCHES).rec.slc.reco.pfp
+    p.columns = ["_".join(c for c in col if c) for col in p.columns]
+    p.columns = [c.replace("shw_razzle_", "razzle_").replace("shw_selVars_", "selvar_")
+                  .replace("cnnscore_", "cnn_") for c in p.columns]
+    return p
+
+
+# ---------------------------------------------------------------------------
 # Leading primary shower / track per slice
 # ---------------------------------------------------------------------------
 
@@ -95,7 +127,7 @@ def _leading(df, key, prefix):
     return lead
 
 
-def _shower_table(pfp):
+def _shower_table(pfp, pid):
     s = pfp.pfp.shw
     e = pd.concat([s.plane.I0.energy, s.plane.I1.energy, s.plane.I2.energy], axis=1)
     e_max = e.max(axis=1)
@@ -120,10 +152,10 @@ def _shower_table(pfp):
         "trackScore": pfp.pfp.trackScore,
         "true_pdg": s.truth.p.pdg,
         "true_startE": s.truth.p.startE,
-    }, index=pfp.index)
+    }, index=pfp.index).join(pid)
 
 
-def _track_table(pfp):
+def _track_table(pfp, pid):
     t = pfp.pfp.trk
     return pd.DataFrame({
         "start_x": t.start.x, "start_y": t.start.y, "start_z": t.start.z,
@@ -137,7 +169,8 @@ def _track_table(pfp):
         "trackScore": pfp.pfp.trackScore,
         "true_pdg": t.truth.p.pdg,
         "true_startE": t.truth.p.startE,
-    }, index=pfp.index)
+    }, index=pfp.index).join(pid[[c for c in pid.columns
+                                  if c.startswith(TRK_PID_PREFIXES)]])
 
 
 # ---------------------------------------------------------------------------
@@ -411,11 +444,12 @@ def make_ncdelta_slcdf(f, apply_preselection=True, include_truth=None):
         S = S[cuts.topology_cut(S)]
 
     # ---- leading shower (highest #GE#) and track (longest) ----
-    shw = _shower_table(pfp[is_shw])
+    pid = _pid_table(f)
+    shw = _shower_table(pfp[is_shw], pid)
     shw = _leading(shw[shw.index.droplevel(-1).isin(S.index)], "energy", "shw_")
-    trk = _track_table(pfp[is_trk])
+    trk = _track_table(pfp[is_trk], pid)
     trk = _leading(trk[trk.index.droplevel(-1).isin(S.index)], "len", "trk_")
-    del pfp
+    del pfp, pid
 
     D = S.join(shw, how="left").join(trk, how="left")
 
