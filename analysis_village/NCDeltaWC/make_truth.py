@@ -9,7 +9,8 @@ columns it extends with:
   * g1_* / g2_*: the two most energetic GENIE-primary photons. E [GeV],
     costh (to the beam, z), gap [cm], conv (end process is pair
     conversion), lost (born in the TPC, but it leaves before it ends)
-  * p1_*: the most energetic primary proton. KE [GeV], len [cm], costh,
+  * p1_*: the most energetic primary proton. KE [GeV], len [cm] (in-TPC
+    track length, NaN if it starts outside the TPC), costh,
     and cos_gp, the angle to g1
   * pi0_*: the most energetic primary pi0 and its two decay photons
     (Geant4 daughters, so from rec.true_particles). pi0_E, pi0_g1_* /
@@ -103,7 +104,7 @@ def make_ncdeltawc_truthkinedf(f):
 
     # leading proton
     p1 = _nth(prim[pdg == 2212], 0)
-    P = pd.DataFrame({"p1_KE": p1.genE - PROTON_MASS, "p1_len": p1.length, "p1_costh": p1.dir_z})
+    P = pd.DataFrame({"p1_KE": p1.genE - PROTON_MASS, "p1_len": p1.length.where(p1.start_x > NOPOS), "p1_costh": p1.dir_z})
     N = N.join(P)
     gp = (g1[["dir_x", "dir_y", "dir_z"]] * p1[["dir_x", "dir_y", "dir_z"]].reindex(g1.index)).sum(axis=1, min_count=3)
     N["p1_cos_gp"] = gp.reindex(N.index)
