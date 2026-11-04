@@ -7,8 +7,8 @@ configs/wc_candidates_mc.py. Tables made by make_truth.py also have photon
 gaps, the pi0 decay photons and the leading proton; their page is added when
 those columns exist. Only neutrinos with a true vertex in the active volume count.
 
-  signal   cuts.is_signal, and a clean final state: exactly one photon above
-           20 MeV, no charged pion above 30 MeV KE (0 pi0 is in is_signal)
+  signal   cuts.is_signal (one photon above 20 MeV, no pi0), and no charged
+           pion above 30 MeV KE
   NC 1pi0  NC, exactly one pi0, no charged pion above 30 MeV KE
 
 Both are split by the number of protons above PROTON_COL's threshold.
@@ -53,7 +53,7 @@ GENIE_MODES = {0: "QE", 1: "Res", 2: "DIS", 3: "Coh", 10: "MEC"}
 
 def samples(m, pcol):
     clean = (m.true_npi_30MeV == 0)
-    sig = cuts.is_signal(m) & (m.true_ngamma_20MeV == 1) & clean
+    sig = cuts.is_signal(m) & clean
     pi0 = (m.true_isnc == 1) & (m.true_npi0 == 1) & clean & cuts.true_in_active(m)
     np_ = m[pcol]
     return {"1g0p": m[sig & (np_ == 0)], "1g1p": m[sig & (np_ == 1)],
@@ -181,7 +181,7 @@ def main():
     pcol = args.proton_col or ("true_np_35MeV" if "true_np_35MeV" in m else "true_np_20MeV")
     plab = dict(PROTON_THRESHOLDS).get(pcol, pcol)
     S = samples(m, pcol)
-    sig_all = m[cuts.is_signal(m) & (m.true_ngamma_20MeV == 1) & (m.true_npi_30MeV == 0)]
+    sig_all = m[cuts.is_signal(m) & (m.true_npi_30MeV == 0)]
     summary(S, totals.pot.sum())
 
     os.makedirs(args.outdir, exist_ok=True)

@@ -72,14 +72,15 @@ def is_cosmic(df):
 
 
 def is_ncdelta_rad(df):
-    """NC Delta(1232) -> N gamma from GENIE truth.
+    """NC Delta(1232) -> N gamma with a single photon, from GENIE truth.
 
-    GENIE primaries include ~3 MeV nuclear de-excitation gammas, hence the
-    100 MeV photon.
+    Exactly one primary photon above 20 MeV: GENIE primaries also include
+    ~3-9 MeV nuclear de-excitation gammas, which do not shower. pi0 decay
+    photons are not GENIE primaries, hence npi0 == 0.
     """
     return ((df.true_isnc == 1)
             & (df.true_resnum == RESNUM_DELTA_1232)
-            & (df.true_ngamma_100MeV >= 1)
+            & (df.true_ngamma_20MeV == 1)
             & (df.true_npi0 == 0))
 
 
