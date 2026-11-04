@@ -158,44 +158,6 @@ group("MC truth match (T_match level 3, T_pf)", [
     ("pf_n_primary", "Primary nodes (depth 0)"),
     ("pf_n_pseudo", "Inferred pseudo-particles (photon of a gap shower, neutron of a detached proton)"),
 ])
-group("Matched true neutrino (rec.mc.nu, GENIE)", [
-    ("true_pdg", "Neutrino PDG: +-12 nue, +-14 numu"),
-    ("true_iscc", "1 = CC"),
-    ("true_isnc", "1 = NC"),
-    ("true_genie_mode", "GENIE mode (0 QE, 1 RES, 2 DIS, 3 COH, 10 MEC)"),
-    ("true_resnum", "GENIE resonance; 0 = Delta(1232) (only meaningful for RES)"),
-    ("true_E", "True neutrino energy [GeV]"),
-    ("true_w", "Hadronic invariant mass W [GeV]"),
-    ("true_vtx_x true_vtx_y true_vtx_z", "True vertex [cm]"),
-    ("true_npi0", "Primary pi0s"),
-    ("true_ngamma", "Primary photons, any energy (incl. ~3-9 MeV nuclear de-excitation)"),
-    ("true_ngamma_20MeV true_ngamma_100MeV", "Primary photons above 20 / 100 MeV"),
-    ("true_leading_gamma_E", "Most energetic primary photon energy [GeV]"),
-    ("true_np", "Primary protons, any energy"),
-    ("true_np_20MeV true_np_35MeV true_np_50MeV", "Primary protons above 20 / 35 / 50 MeV kinetic energy"),
-    ("true_nn", "Primary neutrons"),
-    ("true_npi_30MeV", "Primary charged pions above 30 MeV kinetic energy"),
-    ("true_nmu_27MeV", "Primary muons above 27 MeV kinetic energy"),
-])
-group("Matched true photons, pi0 and proton (make_truth.py)", [
-    ("true_g1_E true_g2_E", "Leading / 2nd primary photon (> 20 MeV) energy [GeV]"),
-    ("true_g1_costh true_g2_costh", "Primary photon direction, cos(angle to beam)"),
-    ("true_g1_gap true_g2_gap", "Distance from creation to conversion [cm]; NaN unless made and ending in the TPC"),
-    ("true_g1_conv true_g2_conv", "1 = trajectory ends in pair conversion (0: photoabsorption)"),
-    ("true_g1_lost true_g2_lost", "1 = made in the TPC but leaves before it ends"),
-    ("true_p1_KE", "Leading primary proton kinetic energy [GeV]"),
-    ("true_p1_len", "Leading proton in-TPC track length [cm]"),
-    ("true_p1_costh", "Leading proton cos(angle to beam)"),
-    ("true_p1_cos_gp", "cos(angle) between leading photon and leading proton"),
-    ("true_pi0_E", "Leading primary pi0 total energy [GeV]"),
-    ("true_pi0_g1_E true_pi0_g2_E", "pi0 decay photons, leading / sub-leading energy [GeV]"),
-    ("true_pi0_g1_costh true_pi0_g2_costh", "pi0 decay photon cos(angle to beam)"),
-    ("true_pi0_g1_gap true_pi0_g2_gap", "pi0 decay photon conversion distance [cm]; NaN unless made and ending in the TPC"),
-    ("true_pi0_g1_conv true_pi0_g2_conv", "pi0 decay photon ends in pair conversion"),
-    ("true_pi0_g1_lost true_pi0_g2_lost", "pi0 decay photon leaves the TPC before it ends"),
-    ("true_pi0_open", "pi0 decay photon opening angle [deg]"),
-    ("true_pi0_asym", "pi0 energy asymmetry (E1 - E2) / (E1 + E2)"),
-])
 
 
 def expand(patterns):

@@ -13,22 +13,22 @@ Everything Wire-Cell writes about a candidate in one row, for selection work:
     leading energies. The unclear-link leftover showers (== 3) are counted
     apart, n_unclear / E_unclear; kine_reco_Enu includes both.
   * segments (T_segment) and charge points (T_rec_charge): counts, lengths
-  * MC only: the matched true neutrino, every true_* column of
-    make_truth.make_ncdeltawc_truthkinedf (GENIE truth, photon gaps, pi0
-    decay photons, leading proton), joined on tmatch_idx; NaN for
-    candidates with no match (tmatch_idx < 0). Also the T_pf tree size
-    (pf_*). On data these columns are absent.
+  * MC only: the T_match truth match (tmatch_idx, IoUs) and the T_pf tree
+    size (pf_*). On data these columns are absent.
 
-Events without a candidate have no row; for efficiency denominators use the
-truth table itself (the mcnu table of configs/wc_candidates_mc.py).
+Reco only: truth is the separate mcnu table (make_truth.py, written by
+configs/wc_candidates_mc.py), one row per true neutrino. tmatch_idx is the
+candidate's row in it (-1: no match):
+  wc.join(mcnu, on=["entry", "tmatch_idx"])
+(prepend "__ntuple", and "file" after dfio.load, to the keys). Events
+without a candidate have no row here; mcnu also gives the efficiency
+denominators.
 """
 
 import numpy as np
 import pandas as pd
 
 from makedf import wirecell as wc
-
-from analysis_village.NCDeltaWC.make_truth import make_ncdeltawc_truthkinedf
 
 LEVELS = wc.WC_NU_LEVELS
 PID = {"em": 11, "muon": 13, "pion": 211, "proton": 2212, "nopid": 0}
@@ -112,10 +112,6 @@ def make_wc_candidate_df(f):
     D = D.join(_particles(f, D.index)).join(_segments(f, D.index)).join(_charge(f, D.index))
 
     if "tmatch_idx" in D:
-        t = make_ncdeltawc_truthkinedf(f).drop(columns=["detector", "Run"])
-        t.index.names = ["entry", "tmatch_idx"]
-        D = D.join(t, on=["entry", "tmatch_idx"])
-
         pf = wc.make_wc_tabledf(f, "T_pf", ["nu_index", "depth", "is_pseudo"])
         pf = pf.reset_index("row", drop=True).set_index("nu_index", append=True)
         P = pd.DataFrame(index=D.index)
