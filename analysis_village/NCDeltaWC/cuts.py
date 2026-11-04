@@ -109,3 +109,15 @@ def truth_category(df):
 def is_signal(df):
     """True NC Delta -> N gamma with vertex in the active volume."""
     return is_ncdelta_rad(df) & true_in_active(df)
+
+
+def is_signal_1g0p(df):
+    """Signal whose final state is the photon and nucleons only, with no
+    proton above 35 MeV KE (neutrons and softer protons allowed).
+    Needs the make_truth.py columns."""
+    return is_signal(df) & (df.true_nother == 0) & (df.true_np_35MeV == 0)
+
+
+def is_signal_1g1p(df):
+    """As is_signal_1g0p, with exactly one proton above 35 MeV KE."""
+    return is_signal(df) & (df.true_nother == 0) & (df.true_np_35MeV == 1)

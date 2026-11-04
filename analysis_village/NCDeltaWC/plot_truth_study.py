@@ -3,15 +3,15 @@
 
 Input: .df files (or directories of them) with an "mcnu" table: one row per
 true neutrino with the make_ncdeltawc_truthdf columns, e.g. from
-configs/wc_candidates_mc.py. Tables made by make_truth.py also have photon
-gaps, the pi0 decay photons and the leading proton; their page is added when
-those columns exist. Only neutrinos with a true vertex in the active volume count.
+configs/wc_candidates_mc.py. It needs the make_truth.py columns (photon gaps,
+pi0 decay photons, leading proton, true_nother). Only neutrinos with a true vertex in the active volume count.
 
-  signal   cuts.is_signal (one photon above 20 MeV, no pi0), and no charged
-           pion above 30 MeV KE
-  NC 1pi0  NC, exactly one pi0, no charged pion above 30 MeV KE
+  signal   cuts.is_signal_1g0p / is_signal_1g1p: one photon above 20 MeV,
+           nothing else but nucleons, 0 / 1 proton above 35 MeV KE
+  NC 1pi0  NC, the pi0 is the only primary besides photons and nucleons
+           (true_nother == 1), 0 / 1 proton above 35 MeV KE
 
-Both are split by the number of protons above PROTON_COL's threshold.
+Needs the make_truth.py columns (configs/wc_candidates_mc.py).
 Distributions are area-normalised; the legend gives each sample's count.
 
   python analysis_village/NCDeltaWC/plot_truth_study.py -i <dir or .df files> -o truth_plots/
@@ -51,12 +51,10 @@ PROTON_THRESHOLDS = [("true_np", "any"), ("true_np_20MeV", "> 20 MeV"),
 GENIE_MODES = {0: "QE", 1: "Res", 2: "DIS", 3: "Coh", 10: "MEC"}
 
 
-def samples(m, pcol):
-    clean = (m.true_npi_30MeV == 0)
-    sig = cuts.is_signal(m) & clean
-    pi0 = (m.true_isnc == 1) & (m.true_npi0 == 1) & clean & cuts.true_in_active(m)
-    np_ = m[pcol]
-    return {"1g0p": m[sig & (np_ == 0)], "1g1p": m[sig & (np_ == 1)],
+def samples(m):
+    pi0 = (m.true_isnc == 1) & (m.true_npi0 == 1) & (m.true_nother == 1) & cuts.true_in_active(m)
+    np_ = m.true_np_35MeV
+    return {"1g0p": m[cuts.is_signal_1g0p(m)], "1g1p": m[cuts.is_signal_1g1p(m)],
             "NC1pi0 0p": m[pi0 & (np_ == 0)], "NC1pi0 1p": m[pi0 & (np_ == 1)]}
 
 
@@ -92,7 +90,7 @@ def page_topology(pdf, m, sig_all):
     ax.set_yticks(y, ["protons " + i for i in fr.index])
     ax.invert_yaxis()
     ax.set_xlim(0, 1)
-    ax.set_xlabel("fraction of clean NC Delta -> N gamma (%d)" % len(sig_all))
+    ax.set_xlabel("fraction of signal with only photon + nucleons (%d)" % len(sig_all))
     ax.grid(False)
     ax.legend(ncol=3, loc="lower center", bbox_to_anchor=(0.5, 1.0))
     ax.set_title("Signal proton multiplicity vs. threshold", loc="left", pad=22)
@@ -155,41 +153,40 @@ def summary(S, pot):
     print("POT %.3g" % pot)
     for name, d in S.items():
         print("  %-10s %7d  (%.1f per 1e20 POT)" % (name, len(d), len(d) / pot * 1e20))
-    if "true_g1_gap" in S["1g0p"]:
-        for name in ["1g0p", "1g1p"]:
-            g = S[name].true_g1_gap
-            print("  %s gap: median %.1f cm, < 3 cm %.0f%%, lost/out of TPC %.0f%%" % (
-                name, g.median(), 100 * (g < 3).mean(), 100 * g.isna().mean()))
-        for name in ["NC1pi0 0p", "NC1pi0 1p"]:
-            d = S[name]
-            print("  %s: E2 < 30 MeV %.0f%%, open < 20 deg %.0f%%, a photon leaves TPC %.0f%%" % (
-                name, 100 * (d.true_pi0_g2_E < 0.03).mean(), 100 * (d.true_pi0_open < 20).mean(),
-                100 * ((d.true_pi0_g1_lost > 0) | (d.true_pi0_g2_lost > 0)).mean()))
+    for name in ["1g0p", "1g1p"]:
+        g = S[name].true_g1_gap
+        print("  %s gap: median %.1f cm, < 3 cm %.0f%%, lost/out of TPC %.0f%%" % (
+            name, g.median(), 100 * (g < 3).mean(), 100 * g.isna().mean()))
+    for name in ["NC1pi0 0p", "NC1pi0 1p"]:
+        d = S[name]
+        print("  %s: E2 < 30 MeV %.0f%%, open < 20 deg %.0f%%, a photon leaves TPC %.0f%%" % (
+            name, 100 * (d.true_pi0_g2_E < 0.03).mean(), 100 * (d.true_pi0_open < 20).mean(),
+            100 * ((d.true_pi0_g1_lost > 0) | (d.true_pi0_g2_lost > 0)).mean()))
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-i", "--inputs", nargs="+", required=True, help=".df files, directories or globs")
     ap.add_argument("-o", "--outdir", default="truth_plots")
-    ap.add_argument("--proton-col", default=None,
-                    help="proton count for 0p/1p (default true_np_35MeV if present, else true_np_20MeV)")
     args = ap.parse_args()
 
     frames, totals = dfio.load(dfio.expand_inputs(args.inputs), keys=["mcnu"])
     m = frames["mcnu"]
+    if "true_nother" not in m:
+        sys.exit("mcnu has no make_truth.py columns; make it with configs/wc_candidates_mc.py.")
     m = m[cuts.true_in_active(m)]
-    pcol = args.proton_col or ("true_np_35MeV" if "true_np_35MeV" in m else "true_np_20MeV")
-    plab = dict(PROTON_THRESHOLDS).get(pcol, pcol)
-    S = samples(m, pcol)
-    sig_all = m[cuts.is_signal(m) & (m.true_npi_30MeV == 0)]
+    S = samples(m)
+    sig = m[cuts.is_signal(m)]
+    sig_all = sig[sig.true_nother == 0]
+    print("signal %d: %d with only photon + nucleons, %d with other particles (true_nother > 0)"
+          % (len(sig), len(sig_all), len(sig) - len(sig_all)))
     summary(S, totals.pot.sum())
 
     os.makedirs(args.outdir, exist_ok=True)
     out = os.path.join(args.outdir, "truth_study.pdf")
     with PdfPages(out) as pdf:
-        figs = [page_topology(pdf, m, sig_all), page_kinematics(pdf, S, plab)]
-        if "true_g1_gap" in m:
-            figs.append(page_photons(pdf, S))
+        figs = [page_topology(pdf, m, sig_all), page_kinematics(pdf, S, "> 35 MeV KE"),
+                page_photons(pdf, S)]
         for i, fig in enumerate(figs):
             fig.savefig(os.path.join(args.outdir, "truth_%02d.png" % i), dpi=130)
             plt.close(fig)

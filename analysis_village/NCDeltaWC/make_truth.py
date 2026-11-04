@@ -6,6 +6,9 @@ columns it extends with:
 
   * true_np_35MeV, true_nn: proton count above the WC proton threshold,
     neutron count
+  * true_nother: primaries other than photons, protons, neutrons, nuclear
+    fragments and the outgoing neutrino, at any energy: pi+-, pi0, mu, e,
+    kaons, ... 0 means the final state is only photons and nucleons.
   * true_g1_* / true_g2_*: the two most energetic GENIE-primary photons. E [GeV],
     costh (to the beam, z), gap [cm], conv (end process is pair
     conversion), lost (born in the TPC, but it leaves before it ends)
@@ -97,6 +100,7 @@ def make_ncdeltawc_truthkinedf(f):
     cnt = lambda m: m.groupby(level=NU_LEVELS).sum().reindex(N.index).fillna(0).astype(int)
     N["true_np_35MeV"] = cnt((pdg == 2212) & (pKE > 0.035))
     N["true_nn"] = cnt(pdg == 2112)
+    N["true_nother"] = cnt(~pdg.isin([22, 2112, 2212, 12, 14, 16]) & (pdg < 1000000000))
 
     # GENIE-primary photons
     gam = prim[(prim.pdg == 22) & (prim.genE > PHOTON_E_MIN)]
