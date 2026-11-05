@@ -4,8 +4,11 @@ Everything Wire-Cell writes about a candidate in one row, for selection work:
 
   * event: run/subrun/evt, candidates in the event (n_nu), Trun flash and
     bundle counts
-  * T_tagger summary + shw_sp_filled, T_kine scalars (energies in MeV, as
-    in the CAF), and on MC the T_match level-3 truth match
+  * every scalar T_tagger leaf (~1030: the summary flags and scores plus
+    the inputs of Wire-Cell's BDTs, shw_sp_*, pio_*, numu_cc_*, cosmict_*,
+    the nue-tagger blocks, ssm_*), under their T_tagger names; T_kine
+    scalars (energies in MeV, as in the CAF); on MC the T_match level-3
+    truth match
   * main cluster (T_cluster row of T_tagger.cluster_id): main_cluster_*
   * flash bundle (T_bundle row with this nu_index): bundle_*
   * particle list (T_kine vectors), summarised over the particles connected
@@ -32,6 +35,8 @@ from makedf import wirecell as wc
 
 LEVELS = wc.WC_NU_LEVELS
 PID = {"em": 11, "muon": 13, "pion": 211, "proton": 2212, "nopid": 0}
+# T_tagger identifiers not carried (run/subrun/evt come from the event table)
+TAGGER_SKIP = {"run", "subrun", "event", "nu_index", "sel_cluster_id"}
 
 
 def _by_nu(df):
@@ -87,7 +92,8 @@ def _charge(f, index):
 
 
 def make_wc_candidate_df(f):
-    nu = wc.make_wc_nudf(f, tagger_leaves=wc.wctaggerbranches + ["shw_sp_filled"])
+    extra = [l for l in wc.wc_tagger_leaves(f) if l not in TAGGER_SKIP and l not in wc.wctaggerbranches]
+    nu = wc.make_wc_nudf(f, tagger_leaves=wc.wctaggerbranches + extra)
     if not len(nu):
         return nu
     entry = nu.index.get_level_values("entry")

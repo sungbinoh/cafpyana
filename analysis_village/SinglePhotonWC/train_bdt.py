@@ -2,10 +2,9 @@
 """BDT (XGBoost) separating the inclusive single-photon signal from every
 background, on candidates passing cuts.PRESELECTION.
 
-Inputs are reco only: every numeric Wire-Cell candidate column except
-identifiers, MC-only truth-match columns, absolute position and time
-(see feature_columns). With --tagger, also the wctag table (every scalar
-T_tagger leaf, configs/sp_mc_bdt.py).
+Inputs are reco only: every numeric Wire-Cell candidate column (summary
+columns plus every scalar T_tagger leaf) except identifiers, MC-only
+truth-match columns, absolute position and time (see feature_columns).
 
 Two-fold by file: each half of the files is scored by a model trained on
 the other half, so every candidate gets an unbiased score. A tenth of the
@@ -13,7 +12,7 @@ training files is held out for early stopping.
 
 Efficiency is per true signal neutrino (as cutflow.py); purity per candidate.
 
-  python analysis_village/SinglePhotonWC/train_bdt.py -i <.df files or dirs> -o bdt_out/ [--tagger]
+  python analysis_village/SinglePhotonWC/train_bdt.py -i <.df files or dirs> -o bdt_out/
 """
 
 import argparse
@@ -37,8 +36,8 @@ from analysis_village.SinglePhotonWC.cutflow import load, NU_KEY  # noqa: E402
 # (the vertex enters as distance to the wall), sample bookkeeping.
 EXCLUDE = re.compile(
     r"^(run|subrun|evt|n_nu|cluster_id|matched_flash_gid|kine_main_vertex_id|"
-    r"tmatch_.*|pf_.*|nu_[xyz]|kine_nu_[xyz]_corr|flash_time_us|"
-    r"tag_(run|subrun|event|nu_[xyz]|.*cluster_id|.*flash.*|.*time.*|match_.*))$")
+    r"tmatch_.*|pf_.*|nu_[xyz]|kine_nu_[xyz]_corr|flash_time_us|flash_group|"
+    r"vertex_moved_cluster)$")
 PARAMS = dict(objective="binary:logistic", eval_metric="aucpr", tree_method="hist",
               max_depth=6, learning_rate=0.05, subsample=0.8, colsample_bytree=0.5,
               min_child_weight=5, nthread=os.cpu_count())
@@ -137,11 +136,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-i", "--inputs", nargs="+", required=True)
     ap.add_argument("-o", "--outdir", default="bdt_out")
-    ap.add_argument("--tagger", action="store_true", help="also use the wctag (T_tagger) table")
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
-    w, m, pot = load(args.inputs, extra=["wctag"] if args.tagger else [])
+    w, m, pot = load(args.inputs)
     nsig_nu = m.cat.isin(cuts.SIGNAL_CATEGORIES).sum()
     p = add_derived(w[cuts.preselection(w)].copy())
     feats = feature_columns(p)
