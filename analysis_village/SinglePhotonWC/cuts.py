@@ -133,11 +133,13 @@ def truth_category(df):
 # --- Reco preselection (Wire-Cell candidate columns)
 #
 #   vertex      has_vertex == 1: a vertex was found, so the taggers ran
-#   generic     Wire-Cell generic neutrino selection: not tagged cosmic
-#               (cosmict_flag, OR of the 10 cosmic sub-taggers) and main
-#               cluster > 15 cm. Every candidate already has a matched flash;
-#               the main-cluster through-going / stopping muon flags fire on
-#               < 0.1% of candidates (applied upstream), so are not cut on.
+#   generic     MicroBooNE Wire-Cell generic neutrino selection: main
+#               cluster not a through-going muon, stopping muon or light
+#               mismatch, and > 15 cm. Every candidate already has a matched
+#               flash; tgm/stm/lm fire on < 0.1% of SBND candidates (mostly
+#               applied upstream), so in practice this is the length cut.
+#               The cosmic tagger (cosmict_*) is not cut on: as in MicroBooNE
+#               it feeds the "other" BDT.
 #   fv          reco vertex >= 5 cm inside the active volume
 #   em_shower   >= 1 connected EM shower (T_kine PID 11)
 
@@ -151,7 +153,8 @@ def reco_in_fv(df, inset=FV_INSET):
 
 PRESELECTION = {
     "vertex": lambda df: df.has_vertex == 1,
-    "generic": lambda df: (df.cosmict_flag == 0) & (df.main_cluster_length_cm > MIN_CLUSTER_LENGTH),
+    "generic": lambda df: ((df.main_cluster_tgm == 0) & (df.main_cluster_stm == 0) & (df.main_cluster_lm == 0)
+                           & (df.main_cluster_length_cm > MIN_CLUSTER_LENGTH)),
     "fv": reco_in_fv,
     "em_shower": lambda df: df.n_em >= 1,
 }
