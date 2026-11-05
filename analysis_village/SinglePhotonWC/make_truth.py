@@ -13,6 +13,8 @@ candidates join on (entry, tmatch_idx). Columns, all prefixed true_:
                     cuts.SHOWER_INSET inside the TPC)
       ngamma_out    of those, not reconstructable: converts outside the TPC
                     or closer than SHOWER_INSET to its boundary
+      ngamma_edge   of ngamma_out, converts inside the TPC within
+                    SHOWER_INSET of its boundary (visible, but not counted)
       ndecayg_soft  decay photons below 20 MeV
       nshower       reconstructable showers after merging photons < 20 deg
                     apart; nmerged = ngamma_rec - nshower
@@ -39,6 +41,7 @@ MUON_MASS = 0.105658     # GeV
 G4_DECAY = 3             # caf::g4_process_ kG4Decay
 LEPTONS = [11, 12, 13, 14, 15, 16]
 MAX_DECAY_DEPTH = 4      # eta -> 3pi0 -> 6gamma needs 2
+EDGE_EPS = 0.5           # cm; trajectory ends closer to the boundary are escapes
 
 
 def _load(f, prefix, leaves):
@@ -128,6 +131,8 @@ def make_sp_truthdf(f):
     N["ngamma_20MeV"] = cnt(hard, by)
     N["ngamma_rec"] = cnt(g.rec, by)
     N["ngamma_out"] = cnt(hard & ~g.rec, by)
+    # escaping photons end on the boundary (distance ~0), so require > EDGE_EPS inside
+    N["ngamma_edge"] = cnt(hard & ~g.rec & (cuts.dist_to_active_boundary(g.end_x, g.end_y, g.end_z) > EDGE_EPS), by)
     N["ndecayg_soft"] = cnt(~hard & (g.origin != cuts.ORIGIN_PRIMARY), by)
 
     # reconstructable showers, most energetic first
