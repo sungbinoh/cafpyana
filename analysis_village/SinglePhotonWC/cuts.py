@@ -162,15 +162,17 @@ PRESELECTION = {
 
 # --- MicroBooNE reference selection (microboone_single_photon_selection.yaml)
 #
-# On the MicroBooNE other and NC pi0 BDT scores, columns ub_<name>
-# (microboone_bdt.score; NaN = not evaluable). The numu and nue steps use
-# the SBND Wire-Cell tagger scores instead: for nue it keeps ~2x the signal
-# of the MicroBooNE nue BDT at the same purity; for numu it matches the
-# MicroBooNE numu BDT. The MicroBooNE FV is not used.
+# On the MicroBooNE numu, other and NC pi0 BDT scores, columns ub_<name>
+# (microboone_bdt.score; NaN = not evaluable), plus the SBND Wire-Cell
+# tagger scores: numu_score (removes CC numu the MicroBooNE numu BDT keeps)
+# and nue_score instead of the MicroBooNE nue BDT (~2x the signal at the
+# same purity). The MicroBooNE FV is not used.
 #   vertex_shower   >= 1 photon-like shower > 20 MeV at the vertex
-#   bdts_evaluable  shw_sp_filled and every input finite, the two BDTs used
+#   bdts_evaluable  shw_sp_filled and every input finite, the three BDTs used
 #   wc_numu         not numu CC-like: numu_score < 0.5
-#   ub_<name>       score above the MicroBooNE threshold (log10 score scale,
+#   ub_numu         MicroBooNE numu BDT > 1 (MicroBooNE: 0.4; tighter on SBND,
+#                   tuned out-of-fold, as wc_numu already cut)
+#   ub_other/ncpi0  score above the MicroBooNE threshold (log10 score scale,
 #                   see microboone_bdt). Re-tuning on SBND MC (3 cm inset)
 #                   found these already near-optimal.
 #   wc_nue          not nue-like: nue_score < 7 (MicroBooNE's nue selection
@@ -179,7 +181,8 @@ PRESELECTION = {
 
 # Keep the order: the MicroBooNE BDTs are a cascade, each trained on events
 # passing the previous ones (the NC pi0 BDT has no separation before "other").
-UB_SCORES = ["ub_other", "ub_ncpi0"]
+UB_SCORES = ["ub_numu", "ub_other", "ub_ncpi0"]
+UB_NUMU_MIN = 1.0
 UB_OTHER_MIN = 0.2
 UB_NCPI0_MIN = -0.05
 WC_NUMU_SCORE_MAX = 0.5
@@ -189,6 +192,7 @@ UB_SELECTION = {
     "vertex_shower": lambda df: df.shw_sp_n_20mev_showers > 0,
     "bdts_evaluable": lambda df: df[UB_SCORES].notna().all(axis=1),
     "wc_numu": lambda df: df.numu_score < WC_NUMU_SCORE_MAX,
+    "ub_numu": lambda df: df.ub_numu > UB_NUMU_MIN,
     "ub_other": lambda df: df.ub_other > UB_OTHER_MIN,
     "ub_ncpi0": lambda df: df.ub_ncpi0 > UB_NCPI0_MIN,
     "wc_nue": lambda df: df.nue_score < WC_NUE_SCORE_MAX,
@@ -196,11 +200,10 @@ UB_SELECTION = {
 }
 
 # Cut chains for cutflow.py
-_PRESEL_NO_EM = {k: PRESELECTION[k] for k in ("vertex", "generic", "fv")}
 CHAINS = {
     "presel": PRESELECTION,
     "uboone": UB_SELECTION,
-    "presel+uboone": {**_PRESEL_NO_EM, **UB_SELECTION},
+    "presel+uboone": {**PRESELECTION, **UB_SELECTION},
 }
 
 
