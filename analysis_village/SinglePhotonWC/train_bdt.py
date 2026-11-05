@@ -35,11 +35,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from analysis_village.SinglePhotonWC import cuts  # noqa: E402
 from analysis_village.SinglePhotonWC.cutflow import load, n_signal_nu  # noqa: E402
 
-# Not inputs: identifiers, MC-only truth match, detector position and time
+# Not inputs: identifiers, MC-only truth match (tmatch_*; pf_* in tables made
+# before e5679de), detector position and time
 # (the vertex enters as distance to the wall).
 EXCLUDE = re.compile(
     r"^(run|subrun|evt|n_nu|cluster_id|matched_flash_gid|kine_main_vertex_id|"
-    r"tmatch_.*|nu_[xyz]|kine_nu_[xyz]_corr|flash_time_us|flash_group|vertex_moved_cluster)$")
+    r"tmatch_.*|pf_.*|nu_[xyz]|kine_nu_[xyz]_corr|flash_time_us|flash_group|vertex_moved_cluster)$")
 PARAMS = dict(objective="binary:logistic", eval_metric="aucpr", tree_method="hist",
               max_depth=6, learning_rate=0.05, subsample=0.8, colsample_bytree=0.5,
               min_child_weight=5, nthread=os.cpu_count())
