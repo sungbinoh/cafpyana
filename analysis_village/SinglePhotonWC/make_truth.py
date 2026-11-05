@@ -53,7 +53,6 @@ def _prompt_photons(prim, tp):
     """Photons from the neutrino interaction: primaries, and the decay chains
     of primary hadrons. Columns entry, nu, origin plus the tp columns."""
     p = prim.reset_index()
-    p.columns = ["entry", "nu", "iprim"] + list(p.columns[3:])
     t = tp.reset_index()
     t.columns = ["entry", "itp"] + list(t.columns[2:])
     key = ["entry", "G4ID"]
@@ -93,55 +92,53 @@ def _merge_showers(r):
 
 
 def make_sp_truthdf(f):
-    nu = _load(f, "rec.mc.nu.", ["E", "pdg", "iscc", "isnc", "genie_mode", "w", "resnum",
-                                 "position.x", "position.y", "position.z"])
-    N = nu.rename(columns={"position_x": "vtx_x", "position_y": "vtx_y", "position_z": "vtx_z"})
-    idx = N.index
+    N = _load(f, "rec.mc.nu.", ["E", "pdg", "iscc", "isnc", "genie_mode", "w", "resnum",
+                                "position.x", "position.y", "position.z"])
+    N = N.rename(columns={"position_x": "vtx_x", "position_y": "vtx_y", "position_z": "vtx_z"})
     if not len(N):
-        return N
+        return N.add_prefix("true_")
+    names = N.index.names
+    N.index.names = ["entry", "nu"]
+    cnt = lambda m, by: m.groupby(by).sum().reindex(N.index).fillna(0).astype(int)
 
+    # primaries
     prim = _load(f, "rec.mc.nu.prim.", ["pdg", "G4ID", "genE"])
-    pdg = prim.pdg.abs()
-    cnt = lambda m: m.groupby(level=[0, 1]).sum().reindex(idx).fillna(0).astype(int)
+    prim.index.names = ["entry", "nu", "iprim"]
+    pdg, nu = prim.pdg.abs(), ["entry", "nu"]
     muKE = (prim.genE - MUON_MASS).where(pdg == 13)
-    N["npi0"] = cnt(pdg == 111)
-    N["neta"] = cnt(pdg == 221)
-    N["npipm"] = cnt(pdg == 211)
-    N["np_35MeV"] = cnt((pdg == 2212) & (prim.genE - PROTON_MASS > 0.035))
-    N["nn"] = cnt(pdg == 2112)
-    N["nmu"] = cnt(pdg == 13)
-    N["nmu_100MeV"] = cnt(muKE >= cuts.MUON_KE_MAX)
-    N["mu_KE"] = muKE.groupby(level=[0, 1]).max().reindex(idx)
-    N["ne"] = cnt(pdg == 11)
+    N["npi0"] = cnt(pdg == 111, nu)
+    N["neta"] = cnt(pdg == 221, nu)
+    N["npipm"] = cnt(pdg == 211, nu)
+    N["np_35MeV"] = cnt((pdg == 2212) & (prim.genE - PROTON_MASS > 0.035), nu)
+    N["nn"] = cnt(pdg == 2112, nu)
+    N["nmu"] = cnt(pdg == 13, nu)
+    N["nmu_100MeV"] = cnt(muKE >= cuts.MUON_KE_MAX, nu)
+    N["mu_KE"] = muKE.groupby(nu).max().reindex(N.index)
+    N["ne"] = cnt(pdg == 11, nu)
 
+    # prompt photons
     tp = _load(f, "rec.true_particles.", ["pdg", "G4ID", "parent", "start_process", "genE",
                                           "genp.x", "genp.y", "genp.z", "end.x", "end.y", "end.z"])
-    g = _prompt_photons(prim, tp)
-    vtx = N[["vtx_x", "vtx_y", "vtx_z"]].copy()
-    vtx.index = vtx.index.set_names(["entry", "nu"])
-    g = g.join(vtx, on=["entry", "nu"])
+    g = _prompt_photons(prim, tp).join(N[["vtx_x", "vtx_y", "vtx_z"]], on=nu)
     g["gap"] = np.sqrt((g.end_x - g.vtx_x)**2 + (g.end_y - g.vtx_y)**2 + (g.end_z - g.vtx_z)**2)
     hard = g.genE >= cuts.PHOTON_E_MIN
     g["rec"] = hard & (cuts.dist_to_active_boundary(g.end_x, g.end_y, g.end_z) >= cuts.SHOWER_INSET)
+    by = [g.entry, g.nu]
+    N["ngamma_20MeV"] = cnt(hard, by)
+    N["ngamma_rec"] = cnt(g.rec, by)
+    N["ngamma_out"] = cnt(hard & ~g.rec, by)
+    N["ndecayg_soft"] = cnt(~hard & (g.origin != cuts.ORIGIN_PRIMARY), by)
 
-    per_nu = lambda m: m.groupby([g.entry, g.nu]).sum().reindex(idx).fillna(0).astype(int).values
-    N["ngamma_20MeV"] = per_nu(hard)
-    N["ngamma_rec"] = per_nu(g.rec)
-    N["ngamma_out"] = per_nu(hard & ~g.rec)
-    N["ndecayg_soft"] = per_nu(~hard & (g.origin != cuts.ORIGIN_PRIMARY))
-
-    r = _merge_showers(g[g.rec])
-    s = r.groupby(["entry", "nu", "shower"]).agg(
+    # reconstructable showers, most energetic first
+    s = _merge_showers(g[g.rec]).groupby(["entry", "nu", "shower"]).agg(
         E=("genE", "sum"), gap=("gap", "min"), costh=("dz", "first"),
         nphot=("genE", "size"), origin=("origin", "first")).reset_index()
     s = s.sort_values(["entry", "nu", "E"], ascending=[True, True, False])
-    s["rank"] = s.groupby(["entry", "nu"]).cumcount()
-    s = s.set_index(["entry", "nu"])
-    N["nshower"] = s.groupby(level=[0, 1]).size().reindex(idx.set_names(["entry", "nu"])).fillna(0).astype(int).values
+    s["rank"] = s.groupby(nu).cumcount()
+    s = s.set_index(nu)
+    N["nshower"] = cnt(s["rank"] >= 0, nu)
     N["nmerged"] = N.ngamma_rec - N.nshower
-    for k, cols in [(0, ["E", "gap", "costh", "nphot", "origin"]), (1, ["E", "gap"])]:
-        sk = s[s["rank"] == k][cols].add_prefix("shw%d_" % (k + 1))
-        sk = sk.reindex(idx.set_names(["entry", "nu"]))
-        for c in sk:
-            N[c] = sk[c].values
+    N = N.join(s.loc[s["rank"] == 0, ["E", "gap", "costh", "nphot", "origin"]].add_prefix("shw1_"))
+    N = N.join(s.loc[s["rank"] == 1, ["E", "gap"]].add_prefix("shw2_"))
+    N.index.names = names
     return N.add_prefix("true_")

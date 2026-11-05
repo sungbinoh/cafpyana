@@ -22,7 +22,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 from analysis_village.SinglePhotonWC import cuts  # noqa: E402
-from analysis_village.NCDeltaWC import dfio  # noqa: E402
+from analysis_village.SinglePhotonWC import dfio  # noqa: E402
 
 INK2 = "#52514e"
 plt.rcParams.update({

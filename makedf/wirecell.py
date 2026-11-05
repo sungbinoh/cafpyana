@@ -34,7 +34,7 @@ WC_TREE = "recTreeWireCell"
 WC_NU_LEVELS = ["entry", "nu_index"]
 
 # T_tagger leaves loaded by default: vertex, flash, and the summary flags and
-# BDT scores. Use wc_tagger_leaves(f, prefixes) for the BDT input variables.
+# BDT scores. wc_tagger_leaves(f) lists every scalar leaf (the BDT inputs).
 # cosmict_flag is the overall cosmic verdict (OR of cosmict_flag_1..10);
 # cosmic_flag is only one sub-tagger's shower cross-check and defaults to 1.
 # neutrino_type bits: 2 cosmic, 4 numu CC, 8 NC (numu tagger: not CC), 32 nue;
@@ -65,16 +65,6 @@ wckineparticlebranches = [
     "kine_particle_cluster_id", "kine_particle_nseg", "kine_particle_pool",
 ]
 
-# T_pf: the particle-flow hierarchy, MC with truth match only. is_pseudo marks
-# inferred particles (a gamma for a gap-converted shower, a neutron for a
-# detached proton).
-wcpfbranches = [
-    "nu_index", "node_id", "parent_id", "depth", "n_children", "pdg",
-    "is_pseudo", "kine_index", "ke_mev",
-    "start_x", "start_y", "start_z", "end_x", "end_y", "end_z",
-]
-
-
 def has_wc(f):
     return WC_TREE in f
 
@@ -83,11 +73,6 @@ def _wc_tree(f):
     if not has_wc(f):
         raise KeyError("%s not in file; it was not made with the Wire-Cell CAF maker." % WC_TREE)
     return f[WC_TREE]
-
-
-def _load(f, group, leaves):
-    """Flat per-row leaves of wc.<group>, columns = leaf names."""
-    return loadbranches(_wc_tree(f), ["wc.%s.%s" % (group, l) for l in leaves]).wc[group]
 
 
 def _index_by_nu(df):
@@ -106,29 +91,24 @@ def make_wc_evtdf(f):
     return df
 
 
-def wc_tagger_leaves(f, prefixes=None):
-    """Scalar-per-candidate T_tagger leaves, optionally filtered by prefix.
-
-    The ~200 nested (vector-per-candidate) leaves are excluded.
-    """
+def wc_tagger_leaves(f):
+    """Scalar-per-candidate T_tagger leaves; the ~200 nested
+    (vector-per-candidate) leaves are excluded."""
     keys = _wc_tree(f).keys()
     head = "wc.T_tagger."
     nested = {k[len(head):].split("..")[0] for k in keys if k.startswith(head) and k.endswith("..idx")}
-    leaves = [k[len(head):] for k in keys
-              if k.startswith(head) and ".." not in k and k[len(head):] not in nested]
-    if prefixes is not None:
-        leaves = [l for l in leaves if l.startswith(tuple(prefixes))]
-    return leaves
+    return [k[len(head):] for k in keys
+            if k.startswith(head) and ".." not in k and k[len(head):] not in nested]
 
 
 def make_wc_taggerdf(f, leaves=wctaggerbranches):
     leaves = ["nu_index"] + [l for l in leaves if l != "nu_index"]
-    return _index_by_nu(_load(f, "T_tagger", leaves))
+    return _index_by_nu(make_wc_tabledf(f, "T_tagger", leaves))
 
 
 def make_wc_kinedf(f, leaves=wckinebranches):
     leaves = ["nu_index"] + [l for l in leaves if l != "nu_index"]
-    return _index_by_nu(_load(f, "T_kine", leaves))
+    return _index_by_nu(make_wc_tabledf(f, "T_kine", leaves))
 
 
 def make_wc_kineparticledf(f, leaves=wckineparticlebranches):
@@ -148,14 +128,6 @@ def make_wc_kineparticledf(f, leaves=wckineparticlebranches):
     return df.reorder_levels(["entry", "nu_index", "kine_particle"])
 
 
-def make_wc_pfdf(f, leaves=wcpfbranches):
-    """One row per T_pf particle, index (entry, nu_index, pf)."""
-    df = _load(f, "T_pf", leaves)
-    df.index.names = ["entry", "pf"]
-    df = df.set_index("nu_index", append=True)
-    return df.reorder_levels(["entry", "nu_index", "pf"])
-
-
 def make_wc_tmatchdf(f, level=3):
     """Truth neutrino matched to each Wire-Cell candidate, from T_match.
 
@@ -172,8 +144,7 @@ def make_wc_tmatchdf(f, level=3):
     t = _wc_tree(f)
     if "wc.T_match.level" not in t.keys():
         raise KeyError("no T_match: this file was made without the Wire-Cell truth match (WC_TRUTH_MATCH=0 or schema v1).")
-    m = _load(f, "T_match", ["level", "side", "obj", "nu_index", "truth_nu_idx"])
-    m.index.names = ["entry", "row"]
+    m = make_wc_tabledf(f, "T_match", ["level", "side", "obj", "nu_index", "truth_nu_idx"])
     nested = {}
     for l in ["match_obj", "match_iou_q", "match_iou_n"]:
         c = loadbranches(t, ["wc.T_match." + l]).wc.T_match[l]
@@ -218,14 +189,13 @@ wcbundlebranches = ["gid", "reason", "nu_index", "n_main", "sel_cluster_id", "se
 wcsegmentbranches = ["nu_index", "segment_id", "kine_index", "pdg", "flag_shower", "dirsign",
                      "length_cm", "ke_mev", "in_enu"]
 wcchargebranches = ["x", "y", "z", "q", "rr", "nu_index", "sub_cluster_id"]
-wctruthnubranches = ["nu_idx", "pdg", "ccnc", "mode", "E", "vtx_x", "vtx_y", "vtx_z"]
 
 
 def make_wc_tabledf(f, group, leaves):
     """Flat per-row leaves of wc.<group>, index (entry, row).
 
-    Unlike _load, a tree with no rows in the file (MC-only trees on data)
-    gives an empty frame with the right columns instead of failing.
+    A tree with no rows in the file (MC-only trees on data) gives an empty
+    frame with the right columns.
     """
     t = _wc_tree(f)
     br = ["wc.%s.%s" % (group, l) for l in leaves]
@@ -255,11 +225,6 @@ def make_wc_segmentdf(f, leaves=wcsegmentbranches):
 
 def make_wc_chargedf(f, leaves=wcchargebranches):
     return make_wc_tabledf(f, "T_rec_charge", leaves)
-
-
-def make_wc_truthnudf(f, leaves=wctruthnubranches):
-    """T_truth_nu, MC only; row is the index into rec.mc.nu (= tmatch_idx)."""
-    return make_wc_tabledf(f, "T_truth_nu", leaves)
 
 
 def make_wc_flashbothtpcdf(f):

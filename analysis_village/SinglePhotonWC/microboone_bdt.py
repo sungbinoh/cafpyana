@@ -12,7 +12,7 @@ Inputs are read by their XML name from the candidate columns, except
 reco_nuvtxY -> kine_nu_y_corr. A score exists only if shw_sp_filled == 1
 and every input is finite (no defaults); otherwise it is NaN.
 
-  scores = score(df)            # DataFrame: numu, other, ncpi0, nue
+  df = df.join(score(df, bdt_dir))     # adds ub_numu, ub_other, ub_ncpi0, ub_nue
 """
 
 import os
@@ -93,8 +93,9 @@ def input_columns(bdt_dir=None):
 
 
 def score(df, bdt_dir=None):
-    """The four scores per candidate row; NaN where not evaluable."""
-    out = pd.DataFrame(index=df.index, columns=NAMES, dtype=float)
+    """The four scores per candidate row, columns ub_<name>; NaN where not
+    evaluable."""
+    out = pd.DataFrame(index=df.index)
     filled = (df.shw_sp_filled == 1).values
     for n, m in models(bdt_dir).items():
         cols = input_columns(bdt_dir)[n]
@@ -106,5 +107,5 @@ def score(df, bdt_dir=None):
         s = np.full(len(df), np.nan)
         if ok.any():
             s[ok] = m.evaluate(X[ok])
-        out[n] = s
+        out["ub_" + n] = s
     return out

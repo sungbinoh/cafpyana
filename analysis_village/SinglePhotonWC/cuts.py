@@ -24,11 +24,10 @@ do not count.
 Truth columns are those of make_truth.make_sp_truthdf, joined to candidates
 on (entry, tmatch_idx); a candidate with no match is "cosmic".
 
-Reco preselection (one row per Wire-Cell candidate, make_wc_candidates.py):
-PRESELECTION, applied in order by preselection().
+Reco selections (one row per Wire-Cell candidate, make_wc_candidates.py):
+PRESELECTION and the MicroBooNE reference UB_SELECTION, cut chains applied
+in order by passes().
 """
-
-from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -84,19 +83,23 @@ def is_signal(df):
 RESNUM_DELTA_1232 = 0   # genie::EResonance kP33_1232
 ORIGIN_PRIMARY = 22     # true_shw1_origin of a GENIE-primary photon
 
-CATEGORY_LABELS = OrderedDict([
-    (0, "1g: NC Delta->Ngamma"),
-    (1, "1g: NC pi0"),
-    (2, "1g: CC pi0, mu < 100 MeV"),
-    (3, "1g: other"),
-    (4, ">=2 showers"),
-    (5, "0 showers"),
-    (6, "CC numu, mu >= 100 MeV"),
-    (7, "CC nue (primary e)"),
-    (8, "Outside active volume"),
-    (9, "Cosmic / unmatched"),
-])
+CATEGORY_LABELS = {
+    0: "1g: NC Delta->Ngamma",
+    1: "1g: NC pi0",
+    2: "1g: CC pi0, mu < 100 MeV",
+    3: "1g: other",
+    4: ">=2 showers",
+    5: "0 showers",
+    6: "CC numu, mu >= 100 MeV",
+    7: "CC nue (primary e)",
+    8: "Outside active volume",
+    9: "Cosmic / unmatched",
+}
 SIGNAL_CATEGORIES = [0, 1, 2, 3]
+
+
+def is_signal_cat(cat):
+    return cat.isin(SIGNAL_CATEGORIES)
 
 
 def truth_category(df):
@@ -126,9 +129,10 @@ def truth_category(df):
 #
 #   vertex      has_vertex == 1: a vertex was found, so the taggers ran
 #   generic     Wire-Cell generic neutrino selection: not tagged cosmic
-#               (cosmict_flag, OR of the 10 cosmic sub-taggers), main cluster
-#               not a through-going / stopping muon, main cluster > 15 cm.
-#               Every candidate already has a matched flash.
+#               (cosmict_flag, OR of the 10 cosmic sub-taggers) and main
+#               cluster > 15 cm. Every candidate already has a matched flash;
+#               the main-cluster through-going / stopping muon flags fire on
+#               < 0.1% of candidates (applied upstream), so are not cut on.
 #   fv          reco vertex >= 5 cm inside the active volume
 #   em_shower   >= 1 connected EM shower (T_kine PID 11)
 
@@ -140,17 +144,12 @@ def reco_in_fv(df, inset=FV_INSET):
     return pd.Series(dist_to_active_boundary(df.nu_x, df.nu_y, df.nu_z) >= inset, index=df.index)
 
 
-def is_generic_nu(df):
-    return ((df.cosmict_flag == 0) & (df.main_cluster_tgm == 0) & (df.main_cluster_stm == 0)
-            & (df.main_cluster_length_cm > MIN_CLUSTER_LENGTH))
-
-
-PRESELECTION = OrderedDict([
-    ("vertex", lambda df: df.has_vertex == 1),
-    ("generic", is_generic_nu),
-    ("fv", reco_in_fv),
-    ("em_shower", lambda df: df.n_em >= 1),
-])
+PRESELECTION = {
+    "vertex": lambda df: df.has_vertex == 1,
+    "generic": lambda df: (df.cosmict_flag == 0) & (df.main_cluster_length_cm > MIN_CLUSTER_LENGTH),
+    "fv": reco_in_fv,
+    "em_shower": lambda df: df.n_em >= 1,
+}
 
 
 # --- MicroBooNE reference selection (microboone_single_photon_selection.yaml)
@@ -159,28 +158,31 @@ PRESELECTION = OrderedDict([
 # NaN = not evaluable). The MicroBooNE FV is not an SBND FV and is not used.
 #   vertex_shower   >= 1 photon-like shower > 20 MeV at the vertex
 #   bdts_evaluable  shw_sp_filled and every input finite, all four BDTs
-#   ub_<name>       score above UB_THRESHOLDS (nue: always true, as in uB)
+#   ub_<name>       score above the MicroBooNE threshold (nue > -1 always
+#                   passes, as in MicroBooNE)
 #   one_shower      exactly one reconstructable photon-like shower
 
-UB_THRESHOLDS = {"numu": 0.4, "other": 0.2, "ncpi0": -0.05, "nue": -1.0}
-UB_SCORES = ["ub_" + n for n in UB_THRESHOLDS]
+UB_SCORES = ["ub_numu", "ub_other", "ub_ncpi0", "ub_nue"]
 
-UB_SELECTION = OrderedDict(
-    [("vertex_shower", lambda df: df.shw_sp_n_20mev_showers > 0),
-     ("bdts_evaluable", lambda df: df[UB_SCORES].notna().all(axis=1))]
-    + [("ub_" + n, (lambda n, t: lambda df: df["ub_" + n] > t)(n, t)) for n, t in UB_THRESHOLDS.items()]
-    + [("one_shower", lambda df: df.shw_sp_n_20br1_showers == 1)])
+UB_SELECTION = {
+    "vertex_shower": lambda df: df.shw_sp_n_20mev_showers > 0,
+    "bdts_evaluable": lambda df: df[UB_SCORES].notna().all(axis=1),
+    "ub_numu": lambda df: df.ub_numu > 0.4,
+    "ub_other": lambda df: df.ub_other > 0.2,
+    "ub_ncpi0": lambda df: df.ub_ncpi0 > -0.05,
+    "ub_nue": lambda df: df.ub_nue > -1.0,
+    "one_shower": lambda df: df.shw_sp_n_20br1_showers == 1,
+}
 
 # Cut chains for cutflow.py
 CHAINS = {
     "presel": PRESELECTION,
     "uboone": UB_SELECTION,
-    "presel+uboone": OrderedDict([(k, PRESELECTION[k]) for k in ("vertex", "generic", "fv")]
-                                 + list(UB_SELECTION.items())),
+    "presel+uboone": {**{k: PRESELECTION[k] for k in ("vertex", "generic", "fv")}, **UB_SELECTION},
 }
 
 
-def preselection(df, upto=None, chain=PRESELECTION):
+def passes(df, chain=PRESELECTION, upto=None):
     """Candidates passing the cuts of `chain`, through `upto` (inclusive)."""
     m = pd.Series(True, index=df.index)
     for name, cut in chain.items():

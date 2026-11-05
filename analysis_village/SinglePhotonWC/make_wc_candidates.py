@@ -16,19 +16,14 @@ Everything Wire-Cell writes about a candidate in one row, for selection work:
     leading energies. The unclear-link leftover showers (== 3) are counted
     apart, n_unclear / E_unclear; kine_reco_Enu includes both.
   * segments (T_segment) and charge points (T_rec_charge): counts, lengths
-  * MC only: the T_match truth match (tmatch_idx, IoUs) and the T_pf tree
-    size (pf_*). On data these columns are absent.
+  * MC only: the T_match truth match, tmatch_idx (row in rec.mc.nu, -1: no
+    match) and its charge / point IoU. Absent on data.
 
-Reco only: truth is the separate mcnu table (make_truth.py, written by
-configs/wc_candidates_mc.py), one row per true neutrino. tmatch_idx is the
-candidate's row in it (-1: no match):
-  wc.join(mcnu, on=["entry", "tmatch_idx"])
-(prepend "__ntuple", and "file" after dfio.load, to the keys). Events
-without a candidate have no row here; mcnu also gives the efficiency
-denominators.
+Reco only: truth is the separate mcnu table (make_truth.py), joined on
+(file, __ntuple, entry, tmatch_idx) by cutflow.load. Events without a
+candidate have no row here; mcnu gives the efficiency denominators.
 """
 
-import numpy as np
 import pandas as pd
 
 from makedf import wirecell as wc
@@ -45,7 +40,8 @@ def _by_nu(df):
 
 def _nth(E, n):
     """n-th largest value per candidate (n = 1 is the maximum)."""
-    return _by_nu(E).apply(lambda s: s.nlargest(n).iloc[-1] if len(s) >= n else np.nan)
+    s = E.sort_values(ascending=False)
+    return s[s.groupby(level=LEVELS).cumcount() == n - 1]
 
 
 def _particles(f, index):
@@ -115,14 +111,4 @@ def make_wc_candidate_df(f):
     b = b[["n_main"]].add_prefix("bundle_")
     D = D.join(b)
 
-    D = D.join(_particles(f, D.index)).join(_segments(f, D.index)).join(_charge(f, D.index))
-
-    if "tmatch_idx" in D:
-        pf = wc.make_wc_tabledf(f, "T_pf", ["nu_index", "depth", "is_pseudo"])
-        pf = pf.reset_index("row", drop=True).set_index("nu_index", append=True)
-        P = pd.DataFrame(index=D.index)
-        P["pf_n_nodes"] = _by_nu(pf).size()
-        P["pf_n_primary"] = _by_nu(pf.depth == 0).sum()
-        P["pf_n_pseudo"] = _by_nu(pf.is_pseudo > 0).sum()
-        D = D.join(P.fillna(0).astype(int))
-    return D
+    return D.join(_particles(f, D.index)).join(_segments(f, D.index)).join(_charge(f, D.index))

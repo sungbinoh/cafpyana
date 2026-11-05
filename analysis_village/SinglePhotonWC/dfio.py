@@ -1,4 +1,4 @@
-"""Read and merge NCDeltaWC .df files (run_df_maker output), e.g. from the grid.
+"""Read and merge run_df_maker .df files, e.g. from the grid.
 
 A .df file is an HDF5 store holding each dataframe in splits, under keys
 "<name>_0", "<name>_1", ..., with the number of splits in key "split". Every
@@ -9,7 +9,7 @@ from different jobs collide. load() adds an outer "file" level (position in
 the input list) to keep them apart.
 
 Merge a grid output directory into one .df:
-  python -m analysis_village.NCDeltaWC.dfio -i /pnfs/sbnd/scratch/users/$USER/cafpyana_out/<dir> -o merged.df
+  python -m analysis_village.SinglePhotonWC.dfio -i $CAFPYANA_GRID_OUT_DIR/dfs/<dir> -o merged.df
 """
 
 import argparse
