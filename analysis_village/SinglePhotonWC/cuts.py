@@ -153,10 +153,37 @@ PRESELECTION = OrderedDict([
 ])
 
 
-def preselection(df, upto=None):
-    """Candidates passing the PRESELECTION cuts, through `upto` (inclusive)."""
+# --- MicroBooNE reference selection (microboone_single_photon_selection.yaml)
+#
+# On the four MicroBooNE BDT scores, columns ub_<name> (microboone_bdt.score;
+# NaN = not evaluable). The MicroBooNE FV is not an SBND FV and is not used.
+#   vertex_shower   >= 1 photon-like shower > 20 MeV at the vertex
+#   bdts_evaluable  shw_sp_filled and every input finite, all four BDTs
+#   ub_<name>       score above UB_THRESHOLDS (nue: always true, as in uB)
+#   one_shower      exactly one reconstructable photon-like shower
+
+UB_THRESHOLDS = {"numu": 0.4, "other": 0.2, "ncpi0": -0.05, "nue": -1.0}
+UB_SCORES = ["ub_" + n for n in UB_THRESHOLDS]
+
+UB_SELECTION = OrderedDict(
+    [("vertex_shower", lambda df: df.shw_sp_n_20mev_showers > 0),
+     ("bdts_evaluable", lambda df: df[UB_SCORES].notna().all(axis=1))]
+    + [("ub_" + n, (lambda n, t: lambda df: df["ub_" + n] > t)(n, t)) for n, t in UB_THRESHOLDS.items()]
+    + [("one_shower", lambda df: df.shw_sp_n_20br1_showers == 1)])
+
+# Cut chains for cutflow.py
+CHAINS = {
+    "presel": PRESELECTION,
+    "uboone": UB_SELECTION,
+    "presel+uboone": OrderedDict([(k, PRESELECTION[k]) for k in ("vertex", "generic", "fv")]
+                                 + list(UB_SELECTION.items())),
+}
+
+
+def preselection(df, upto=None, chain=PRESELECTION):
+    """Candidates passing the cuts of `chain`, through `upto` (inclusive)."""
     m = pd.Series(True, index=df.index)
-    for name, cut in PRESELECTION.items():
+    for name, cut in chain.items():
         m &= cut(df)
         if name == upto:
             break

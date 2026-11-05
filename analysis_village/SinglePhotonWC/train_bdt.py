@@ -12,7 +12,8 @@ training files is held out for early stopping.
 
 Efficiency is per true signal neutrino (as cutflow.py); purity per candidate.
 
-  python analysis_village/SinglePhotonWC/train_bdt.py -i <.df files or dirs> -o bdt_out/
+  python analysis_village/SinglePhotonWC/train_bdt.py -i <.df files or dirs> -o bdt_out/ \
+      [--uboone-bdt <xml dir>] [--features uboone]
 """
 
 import argparse
@@ -136,13 +137,23 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-i", "--inputs", nargs="+", required=True)
     ap.add_argument("-o", "--outdir", default="bdt_out")
+    ap.add_argument("--uboone-bdt", default=None, help="MicroBooNE BDT XML directory: adds the four ub_* scores")
+    ap.add_argument("--features", choices=["all", "uboone"], default="all",
+                    help="uboone: only the inputs of the four MicroBooNE BDTs (retrain them on SBND)")
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
     w, m, pot = load(args.inputs)
     nsig_nu = m.cat.isin(cuts.SIGNAL_CATEGORIES).sum()
     p = add_derived(w[cuts.preselection(w)].copy())
+    if args.uboone_bdt:
+        from analysis_village.SinglePhotonWC import microboone_bdt
+        p = p.join(microboone_bdt.score(p, args.uboone_bdt).add_prefix("ub_"))
     feats = feature_columns(p)
+    if args.features == "uboone":
+        from analysis_village.SinglePhotonWC import microboone_bdt
+        ub = {c for cols in microboone_bdt.input_columns(args.uboone_bdt).values() for c in cols}
+        feats = [c for c in p.columns if c in ub and p[c].nunique(dropna=False) > 1]
     print("%d preselected candidates, %d signal; %d input variables" % (
         len(p), p.cat.isin(cuts.SIGNAL_CATEGORIES).sum(), len(feats)))
     X = p[feats].astype(np.float32)
