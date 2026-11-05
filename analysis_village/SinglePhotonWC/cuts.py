@@ -170,13 +170,16 @@ PRESELECTION = {
 #   vertex_shower   >= 1 photon-like shower > 20 MeV at the vertex
 #   bdts_evaluable  shw_sp_filled and every input finite, the two BDTs used
 #   wc_numu         not numu CC-like: numu_score < 0.5
-#   ub_<name>       score above the MicroBooNE threshold (log10 score scale,
-#                   see microboone_bdt)
+#   ub_<name>       score above threshold (log10 score scale, see
+#                   microboone_bdt). Thresholds re-tuned on SBND MC (models
+#                   unchanged); MicroBooNE's were other > 0.2, NC pi0 > -0.05
 #   wc_nue          not nue-like: nue_score < 7 (MicroBooNE's nue selection
 #                   is nue_score > 7)
 #   one_shower      exactly one reconstructable photon-like shower
 
 UB_SCORES = ["ub_other", "ub_ncpi0"]
+UB_OTHER_MIN = 0.0
+UB_NCPI0_MIN = -0.25
 WC_NUMU_SCORE_MAX = 0.5
 WC_NUE_SCORE_MAX = 7.0
 
@@ -184,8 +187,8 @@ UB_SELECTION = {
     "vertex_shower": lambda df: df.shw_sp_n_20mev_showers > 0,
     "bdts_evaluable": lambda df: df[UB_SCORES].notna().all(axis=1),
     "wc_numu": lambda df: df.numu_score < WC_NUMU_SCORE_MAX,
-    "ub_other": lambda df: df.ub_other > 0.2,
-    "ub_ncpi0": lambda df: df.ub_ncpi0 > -0.05,
+    "ub_other": lambda df: df.ub_other > UB_OTHER_MIN,
+    "ub_ncpi0": lambda df: df.ub_ncpi0 > UB_NCPI0_MIN,
     "wc_nue": lambda df: df.nue_score < WC_NUE_SCORE_MAX,
     "one_shower": lambda df: df.shw_sp_n_20br1_showers == 1,
 }
