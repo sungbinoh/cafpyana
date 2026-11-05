@@ -23,10 +23,13 @@ from analysis_village.NCDeltaWC import dfio  # noqa: E402
 NU_KEY = ["file", "__ntuple", "entry"]
 
 
-def load(inputs):
-    """(candidates with truth and cat, mcnu with cat, POT)."""
-    frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "mcnu"])
+def load(inputs, extra=()):
+    """(candidates with truth and cat, mcnu with cat, POT). extra: more
+    candidate-indexed keys to join, e.g. "wctag"."""
+    frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "mcnu"] + list(extra))
     w, m = frames["wc"], frames["mcnu"]
+    for k in extra:
+        w = w.join(frames[k])
     m.index = m.index.set_names(NU_KEY + ["tmatch_idx"])
     m["cat"] = cuts.truth_category(m)
     w = w.join(m.drop(columns="cat"), on=NU_KEY + ["tmatch_idx"])
