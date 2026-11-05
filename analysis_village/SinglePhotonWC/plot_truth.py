@@ -35,8 +35,7 @@ SIG_COLOR, BKG_COLOR = "#2a78d6", "#a3a29d"
 
 # Compared samples: signal solid, background dashed
 GROUPS = {
-    "signal: NC Delta":      dict(cats=[0], color="#2a78d6", ls="-"),
-    "signal: pi0 (NC+CC)":   dict(cats=[1, 2], color="#eb6834", ls="-"),
+    "signal (inclusive 1g)": dict(cats=[0, 1, 2, 3], color="#2a78d6", ls="-"),
     "bkg: >=2 showers":      dict(cats=[4], color="#1baf7a", ls="--"),
     "bkg: CC numu mu>=100":  dict(cats=[6], color="#eda100", ls="--"),
     "bkg: CC nue":           dict(cats=[7], color="#7f5bd5", ls="--"),
@@ -124,7 +123,7 @@ def page_kinematics(pdf, G):
 def page_extra(pdf, m):
     fig, axs = plt.subplots(1, 3, figsize=(15, 4.2))
     G = groups(m)
-    hist(axs[0], {k: G[k] for k in ["signal: pi0 (NC+CC)", "bkg: >=2 showers"]}, "true_shw2_E",
+    hist(axs[0], {k: G[k] for k in ["bkg: >=2 showers"]}, "true_shw2_E",
          np.linspace(0, 400, 41), "sub-leading shower E [MeV]", scale=1000.)
     axs[0].set_title("Sub-leading shower (signal: none)", loc="left")
     axs[0].legend(fontsize=8)
