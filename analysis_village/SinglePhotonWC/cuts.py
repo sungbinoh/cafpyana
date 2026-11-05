@@ -177,6 +177,8 @@ PRESELECTION = {
 #                   is nue_score > 7)
 #   one_shower      exactly one reconstructable photon-like shower
 
+# Keep the order: the MicroBooNE BDTs are a cascade, each trained on events
+# passing the previous ones (the NC pi0 BDT has no separation before "other").
 UB_SCORES = ["ub_other", "ub_ncpi0"]
 UB_OTHER_MIN = 0.0
 UB_NCPI0_MIN = -0.25
