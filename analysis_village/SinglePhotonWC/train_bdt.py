@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """BDT (XGBoost) separating the inclusive single-photon signal from every
-background, on candidates passing cuts.PRESELECTION.
+background, on candidates passing a cuts.CHAINS chain (default presel).
 
 Inputs are reco only: every numeric Wire-Cell candidate column (summary
 columns plus every scalar T_tagger leaf) except identifiers, MC-only
@@ -15,7 +15,7 @@ training files is held out for early stopping.
 Efficiency is per true signal neutrino (as cutflow.py); purity per candidate.
 
   python analysis_village/SinglePhotonWC/train_bdt.py -i <.df files or dirs> -o bdt_out/ \
-      [--uboone-bdt <xml dir>] [--features uboone]
+      [--uboone-bdt <xml dir>] [--features uboone] [--chain presel+uboone]
 """
 
 import argparse
@@ -126,12 +126,14 @@ def main():
     ap.add_argument("--uboone-bdt", help="MicroBooNE BDT XML directory: adds the four ub_* scores")
     ap.add_argument("--features", choices=["all", "uboone"], default="all",
                     help="uboone: only the inputs of the four MicroBooNE BDTs (needs --uboone-bdt)")
+    ap.add_argument("--chain", default="presel", choices=list(cuts.CHAINS),
+                    help="candidates to train on (uboone chains need --uboone-bdt)")
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
     w, m, pot = load(args.inputs, args.uboone_bdt)
     nsig_nu = cuts.is_signal_cat(m.cat).sum()
-    p = w[cuts.passes(w)].copy()
+    p = w[cuts.passes(w, cuts.CHAINS[args.chain])].copy()
     p["vtx_dwall"] = cuts.dist_to_active_boundary(p.nu_x, p.nu_y, p.nu_z)
     p["E_em_frac"] = p.E_em_1 / p.kine_reco_Enu
     only = None
@@ -155,7 +157,7 @@ def main():
     imp = (imp / imp.sum()).sort_values(ascending=False)
 
     print("AUC (all, out-of-fold) %.4f" % roc_auc_score(y, p.bdt))
-    print("Preselection efficiency %.1f%%, purity %.2f%%" % (100 * n_signal_nu(p) / nsig_nu, 100 * y.mean()))
+    print("Efficiency before the BDT %.1f%%, purity %.2f%%" % (100 * n_signal_nu(p) / nsig_nu, 100 * y.mean()))
     wp = working_points(p, nsig_nu, pot)
     pd.set_option("display.width", 250)
     print("Working points (rates per 1e20 POT):")

@@ -7,7 +7,10 @@ Pass their directory, or set SP_UBOONE_BDT_DIR.
 
 Evaluation follows abhatfnal/sbnd-wirecell-single-photon
 score_microboone_bdts.py, which agrees with TMVA::Reader to 5e-7:
-score = tanh(sum of boostWeight * leaf res), going left when value <= cut.
+EvaluateMVA = tanh(F), F = sum of boostWeight * leaf res, going left when
+value <= cut. The score is MicroBooNE's Wire-Cell convention,
+log10((1 + mva) / (1 - mva)) = 2 F / ln 10, which the selection thresholds
+are in (the paper's nue score axis spans -8 to 4; tanh saturates at -1).
 Inputs are read by their XML name from the candidate columns, except
 reco_nuvtxY -> kine_nu_y_corr. A score exists only if shw_sp_filled == 1
 and every input is finite (no defaults); otherwise it is NaN.
@@ -56,7 +59,7 @@ class TmvaGradBdt:
                                np.array(left), np.array(right), np.array(res)))
 
     def evaluate(self, X):
-        """X: (n, nvar) array in XML variable order -> tanh scores (n,)."""
+        """X: (n, nvar) array in XML variable order -> F (n,); EvaluateMVA is tanh(F)."""
         X = np.asarray(X, dtype=np.float64)
         rows = np.arange(len(X))
         raw = np.zeros(len(X))
@@ -69,7 +72,7 @@ class TmvaGradBdt:
                 node[active] = np.where(go_left, left[n], right[n])
                 active = ivar[node] >= 0
             raw += bw * res[node]
-        return np.tanh(raw)
+        return raw
 
 
 _MODELS = {}
@@ -106,6 +109,6 @@ def score(df, bdt_dir=None):
         ok = filled & np.isfinite(X).all(axis=1)
         s = np.full(len(df), np.nan)
         if ok.any():
-            s[ok] = m.evaluate(X[ok])
+            s[ok] = 2 * m.evaluate(X[ok]) / np.log(10)
         out["ub_" + n] = s
     return out

@@ -158,8 +158,8 @@ PRESELECTION = {
 # NaN = not evaluable). The MicroBooNE FV is not an SBND FV and is not used.
 #   vertex_shower   >= 1 photon-like shower > 20 MeV at the vertex
 #   bdts_evaluable  shw_sp_filled and every input finite, all four BDTs
-#   ub_<name>       score above the MicroBooNE threshold (nue > -1 always
-#                   passes, as in MicroBooNE)
+#   ub_<name>       score above the MicroBooNE threshold (log10 score scale,
+#                   see microboone_bdt)
 #   one_shower      exactly one reconstructable photon-like shower
 
 UB_SCORES = ["ub_numu", "ub_other", "ub_ncpi0", "ub_nue"]
@@ -174,11 +174,12 @@ UB_SELECTION = {
     "one_shower": lambda df: df.shw_sp_n_20br1_showers == 1,
 }
 
-# Cut chains for cutflow.py
+# Cut chains for cutflow.py and train_bdt.py
+_PRESEL_NO_EM = {k: PRESELECTION[k] for k in ("vertex", "generic", "fv")}
 CHAINS = {
     "presel": PRESELECTION,
     "uboone": UB_SELECTION,
-    "presel+uboone": {**{k: PRESELECTION[k] for k in ("vertex", "generic", "fv")}, **UB_SELECTION},
+    "presel+uboone": {**_PRESEL_NO_EM, **UB_SELECTION},
 }
 
 
