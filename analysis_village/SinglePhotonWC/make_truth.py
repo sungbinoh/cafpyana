@@ -9,21 +9,22 @@ candidates join on (entry, tmatch_idx). Columns, all prefixed true_:
     nn, nmu, nmu_100MeV, mu_KE (leading muon, GeV), ne (e+-)
   * prompt photons (GENIE primaries and decay photons of primary hadrons):
       ngamma_20MeV  photons with E >= 20 MeV
-      ngamma_rec    of those, reconstructable (shower starts >= 3 cm inside
-                    the TPC)
+      ngamma_rec    of those, reconstructable (shower starts >=
+                    cuts.SHOWER_INSET inside the TPC)
       ngamma_out    of those, not reconstructable: converts outside the TPC
-                    or < 3 cm from its boundary
+                    or closer than SHOWER_INSET to its boundary
       ndecayg_soft  decay photons below 20 MeV
       nshower       reconstructable showers after merging photons < 20 deg
                     apart; nmerged = ngamma_rec - nshower
   * shw1_* / shw2_*: the two most energetic showers. E [GeV] (sum of its
     photons), gap [cm] (vertex to the nearest conversion point), costh (of
-    its leading photon, to the beam), nphot, origin (22 for a GENIE-primary
-    photon, else the pdg of the primary hadron it comes from: 111, 221, ...)
+    its leading photon, to the beam), conv_x/y/z [cm] (conversion point of
+    its leading photon), nphot, origin (22 for a GENIE-primary photon, else
+    the pdg of the primary hadron it comes from: 111, 221, ...)
 
 The shower start is the photon trajectory end: SBND's Geant4 does not keep
 EM shower daughters, and the CAF stores only in-TPC points (-9999 if none),
-so an escaping photon ends on the boundary and fails the 3 cm inset.
+so an escaping photon ends on the boundary and fails the inset.
 """
 
 import numpy as np
@@ -132,13 +133,15 @@ def make_sp_truthdf(f):
     # reconstructable showers, most energetic first
     s = _merge_showers(g[g.rec]).groupby(["entry", "nu", "shower"]).agg(
         E=("genE", "sum"), gap=("gap", "min"), costh=("dz", "first"),
+        conv_x=("end_x", "first"), conv_y=("end_y", "first"), conv_z=("end_z", "first"),
         nphot=("genE", "size"), origin=("origin", "first")).reset_index()
     s = s.sort_values(["entry", "nu", "E"], ascending=[True, True, False])
     s["rank"] = s.groupby(nu).cumcount()
     s = s.set_index(nu)
     N["nshower"] = cnt(s["rank"] >= 0, nu)
     N["nmerged"] = N.ngamma_rec - N.nshower
-    N = N.join(s.loc[s["rank"] == 0, ["E", "gap", "costh", "nphot", "origin"]].add_prefix("shw1_"))
-    N = N.join(s.loc[s["rank"] == 1, ["E", "gap"]].add_prefix("shw2_"))
+    conv = ["conv_x", "conv_y", "conv_z"]
+    N = N.join(s.loc[s["rank"] == 0, ["E", "gap", "costh", "nphot", "origin"] + conv].add_prefix("shw1_"))
+    N = N.join(s.loc[s["rank"] == 1, ["E", "gap"] + conv].add_prefix("shw2_"))
     N.index.names = names
     return N.add_prefix("true_")

@@ -40,7 +40,7 @@ GROUPS = {
     "bkg: CC numu mu>=100":  dict(cats=[6], color="#eda100", ls="--"),
     "bkg: CC nue":           dict(cats=[7], color="#7f5bd5", ls="--"),
 }
-PI0_REASONS = ["photons merged (< 20 deg)", "other photon escapes / < 3 cm from wall",
+PI0_REASONS = ["photons merged (< 20 deg)", "other photon escapes / < %g cm from wall" % cuts.SHOWER_INSET,
                "other photon < 20 MeV", "other"]
 
 

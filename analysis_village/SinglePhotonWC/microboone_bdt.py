@@ -2,7 +2,7 @@
 scored on Wire-Cell candidate rows (make_wc_candidates.py columns).
 
 The models are the original MicroBooNE GradBoost weight files,
-single_photon_<name>_bdt_final.xml, not SBND-trained; they are not in git.
+single_photon_<name>_bdt_final.xml; they are not in git.
 Pass their directory, or set SP_UBOONE_BDT_DIR.
 
 Evaluation follows abhatfnal/sbnd-wirecell-single-photon

@@ -5,9 +5,11 @@ Signal, following the MicroBooNE inclusive photon-like LEE search
 (PRL, doi:10.1103/89qs-4lcp), which is modelled on MiniBooNE's single
 Cherenkov ring:
 
-  * true neutrino vertex in the active volume
+  * any true neutrino vertex position: a single photon from a vertex
+    outside the active volume is signal, as in MicroBooNE (category
+    "1g: vertex outside AV")
   * exactly one reconstructable photon shower. A reconstructable photon has
-    true E >= 20 MeV and starts its shower (pair conversion) >= 3 cm inside
+    true E >= 20 MeV and starts its shower (pair conversion) >= 10 cm inside
     the TPC boundary. Photons from the same vertex closer than 20 deg are
     one shower.
   * no primary muon with KE >= 100 MeV (below MiniBooNE's threshold)
@@ -40,7 +42,7 @@ ACTIVE_VOLUME = {"x": (-200.0, 200.0), "y": (-200.0, 200.0), "z": (0.0, 500.0)}
 # --- Signal definition
 
 PHOTON_E_MIN = 0.020       # GeV, true photon energy
-SHOWER_INSET = 3.0         # cm, shower start from the TPC boundary
+SHOWER_INSET = 10.0        # cm, shower start from the TPC boundary (MicroBooNE: 3)
 MERGE_ANGLE = 20.0         # deg, photons closer than this are one shower
 MUON_KE_MAX = 0.100        # GeV, primary muons below this are allowed
 
@@ -74,8 +76,9 @@ def is_cosmic(df):
 
 
 def is_signal(df):
-    return (true_in_active(df) & (df.true_nshower == 1)
-            & (df.true_nmu_100MeV == 0) & (df.true_ne == 0))
+    """MicroBooNE-style: one reconstructable photon shower in the TPC, any
+    neutrino vertex position (out-of-AV 1g is signal, as in MicroBooNE)."""
+    return (df.true_nshower == 1) & (df.true_nmu_100MeV == 0) & (df.true_ne == 0)
 
 
 # --- Truth categories
@@ -88,14 +91,15 @@ CATEGORY_LABELS = {
     1: "1g: NC pi0",
     2: "1g: CC pi0, mu < 100 MeV",
     3: "1g: other",
+    10: "1g: vertex outside AV",
     4: ">=2 showers",
     5: "0 showers",
     6: "CC numu, mu >= 100 MeV",
     7: "CC nue (primary e)",
-    8: "Outside active volume",
+    8: "Outside AV, not 1g",
     9: "Cosmic / unmatched",
 }
-SIGNAL_CATEGORIES = [0, 1, 2, 3]
+SIGNAL_CATEGORIES = [0, 1, 2, 3, 10]
 
 
 def is_signal_cat(cat):
@@ -109,6 +113,7 @@ def truth_category(df):
     ncdelta = (df.true_isnc == 1) & (o == ORIGIN_PRIMARY) & (df.true_resnum == RESNUM_DELTA_1232)
     conds = [
         (is_cosmic(df), 9),
+        (sig & ~true_in_active(df), 10),
         (~true_in_active(df), 8),
         (df.true_ne > 0, 7),
         (df.true_nmu_100MeV > 0, 6),
@@ -154,27 +159,35 @@ PRESELECTION = {
 
 # --- MicroBooNE reference selection (microboone_single_photon_selection.yaml)
 #
-# On the four MicroBooNE BDT scores, columns ub_<name> (microboone_bdt.score;
-# NaN = not evaluable). The MicroBooNE FV is not an SBND FV and is not used.
+# On the MicroBooNE other and NC pi0 BDT scores, columns ub_<name>
+# (microboone_bdt.score; NaN = not evaluable). The numu and nue steps use
+# the SBND Wire-Cell tagger scores instead: for nue it keeps ~2x the signal
+# of the MicroBooNE nue BDT at the same purity; for numu it matches the
+# MicroBooNE numu BDT. The MicroBooNE FV is not used.
 #   vertex_shower   >= 1 photon-like shower > 20 MeV at the vertex
-#   bdts_evaluable  shw_sp_filled and every input finite, all four BDTs
+#   bdts_evaluable  shw_sp_filled and every input finite, the two BDTs used
+#   wc_numu         not numu CC-like: numu_score < 0.5
 #   ub_<name>       score above the MicroBooNE threshold (log10 score scale,
 #                   see microboone_bdt)
+#   wc_nue          not nue-like: nue_score < 7 (MicroBooNE's nue selection
+#                   is nue_score > 7)
 #   one_shower      exactly one reconstructable photon-like shower
 
-UB_SCORES = ["ub_numu", "ub_other", "ub_ncpi0", "ub_nue"]
+UB_SCORES = ["ub_other", "ub_ncpi0"]
+WC_NUMU_SCORE_MAX = 0.5
+WC_NUE_SCORE_MAX = 7.0
 
 UB_SELECTION = {
     "vertex_shower": lambda df: df.shw_sp_n_20mev_showers > 0,
     "bdts_evaluable": lambda df: df[UB_SCORES].notna().all(axis=1),
-    "ub_numu": lambda df: df.ub_numu > 0.4,
+    "wc_numu": lambda df: df.numu_score < WC_NUMU_SCORE_MAX,
     "ub_other": lambda df: df.ub_other > 0.2,
     "ub_ncpi0": lambda df: df.ub_ncpi0 > -0.05,
-    "ub_nue": lambda df: df.ub_nue > -1.0,
+    "wc_nue": lambda df: df.nue_score < WC_NUE_SCORE_MAX,
     "one_shower": lambda df: df.shw_sp_n_20br1_showers == 1,
 }
 
-# Cut chains for cutflow.py and train_bdt.py
+# Cut chains for cutflow.py
 _PRESEL_NO_EM = {k: PRESELECTION[k] for k in ("vertex", "generic", "fv")}
 CHAINS = {
     "presel": PRESELECTION,
