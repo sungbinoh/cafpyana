@@ -9,7 +9,7 @@ Cherenkov ring:
     outside the active volume is signal, as in MicroBooNE (category
     "1g: vertex outside AV")
   * exactly one reconstructable photon shower. A reconstructable photon has
-    true E >= 20 MeV and starts its shower (pair conversion) >= 10 cm inside
+    true E >= 20 MeV and starts its shower (pair conversion) >= 3 cm inside
     the TPC boundary. Photons from the same vertex closer than 20 deg are
     one shower.
   * no primary muon with KE >= 100 MeV (below MiniBooNE's threshold)
@@ -42,7 +42,7 @@ ACTIVE_VOLUME = {"x": (-200.0, 200.0), "y": (-200.0, 200.0), "z": (0.0, 500.0)}
 # --- Signal definition
 
 PHOTON_E_MIN = 0.020       # GeV, true photon energy
-SHOWER_INSET = 10.0        # cm, shower start from the TPC boundary (MicroBooNE: 3)
+SHOWER_INSET = 3.0         # cm, shower start from the TPC boundary (as MicroBooNE)
 MERGE_ANGLE = 20.0         # deg, photons closer than this are one shower
 MUON_KE_MAX = 0.100        # GeV, primary muons below this are allowed
 
@@ -170,9 +170,9 @@ PRESELECTION = {
 #   vertex_shower   >= 1 photon-like shower > 20 MeV at the vertex
 #   bdts_evaluable  shw_sp_filled and every input finite, the two BDTs used
 #   wc_numu         not numu CC-like: numu_score < 0.5
-#   ub_<name>       score above threshold (log10 score scale, see
-#                   microboone_bdt). Thresholds re-tuned on SBND MC (models
-#                   unchanged); MicroBooNE's were other > 0.2, NC pi0 > -0.05
+#   ub_<name>       score above the MicroBooNE threshold (log10 score scale,
+#                   see microboone_bdt). Re-tuning on SBND MC (3 cm inset)
+#                   found these already near-optimal.
 #   wc_nue          not nue-like: nue_score < 7 (MicroBooNE's nue selection
 #                   is nue_score > 7)
 #   one_shower      exactly one reconstructable photon-like shower
@@ -180,8 +180,8 @@ PRESELECTION = {
 # Keep the order: the MicroBooNE BDTs are a cascade, each trained on events
 # passing the previous ones (the NC pi0 BDT has no separation before "other").
 UB_SCORES = ["ub_other", "ub_ncpi0"]
-UB_OTHER_MIN = 0.0
-UB_NCPI0_MIN = -0.25
+UB_OTHER_MIN = 0.2
+UB_NCPI0_MIN = -0.05
 WC_NUMU_SCORE_MAX = 0.5
 WC_NUE_SCORE_MAX = 7.0
 
