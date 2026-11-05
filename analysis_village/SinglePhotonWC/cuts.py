@@ -23,6 +23,9 @@ do not count.
 
 Truth columns are those of make_truth.make_sp_truthdf, joined to candidates
 on (entry, tmatch_idx); a candidate with no match is "cosmic".
+
+Reco preselection (one row per Wire-Cell candidate, make_wc_candidates.py):
+PRESELECTION, applied in order by preselection().
 """
 
 from collections import OrderedDict
@@ -117,3 +120,44 @@ def truth_category(df):
     for m, c in reversed(conds):
         cat[m.fillna(False).astype(bool)] = c
     return cat
+
+
+# --- Reco preselection (Wire-Cell candidate columns)
+#
+#   vertex      has_vertex == 1: a vertex was found, so the taggers ran
+#   generic     Wire-Cell generic neutrino selection: not tagged cosmic
+#               (cosmict_flag, OR of the 10 cosmic sub-taggers), main cluster
+#               not a through-going / stopping muon, main cluster > 15 cm.
+#               Every candidate already has a matched flash.
+#   fv          reco vertex >= 5 cm inside the active volume
+#   em_shower   >= 1 connected EM shower (T_kine PID 11)
+
+FV_INSET = 5.0                 # cm
+MIN_CLUSTER_LENGTH = 15.0      # cm
+
+
+def reco_in_fv(df, inset=FV_INSET):
+    return pd.Series(dist_to_active_boundary(df.nu_x, df.nu_y, df.nu_z) >= inset, index=df.index)
+
+
+def is_generic_nu(df):
+    return ((df.cosmict_flag == 0) & (df.main_cluster_tgm == 0) & (df.main_cluster_stm == 0)
+            & (df.main_cluster_length_cm > MIN_CLUSTER_LENGTH))
+
+
+PRESELECTION = OrderedDict([
+    ("vertex", lambda df: df.has_vertex == 1),
+    ("generic", is_generic_nu),
+    ("fv", reco_in_fv),
+    ("em_shower", lambda df: df.n_em >= 1),
+])
+
+
+def preselection(df, upto=None):
+    """Candidates passing the PRESELECTION cuts, through `upto` (inclusive)."""
+    m = pd.Series(True, index=df.index)
+    for name, cut in PRESELECTION.items():
+        m &= cut(df)
+        if name == upto:
+            break
+    return m
