@@ -179,8 +179,6 @@ PRESELECTION = {
 # and nue_score instead of the MicroBooNE nue BDT (~2x the signal at the
 # same purity). The yaml's MicroBooNE-geometry FV is replaced by
 # the SBND fv cut of the preselection.
-#   vertex_shower   >= 1 photon-like shower > 20 MeV at the vertex
-#   bdts_evaluable  shw_sp_filled and every input finite, the three BDTs used
 #   wc_numu         not numu CC-like: numu_score < 0.5
 #   ub_numu         MicroBooNE numu BDT > 1 (MicroBooNE: 0.4; tighter on SBND,
 #                   tuned out-of-fold, as wc_numu already cut)
@@ -191,11 +189,15 @@ PRESELECTION = {
 #                   score scale, see microboone_bdt)
 #   wc_nue          not nue-like: nue_score < 7 (MicroBooNE's nue selection
 #                   is nue_score > 7)
-#   one_shower      exactly one reconstructable photon-like shower
-
-# Keep the order: the MicroBooNE BDTs are a cascade, each trained on events
-# passing the previous ones (the NC pi0 BDT has no separation before "other").
-UB_SCORES = ["ub_numu", "ub_other", "ub_ncpi0"]
+#   one_shower      exactly one EM shower > 20 MeV at the vertex passing the
+#                   single-photon tagger's first reconstruction check
+#
+# MicroBooNE's ">= 1 shower > 20 MeV at the vertex" and "BDTs evaluable"
+# steps are not cut: one_shower and the BDT thresholds (NaN = not
+# evaluable fails them) imply both.
+# The cuts are ANDed, so the order only shapes the cut flow. It follows the
+# MicroBooNE BDT cascade (each trained on events passing the previous ones;
+# the NC pi0 BDT has no separation before "other"), so tune them in order.
 UB_NUMU_MIN = 1.0
 UB_OTHER_MIN = -0.25
 UB_NCPI0_MIN = -0.05
@@ -203,8 +205,6 @@ WC_NUMU_SCORE_MAX = 0.5
 WC_NUE_SCORE_MAX = 7.0
 
 UB_SELECTION = {
-    "vertex_shower": lambda df: df.shw_sp_n_20mev_showers > 0,
-    "bdts_evaluable": lambda df: df[UB_SCORES].notna().all(axis=1),
     "wc_numu": lambda df: df.numu_score < WC_NUMU_SCORE_MAX,
     "ub_numu": lambda df: df.ub_numu > UB_NUMU_MIN,
     "ub_other": lambda df: df.ub_other > UB_OTHER_MIN,
