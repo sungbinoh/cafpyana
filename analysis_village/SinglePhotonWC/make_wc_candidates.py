@@ -10,7 +10,8 @@ Everything Wire-Cell writes about a candidate in one row, for selection work:
     scalars (energies in MeV, as in the CAF); on MC the T_match level-3
     truth match
   * main cluster (T_cluster row of T_tagger.cluster_id): main_cluster_*
-  * flash bundle (T_bundle row with this nu_index): bundle_*
+  * flash bundle (T_bundle row with this nu_index): bundle_*; bundle_reason
+    0 main candidate, 1 demoted main (codes in make_wc_events.py)
   * particle list (T_kine vectors), summarised over the particles connected
     to the candidate (kine_energy_included == 1): counts per PID label and
     leading energies. The unclear-link leftover showers (== 3) are counted
@@ -108,7 +109,7 @@ def make_wc_candidate_df(f):
 
     b = wc.make_wc_bundledf(f)
     b = b[b.nu_index >= 0].reset_index("row", drop=True).set_index("nu_index", append=True)
-    b = b[["n_main"]].add_prefix("bundle_")
+    b = b[["reason", "n_main"]].add_prefix("bundle_")
     D = D.join(b)
 
     return D.join(_particles(f, D.index)).join(_segments(f, D.index)).join(_charge(f, D.index))
