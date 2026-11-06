@@ -12,8 +12,9 @@ Cherenkov ring:
   * vertex in the active volume: no primary muon with KE >= 100 MeV (below
     MiniBooNE's threshold) and no primary electron/positron
   * vertex outside the active volume: any interaction type (MicroBooNE's
-    "out of FV 1g": a photon entering and showering in the TPC); with
-    OUT_AV_LEPTON_VETO the vetoes apply here too
+    "out of FV 1g": a photon entering and showering in the TPC). The
+    definition is what MiniBooNE could see, and a lepton from outside the
+    detector would not have been
   * any number of protons, charged pions, neutrons; any number of photons
     that are not reconstructable (soft, escaping, converting near a wall)
 
@@ -46,11 +47,6 @@ PHOTON_E_MIN = 0.020       # GeV, true photon energy
 SHOWER_INSET = 3.0         # cm, shower start from the TPC boundary (as MicroBooNE)
 MERGE_ANGLE = 20.0         # deg, photons closer than this are one shower
 MUON_KE_MAX = 0.100        # GeV, primary muons below this are allowed
-# The muon/electron vetoes also for vertices outside the AV? MicroBooNE's
-# category list ("out of FV 1g": any interaction) says no; its general
-# definition (photon shower + charged particles below MiniBooNE's Cherenkov
-# threshold) arguably says yes. Unresolved: needs "does the lepton enter".
-OUT_AV_LEPTON_VETO = False
 
 
 def dist_to_active_boundary(x, y, z):
@@ -85,8 +81,6 @@ def is_signal(df):
     """MicroBooNE-style: one reconstructable photon shower in the TPC; the
     muon and electron vetoes apply only to vertices in the active volume."""
     lepton_ok = (df.true_nmu_100MeV == 0) & (df.true_ne == 0)
-    if OUT_AV_LEPTON_VETO:
-        return (df.true_nshower == 1) & lepton_ok
     return (df.true_nshower == 1) & (lepton_ok | ~true_in_active(df))
 
 
