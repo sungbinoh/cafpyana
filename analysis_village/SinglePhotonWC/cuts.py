@@ -142,9 +142,12 @@ def truth_category(df):
 #   vertex      has_vertex == 1: a vertex was found, so the taggers ran
 #   generic     MicroBooNE Wire-Cell generic neutrino selection: main
 #               cluster not a through-going muon, stopping muon or light
-#               mismatch, and > 15 cm. Every candidate already has a matched
-#               flash; tgm/stm/lm fire on < 0.1% of SBND candidates (mostly
-#               applied upstream), so in practice this is the length cut.
+#               mismatch. Every candidate already has a matched flash, and
+#               tgm/stm/lm fire on < 0.1% of SBND candidates (applied
+#               upstream). MicroBooNE's > 15 cm main-cluster cut is dropped:
+#               it removed ~20% of signal (soft photons) at no purity gain.
+#               (Wire-Cell's own 15 cm floor exempts the event's longest
+#               cluster, so it does not do this.)
 #               The cosmic tagger (cosmict_*) is not cut on: as in MicroBooNE
 #               it feeds the "other" BDT.
 #   fv          reco vertex >= 5 cm from the anodes and the cathode (drift
@@ -152,7 +155,6 @@ def truth_category(df):
 #   em_shower   >= 1 connected EM shower (T_kine PID 11)
 
 FV_INSET = 5.0                 # cm
-MIN_CLUSTER_LENGTH = 15.0      # cm
 
 
 def reco_in_fv(df, inset=FV_INSET):
@@ -165,8 +167,7 @@ EVENT_CUTS = {"wc_valid"}
 PRESELECTION = {
     "wc_valid": lambda df: df.wc_valid == 1,
     "vertex": lambda df: df.has_vertex == 1,
-    "generic": lambda df: ((df.main_cluster_tgm == 0) & (df.main_cluster_stm == 0) & (df.main_cluster_lm == 0)
-                           & (df.main_cluster_length_cm > MIN_CLUSTER_LENGTH)),
+    "generic": lambda df: (df.main_cluster_tgm == 0) & (df.main_cluster_stm == 0) & (df.main_cluster_lm == 0),
     "fv": reco_in_fv,
     "em_shower": lambda df: df.n_em >= 1,
 }
