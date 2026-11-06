@@ -132,6 +132,10 @@ def truth_category(df):
 
 # --- Reco preselection (Wire-Cell candidate columns)
 #
+#   wc_valid    Wire-Cell output exists for the event (wcevt valid = 1; 0 is
+#               a production failure, not a reco outcome). An event cut:
+#               valid = 0 events have no candidates, so cutflow applies it
+#               to the true neutrinos (EVENT_CUTS)
 #   vertex      has_vertex == 1: a vertex was found, so the taggers ran
 #   generic     MicroBooNE Wire-Cell generic neutrino selection: main
 #               cluster not a through-going muon, stopping muon or light
@@ -151,7 +155,10 @@ def reco_in_fv(df, inset=FV_INSET):
     return pd.Series(dist_to_active_boundary(df.nu_x, df.nu_y, df.nu_z) >= inset, index=df.index)
 
 
+EVENT_CUTS = {"wc_valid"}
+
 PRESELECTION = {
+    "wc_valid": lambda df: df.wc_valid == 1,
     "vertex": lambda df: df.has_vertex == 1,
     "generic": lambda df: ((df.main_cluster_tgm == 0) & (df.main_cluster_stm == 0) & (df.main_cluster_lm == 0)
                            & (df.main_cluster_length_cm > MIN_CLUSTER_LENGTH)),

@@ -3,7 +3,9 @@
 selection, or both) by truth category.
 
 Input: configs/sp_mc.py outputs (wc + mcnu). Candidates join to the truth on
-(file, __ntuple, entry, tmatch_idx); unmatched ones are cosmic.
+(file, __ntuple, entry, tmatch_idx); unmatched ones are cosmic. Event
+cuts (cuts.EVENT_CUTS, e.g. wc_valid from wcevt) come first and are rows
+of true neutrinos, before "all candidates".
   efficiency  true signal neutrinos with >= 1 passing candidate matched to
               them / all true signal neutrinos
   purity      signal candidates / passing candidates
@@ -28,11 +30,17 @@ NU_KEY = ["file", "__ntuple", "entry", "tmatch_idx"]
 def load(inputs, uboone_bdt=None):
     """(candidates with truth and cat, mcnu with cat, POT). With uboone_bdt,
     the candidates also get the MicroBooNE BDT scores (ub_*)."""
-    frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "mcnu"])
-    w, m = frames["wc"], frames["mcnu"]
+    frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "mcnu", "wcevt"])
+    w, m, ev = frames["wc"], frames["mcnu"], frames["wcevt"]
     m.index = m.index.set_names(NU_KEY)
+    if len(ev):
+        m["wc_valid"] = ev.valid.reindex(m.index.droplevel("tmatch_idx")).fillna(0).astype(int).values
+    else:
+        print("Warning: no wcevt table (older inputs); taking every event as wc_valid.")
+        m["wc_valid"] = 1
     m["cat"] = cuts.truth_category(m)
-    w = w.join(m.drop(columns="cat"), on=NU_KEY)
+    w = w.join(m.drop(columns=["cat", "wc_valid"]), on=NU_KEY)
+    w["wc_valid"] = 1  # a candidate implies Wire-Cell output
     w["cat"] = cuts.truth_category(w)
     if uboone_bdt:
         from analysis_village.SinglePhotonWC import microboone_bdt
@@ -46,17 +54,29 @@ def n_signal_nu(p):
     return len(s.reset_index().drop_duplicates(NU_KEY))
 
 
+def _row(name, p, nsel, nsig, pot):
+    n = p.cat.value_counts().reindex(list(cuts.CATEGORY_LABELS)).fillna(0) / pot * 1e20
+    return dict(cut=name, **n.rename(cuts.CATEGORY_LABELS), total=n.sum(),
+                eff=100 * nsel / nsig if nsig else np.nan,
+                purity=100 * cuts.is_signal_cat(p.cat).mean() if len(p) else 0)
+
+
 def cutflow(w, m, pot, chain):
+    """Rates per 1e20 POT, eff and purity after each cut. Event-cut rows
+    count true neutrinos (keeping them, before candidates); the rest count
+    candidates. Every efficiency is over all true signal neutrinos."""
     nsig = cuts.is_signal_cat(m.cat).sum()
-    rows, mask = [], pd.Series(True, index=w.index)
-    for name, cut in [("all candidates", None)] + list(chain.items()):
+    rows, keep = [], pd.Series(True, index=m.index)
+    events = [k for k in chain if k in cuts.EVENT_CUTS]
+    for name in events:
+        keep &= chain[name](m)
+        rows.append(_row(name, m[keep], cuts.is_signal_cat(m.cat[keep]).sum(), nsig, pot))
+    mask = pd.Series(True, index=w.index)
+    for name, cut in [("all candidates", None)] + [(k, c) for k, c in chain.items() if k not in events]:
         if cut is not None:
             mask &= cut(w)
         p = w[mask]
-        n = p.cat.value_counts().reindex(list(cuts.CATEGORY_LABELS)).fillna(0) / pot * 1e20
-        rows.append(dict(cut=name, **n.rename(cuts.CATEGORY_LABELS), total=n.sum(),
-                         eff=100 * n_signal_nu(p) / nsig if nsig else np.nan,
-                         purity=100 * cuts.is_signal_cat(p.cat).mean() if len(p) else 0))
+        rows.append(_row(name, p, n_signal_nu(p), nsig, pot))
     return pd.DataFrame(rows).set_index("cut")
 
 
