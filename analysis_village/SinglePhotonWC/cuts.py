@@ -178,7 +178,8 @@ PRESELECTION = {
 # (microboone_bdt.score; NaN = not evaluable), plus the SBND Wire-Cell
 # tagger scores: numu_score (removes CC numu the MicroBooNE numu BDT keeps)
 # and nue_score instead of the MicroBooNE nue BDT (~2x the signal at the
-# same purity). The MicroBooNE FV is not used.
+# same purity). The yaml's MicroBooNE-geometry FV is replaced by
+# the SBND fv cut of the preselection.
 #   vertex_shower   >= 1 photon-like shower > 20 MeV at the vertex
 #   bdts_evaluable  shw_sp_filled and every input finite, the three BDTs used
 #   wc_numu         not numu CC-like: numu_score < 0.5
