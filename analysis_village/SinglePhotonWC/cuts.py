@@ -5,20 +5,21 @@ Signal, following the MicroBooNE inclusive photon-like LEE search
 (PRL, doi:10.1103/89qs-4lcp), which is modelled on MiniBooNE's single
 Cherenkov ring:
 
-  * any true neutrino vertex position: a single photon from a vertex
-    outside the active volume is signal, as in MicroBooNE (category
-    "1g: vertex outside AV")
   * exactly one reconstructable photon shower. A reconstructable photon has
     true E >= 20 MeV and starts its shower (pair conversion) >= 3 cm inside
     the TPC boundary. Photons from the same vertex closer than 20 deg are
     one shower.
-  * no primary muon with KE >= 100 MeV (below MiniBooNE's threshold)
-  * no primary electron/positron (photon-like only)
+  * vertex in the active volume: no primary muon with KE >= 100 MeV (below
+    MiniBooNE's threshold) and no primary electron/positron
+  * vertex outside the active volume: any interaction type (MicroBooNE's
+    "out of FV 1g": a photon entering and showering in the TPC); with
+    OUT_AV_LEPTON_VETO the vetoes apply here too
   * any number of protons, charged pions, neutrons; any number of photons
     that are not reconstructable (soft, escaping, converting near a wall)
 
-So NC pi0 events where one photon is lost or the two merge are signal, as
-are NC Delta -> N gamma and CC pi0 with a soft muon. Photons are the prompt
+The signal categories are MicroBooNE's: NC pi0 1g (one photon lost or the
+two merged), NC Delta 1g, NC other 1g, numu CC 1g (muon < 100 MeV, any
+photon origin) and out of FV 1g. Photons are the prompt
 ones from the interaction: GENIE primaries and the decay photons of primary
 hadrons (pi0, eta, ...); photons from secondary interactions in the argon
 do not count.
@@ -45,6 +46,11 @@ PHOTON_E_MIN = 0.020       # GeV, true photon energy
 SHOWER_INSET = 3.0         # cm, shower start from the TPC boundary (as MicroBooNE)
 MERGE_ANGLE = 20.0         # deg, photons closer than this are one shower
 MUON_KE_MAX = 0.100        # GeV, primary muons below this are allowed
+# The muon/electron vetoes also for vertices outside the AV? MicroBooNE's
+# category list ("out of FV 1g": any interaction) says no; its general
+# definition (photon shower + charged particles below MiniBooNE's Cherenkov
+# threshold) arguably says yes. Unresolved: needs "does the lepton enter".
+OUT_AV_LEPTON_VETO = False
 
 
 def dist_to_active_boundary(x, y, z):
@@ -76,9 +82,12 @@ def is_cosmic(df):
 
 
 def is_signal(df):
-    """MicroBooNE-style: one reconstructable photon shower in the TPC, any
-    neutrino vertex position (out-of-AV 1g is signal, as in MicroBooNE)."""
-    return (df.true_nshower == 1) & (df.true_nmu_100MeV == 0) & (df.true_ne == 0)
+    """MicroBooNE-style: one reconstructable photon shower in the TPC; the
+    muon and electron vetoes apply only to vertices in the active volume."""
+    lepton_ok = (df.true_nmu_100MeV == 0) & (df.true_ne == 0)
+    if OUT_AV_LEPTON_VETO:
+        return (df.true_nshower == 1) & lepton_ok
+    return (df.true_nshower == 1) & (lepton_ok | ~true_in_active(df))
 
 
 # --- Truth categories
@@ -89,8 +98,8 @@ ORIGIN_PRIMARY = 22     # true_shw1_origin of a GENIE-primary photon
 CATEGORY_LABELS = {
     0: "1g: NC Delta->Ngamma",
     1: "1g: NC pi0",
-    2: "1g: CC pi0, mu < 100 MeV",
-    3: "1g: other",
+    2: "1g: numu CC, mu < 100 MeV",
+    3: "1g: NC other",
     10: "1g: vertex outside AV",
     4: ">=2 showers",
     5: "0 showers",
@@ -119,7 +128,7 @@ def truth_category(df):
         (df.true_nmu_100MeV > 0, 6),
         (sig & ncdelta, 0),
         (sig & (df.true_isnc == 1) & (o == 111), 1),
-        (sig & (df.true_iscc == 1) & (o == 111), 2),
+        (sig & (df.true_iscc == 1), 2),
         (sig, 3),
         (df.true_nshower >= 2, 4),
         (df.true_nshower == 0, 5),
@@ -144,7 +153,8 @@ def truth_category(df):
 #               applied upstream), so in practice this is the length cut.
 #               The cosmic tagger (cosmict_*) is not cut on: as in MicroBooNE
 #               it feeds the "other" BDT.
-#   fv          reco vertex >= 5 cm inside the active volume
+#   fv          reco vertex >= 5 cm from the anodes and the cathode (drift
+#               direction only, as MicroBooNE)
 #   em_shower   >= 1 connected EM shower (T_kine PID 11)
 
 FV_INSET = 5.0                 # cm
@@ -152,7 +162,8 @@ MIN_CLUSTER_LENGTH = 15.0      # cm
 
 
 def reco_in_fv(df, inset=FV_INSET):
-    return pd.Series(dist_to_active_boundary(df.nu_x, df.nu_y, df.nu_z) >= inset, index=df.index)
+    ax = df.nu_x.abs()
+    return (ax >= inset) & (ax <= ACTIVE_VOLUME["x"][1] - inset)
 
 
 EVENT_CUTS = {"wc_valid"}
