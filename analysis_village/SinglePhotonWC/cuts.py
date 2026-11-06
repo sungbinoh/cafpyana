@@ -140,19 +140,19 @@ def truth_category(df):
 #               valid = 0 events have no candidates, so cutflow applies it
 #               to the true neutrinos (EVENT_CUTS)
 #   vertex      has_vertex == 1: a vertex was found, so the taggers ran
-#   generic     MicroBooNE Wire-Cell generic neutrino selection: main
-#               cluster not a through-going muon, stopping muon or light
-#               mismatch. Every candidate already has a matched flash, and
-#               tgm/stm/lm fire on < 0.1% of SBND candidates (applied
-#               upstream). MicroBooNE's > 15 cm main-cluster cut is dropped:
-#               it removed ~20% of signal (soft photons) at no purity gain.
-#               (Wire-Cell's own 15 cm floor exempts the event's longest
-#               cluster, so it does not do this.)
-#               The cosmic tagger (cosmict_*) is not cut on: as in MicroBooNE
-#               it feeds the "other" BDT.
 #   fv          reco vertex >= 5 cm from the anodes and the cathode (drift
 #               direction only, as MicroBooNE)
-#   em_shower   >= 1 connected EM shower (T_kine PID 11)
+#
+# Not cut here, unlike MicroBooNE:
+#   * the generic neutrino selection's TGM/STM/light-mismatch flags: SBND
+#     Wire-Cell makes no candidate from a flagged cluster (nu_skip_cosmic),
+#     so the cut removed 0.04% of candidates. The cosmic tagger (cosmict_*)
+#     feeds the "other" BDT, as in MicroBooNE.
+#   * the > 15 cm main-cluster length: it removed ~20% of signal (soft
+#     photons) at no purity gain. Wire-Cell's own 15 cm floor exempts the
+#     event's longest cluster, so it does not do this.
+#   * >= 1 EM shower: nearly implied by vertex_shower below (removing it
+#     changed the final efficiency by +0.05%).
 
 FV_INSET = 5.0                 # cm
 
@@ -167,9 +167,7 @@ EVENT_CUTS = {"wc_valid"}
 PRESELECTION = {
     "wc_valid": lambda df: df.wc_valid == 1,
     "vertex": lambda df: df.has_vertex == 1,
-    "generic": lambda df: (df.main_cluster_tgm == 0) & (df.main_cluster_stm == 0) & (df.main_cluster_lm == 0),
     "fv": reco_in_fv,
-    "em_shower": lambda df: df.n_em >= 1,
 }
 
 
