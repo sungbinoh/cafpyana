@@ -18,6 +18,17 @@ candidates join on (entry, tmatch_idx). Columns, all prefixed true_:
       ndecayg_soft  decay photons below 20 MeV
       nshower       reconstructable showers after merging photons < 20 deg
                     apart; nmerged = ngamma_rec - nshower
+  * Wire-Cell charge bookkeeping (MC truth-match trees; NaN without them):
+      wc_q_dep      charge the neutrino's particles deposited (T_truth_track
+                    q_readout), wc_q_img the part imaged into blobs
+      wc_f_cand / wc_f_sameflash / wc_f_otherflash / wc_f_noflash
+                    where its imaged charge went (T_match level 0, cluster
+                    vs interaction): clusters in its matched candidate's
+                    particle flow, other clusters on that candidate's flash
+                    (incl. unused bundle companions), clusters on
+                    another flash (incl. other candidates), unmatched
+                    clusters. Fractions of the cluster-matched charge; with
+                    no matched candidate everything is "otherflash"/"noflash"
   * shw1_* / shw2_*: the two most energetic showers. E [GeV] (sum of its
     photons), gap [cm] (vertex to the nearest conversion point), costh (of
     its leading photon, to the beam), conv_x/y/z [cm] (conversion point of
@@ -33,6 +44,8 @@ import numpy as np
 import pandas as pd
 
 from pyanalib.pandas_helpers import loadbranches
+
+from makedf import wirecell as wc
 
 from analysis_village.SinglePhotonWC import cuts
 
@@ -95,6 +108,70 @@ def _merge_showers(r):
     return r
 
 
+def _nested(t, base, n_entries):
+    """vector<vector> leaf -> per entry, list of per-row arrays."""
+    a = t.arrays([base, base + "..length", base + "..idx"], library="np")
+    return [[v[i:i + l] for i, l in zip(I, L)] for v, L, I in zip(a[base], a[base + "..length"], a[base + "..idx"])]
+
+
+def _wc_charge_destination(f, N):
+    cols = ["wc_q_dep", "wc_q_img", "wc_f_cand", "wc_f_sameflash", "wc_f_otherflash", "wc_f_noflash"]
+    out = pd.DataFrame(np.nan, index=N.index, columns=cols)
+    if not wc.has_wc(f) or "wc.T_match.level" not in f[wc.WC_TREE].keys():
+        return out
+    t = f[wc.WC_TREE]
+    tt = wc.make_wc_tabledf(f, "T_truth_track", ["nu_idx", "q_readout", "q_in_blobs"])
+    tt = tt[tt.nu_idx >= 0].reset_index("row", drop=True).set_index("nu_idx", append=True)
+    q = tt.groupby(level=["entry", "nu_idx"]).sum()
+    q.index.names = N.index.names
+    out["wc_q_dep"] = q.q_readout.reindex(N.index)
+    out["wc_q_img"] = q.q_in_blobs.reindex(N.index)
+    m = wc.make_wc_tabledf(f, "T_match", ["level", "side", "obj", "cluster_id", "truth_nu_idx"])
+    mo = _nested(t, "wc.T_match.match_obj", None); ms = _nested(t, "wc.T_match.match_shared_q", None)
+    cl = wc.make_wc_clusterdf(f, ["cluster_id", "matched_flash_gid"])
+    tag = wc.make_wc_taggerdf(f, ["matched_flash_gid"])
+    tm = wc.make_wc_tmatchdf(f)
+    ov = wc.make_wc_tabledf(f, "T_overlap", ["nu_index", "cluster_id", "in_pf"])
+    for entry in np.unique(m.index.get_level_values("entry")):
+        me = m.loc[entry]
+        l0 = me[me.level == 0]
+        truth_nu = dict(zip(l0[l0.side == 1].obj, l0[l0.side == 1].truth_nu_idx))
+        flash = dict(zip(cl.loc[entry].cluster_id, cl.loc[entry].matched_flash_gid)) if entry in cl.index.get_level_values(0) else {}
+        acc = {}
+        for row, r in l0[l0.side == 0].iterrows():
+            for o, sq in zip(mo[entry][row], ms[entry][row]):
+                nu = truth_nu.get(o, -1)
+                if nu >= 0:
+                    acc.setdefault(nu, []).append((int(r.cluster_id), float(sq)))
+        cand = {}
+        if entry in tm.index.get_level_values(0):
+            te = tm.loc[entry]
+            for nu_index, r in te.iterrows():
+                if r.tmatch_idx >= 0:
+                    cand.setdefault(int(r.tmatch_idx), []).append(nu_index)
+        for nu, lst in acc.items():
+            key = (entry, nu)
+            if key not in out.index:
+                continue
+            cset, cflash = set(), None
+            if nu in cand:
+                ci = cand[nu][0]
+                if entry in ov.index.get_level_values(0):
+                    oe = ov.loc[entry]
+                    cset = set(oe[(oe.nu_index == ci) & (oe.in_pf == 1)].cluster_id)
+                if (entry, ci) in tag.index:
+                    cflash = tag.loc[(entry, ci), "matched_flash_gid"]
+            tot = sum(x for _, x in lst) or np.nan
+            fc = fs = fo = fn = 0.0
+            for c, x in lst:
+                if c in cset: fc += x
+                elif flash.get(c, -1) < 0: fn += x
+                elif cflash is not None and flash.get(c) == cflash: fs += x
+                else: fo += x
+            out.loc[key, ["wc_f_cand", "wc_f_sameflash", "wc_f_otherflash", "wc_f_noflash"]] = [fc / tot, fs / tot, fo / tot, fn / tot]
+    return out
+
+
 def make_sp_truthdf(f):
     N = _load(f, "rec.mc.nu.", ["E", "pdg", "iscc", "isnc", "genie_mode", "w", "resnum",
                                 "position.x", "position.y", "position.z"])
@@ -148,5 +225,6 @@ def make_sp_truthdf(f):
     conv = ["conv_x", "conv_y", "conv_z"]
     N = N.join(s.loc[s["rank"] == 0, ["E", "gap", "costh", "nphot", "origin"] + conv].add_prefix("shw1_"))
     N = N.join(s.loc[s["rank"] == 1, ["E", "gap"] + conv].add_prefix("shw2_"))
+    N = N.join(_wc_charge_destination(f, N))
     N.index.names = names
     return N.add_prefix("true_")
