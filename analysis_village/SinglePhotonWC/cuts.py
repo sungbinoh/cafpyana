@@ -224,6 +224,11 @@ PRESELECTION = {
 #                   is nue_score > 7)
 #   one_shower      exactly one EM shower > 20 MeV at the vertex passing the
 #                   single-photon tagger's first reconstruction check
+#   em_showers      no shower in the candidate labelled mu/pi/p. Wire-Cell
+#                   labels a shower by its start segment's PID (and the A5
+#                   hadronic retype), so a second photon often comes out
+#                   as a mu/pi "shower" that one_shower does not count
+#                   (flat-CAF study: 10/12 two-photon backgrounds)
 #
 # MicroBooNE's ">= 1 shower > 20 MeV at the vertex" and "BDTs evaluable"
 # steps are not cut: one_shower and the BDT thresholds (NaN = not
@@ -244,6 +249,7 @@ UB_SELECTION = {
     "ub_ncpi0": lambda df: df.ub_ncpi0 > UB_NCPI0_MIN,
     "wc_nue": lambda df: df.nue_score < WC_NUE_SCORE_MAX,
     "one_shower": lambda df: df.shw_sp_n_20br1_showers == 1,
+    "em_showers": lambda df: df.n_shower <= df.n_em,
 }
 
 # Cut chains for cutflow.py
