@@ -10,10 +10,12 @@ Cherenkov ring:
     the TPC boundary. Photons from the same vertex closer than 20 deg are
     one shower.
   * that photon converts inside the FV, SIGNAL_FV_INSET = 10 cm from the
-    TPC boundary (SBND's usual FV; MicroBooNE used 3 cm). The 3 cm inset
-    still decides whether other photons are visible, so a second photon
-    converting 3-10 cm from a wall keeps the event out of the signal; it
-    is applied in make_truth, so changing it needs new dataframes.
+    TPC boundary (SBND's usual FV; MicroBooNE used 3 cm)
+  * no other photon (>= 20 MeV) converting anywhere inside the TPC: a
+    second visible shower outside the FV still makes the event not
+    single-photon. (true_nshower counts photons >= SHOWER_INSET = 3 cm in,
+    true_ngamma_edge those converting 0.5-3 cm in; the 20 deg merging is
+    not applied to the latter.)
   * vertex in the active volume: no primary muon with KE >= 100 MeV (below
     MiniBooNE's threshold) and no primary electron/positron
   * vertex outside the active volume: any interaction type (MicroBooNE's
@@ -100,7 +102,8 @@ def is_signal(df):
     conv_in_fv = dist_to_active_boundary(df.true_shw1_conv_x, df.true_shw1_conv_y,
                                          df.true_shw1_conv_z) >= SIGNAL_FV_INSET
     hard_enough = true_in_fv(df) | (df.true_shw1_E >= OUT_FV_PHOTON_E_MIN)
-    return (df.true_nshower == 1) & conv_in_fv & (lepton_ok | ~true_in_active(df)) & hard_enough
+    one_visible = (df.true_nshower == 1) & (df.true_ngamma_edge == 0)
+    return one_visible & conv_in_fv & (lepton_ok | ~true_in_active(df)) & hard_enough
 
 
 # --- Truth categories
@@ -114,7 +117,7 @@ CATEGORY_LABELS = {
     2: "1g: numu CC, mu < 100 MeV",
     3: "1g: NC other",
     10: "1g: vertex outside FV",
-    4: ">=2 showers",
+    4: ">=2 visible photons",
     5: "0 showers",
     6: "CC numu, mu >= 100 MeV",
     7: "CC nue (primary e)",
@@ -137,7 +140,7 @@ def truth_category(df):
     conds = [
         (is_cosmic(df), 9),
         (sig & ~true_in_fv(df), 10),
-        (~true_in_active(df) & (df.true_nshower == 1), 11),
+        (~true_in_active(df) & (df.true_nshower == 1) & (df.true_ngamma_edge == 0), 11),
         (~true_in_active(df), 8),
         (df.true_ne > 0, 7),
         (df.true_nmu_100MeV > 0, 6),
@@ -145,8 +148,8 @@ def truth_category(df):
         (sig & (df.true_isnc == 1) & (o == 111), 1),
         (sig & (df.true_iscc == 1), 2),
         (sig, 3),
+        (df.true_nshower + df.true_ngamma_edge >= 2, 4),
         (df.true_nshower == 1, 11),
-        (df.true_nshower >= 2, 4),
         (df.true_nshower == 0, 5),
     ]
     cat = pd.Series(-1, index=df.index)
