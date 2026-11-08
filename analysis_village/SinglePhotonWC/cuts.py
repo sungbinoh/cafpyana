@@ -1,7 +1,7 @@
 """Signal definition and truth categories for the inclusive single-photon
 search with Wire-Cell (SBND).
 
-Signal, following the MicroBooNE inclusive photon-like LEE search
+Signal, adapted from the MicroBooNE inclusive photon-like LEE search
 (PRL, doi:10.1103/89qs-4lcp), which is modelled on MiniBooNE's single
 Cherenkov ring:
 
@@ -16,21 +16,21 @@ Cherenkov ring:
     single-photon. (true_nshower counts photons >= SHOWER_INSET = 3 cm in,
     true_ngamma_edge those converting 0.5-3 cm in; the 20 deg merging is
     not applied to the latter.)
-  * vertex in the active volume: no primary muon with KE >= 100 MeV (below
-    MiniBooNE's threshold) and no primary electron/positron
-  * vertex outside the active volume: any interaction type (MicroBooNE's
-    "out of FV 1g": a photon entering and showering in the TPC). The
-    definition is what MiniBooNE could see, and a lepton from outside the
-    detector would not have been
-  * vertex outside the FV (outside the AV or < 10 cm inside it): photon
-    true E >= 100 MeV. Wire-Cell's cosmic veto removes softer out-of-FV
-    photons by design (lone, low-light clusters).
+  * vertex inside the active volume, no primary muon with KE >= 100 MeV
+    (below MiniBooNE's threshold) and no primary electron/positron
+  * vertex less than 10 cm inside (outside the FV): photon true E >= 100
+    MeV. Wire-Cell's cosmic veto removes softer out-of-FV photons by
+    design (lone, low-light clusters).
   * any number of protons, charged pions, neutrons; any number of photons
     that are not reconstructable (soft, escaping, converting near a wall)
 
-The signal categories are MicroBooNE's: NC pi0 1g (one photon lost or the
-two merged), NC Delta 1g, NC other 1g, numu CC 1g (muon < 100 MeV, any
-photon origin) and out of FV 1g. Photons are the prompt
+Unlike MicroBooNE, single photons from vertices outside the AV ("dirt" in
+the broad sense: mostly the uninstrumented argon around the TPC) are
+background (category 12): they are hard to model.
+
+The signal categories: NC pi0 1g (one photon lost or the two merged), NC
+Delta 1g, NC other 1g, numu CC 1g (muon < 100 MeV, any photon origin) and
+1g with the vertex in the AV but outside the FV. Photons are the prompt
 ones from the interaction: GENIE primaries and the decay photons of primary
 hadrons (pi0, eta, ...); photons from secondary interactions in the argon
 do not count.
@@ -96,14 +96,18 @@ def true_in_fv(df):
 
 
 def is_signal(df):
-    """One reconstructable photon shower, converting inside the FV; lepton
-    vetoes for vertices in the AV; >= 100 MeV for vertices outside the FV."""
+    """One visible photon shower starting inside the FV, vertex in the AV,
+    no muon >= 100 MeV or electron; >= 100 MeV if the vertex is outside the
+    FV."""
     lepton_ok = (df.true_nmu_100MeV == 0) & (df.true_ne == 0)
-    conv_in_fv = dist_to_active_boundary(df.true_shw1_conv_x, df.true_shw1_conv_y,
-                                         df.true_shw1_conv_z) >= SIGNAL_FV_INSET
     hard_enough = true_in_fv(df) | (df.true_shw1_E >= OUT_FV_PHOTON_E_MIN)
-    one_visible = (df.true_nshower == 1) & (df.true_ngamma_edge == 0)
-    return one_visible & conv_in_fv & (lepton_ok | ~true_in_active(df)) & hard_enough
+    return one_shower_in_fv(df) & true_in_active(df) & lepton_ok & hard_enough
+
+
+def one_shower_in_fv(df):
+    """Exactly one visible photon in the TPC, its shower starting in the FV."""
+    conv = dist_to_active_boundary(df.true_shw1_conv_x, df.true_shw1_conv_y, df.true_shw1_conv_z)
+    return (df.true_nshower == 1) & (df.true_ngamma_edge == 0) & (conv >= SIGNAL_FV_INSET)
 
 
 # --- Truth categories
@@ -116,7 +120,7 @@ CATEGORY_LABELS = {
     1: "1g: NC pi0",
     2: "1g: numu CC, mu < 100 MeV",
     3: "1g: NC other",
-    10: "1g: vertex outside FV",
+    10: "1g: vertex in AV, outside FV",
     4: ">=2 visible photons",
     5: "0 showers",
     6: "CC numu, mu >= 100 MeV",
@@ -124,6 +128,7 @@ CATEGORY_LABELS = {
     8: "Outside AV, not 1g",
     9: "Cosmic / unmatched",
     11: "1g, not signal (soft out-of-FV / converts < 10 cm in)",
+    12: "1g from outside the AV (dirt)",
 }
 SIGNAL_CATEGORIES = [0, 1, 2, 3, 10]
 
@@ -140,7 +145,7 @@ def truth_category(df):
     conds = [
         (is_cosmic(df), 9),
         (sig & ~true_in_fv(df), 10),
-        (~true_in_active(df) & (df.true_nshower == 1) & (df.true_ngamma_edge == 0), 11),
+        (~true_in_active(df) & one_shower_in_fv(df), 12),
         (~true_in_active(df), 8),
         (df.true_ne > 0, 7),
         (df.true_nmu_100MeV > 0, 6),
