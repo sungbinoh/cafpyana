@@ -9,12 +9,20 @@ Cherenkov ring:
     true E >= 20 MeV and starts its shower (pair conversion) >= 3 cm inside
     the TPC boundary. Photons from the same vertex closer than 20 deg are
     one shower.
+  * that photon converts inside the FV, SIGNAL_FV_INSET = 10 cm from the
+    TPC boundary (SBND's usual FV; MicroBooNE used 3 cm). The 3 cm inset
+    still decides whether other photons are visible, so a second photon
+    converting 3-10 cm from a wall keeps the event out of the signal; it
+    is applied in make_truth, so changing it needs new dataframes.
   * vertex in the active volume: no primary muon with KE >= 100 MeV (below
     MiniBooNE's threshold) and no primary electron/positron
   * vertex outside the active volume: any interaction type (MicroBooNE's
     "out of FV 1g": a photon entering and showering in the TPC). The
     definition is what MiniBooNE could see, and a lepton from outside the
     detector would not have been
+  * vertex outside the FV (outside the AV or < 10 cm inside it): photon
+    true E >= 100 MeV. Wire-Cell's cosmic veto removes softer out-of-FV
+    photons by design (lone, low-light clusters).
   * any number of protons, charged pions, neutrons; any number of photons
     that are not reconstructable (soft, escaping, converting near a wall)
 
@@ -44,7 +52,9 @@ ACTIVE_VOLUME = {"x": (-200.0, 200.0), "y": (-200.0, 200.0), "z": (0.0, 500.0)}
 # --- Signal definition
 
 PHOTON_E_MIN = 0.020       # GeV, true photon energy
-SHOWER_INSET = 3.0         # cm, shower start from the TPC boundary (as MicroBooNE)
+SHOWER_INSET = 3.0         # cm, photon visibility: shower start from the TPC boundary
+SIGNAL_FV_INSET = 10.0     # cm, FV for the signal photon's conversion and the vertex
+OUT_FV_PHOTON_E_MIN = 0.100  # GeV, signal photon energy for vertices outside the FV
 MERGE_ANGLE = 20.0         # deg, photons closer than this are one shower
 MUON_KE_MAX = 0.100        # GeV, primary muons below this are allowed
 
@@ -77,11 +87,20 @@ def is_cosmic(df):
     return m
 
 
+def true_in_fv(df):
+    return pd.Series(
+        dist_to_active_boundary(df.true_vtx_x, df.true_vtx_y, df.true_vtx_z) >= SIGNAL_FV_INSET,
+        index=df.index)
+
+
 def is_signal(df):
-    """MicroBooNE-style: one reconstructable photon shower in the TPC; the
-    muon and electron vetoes apply only to vertices in the active volume."""
+    """One reconstructable photon shower, converting inside the FV; lepton
+    vetoes for vertices in the AV; >= 100 MeV for vertices outside the FV."""
     lepton_ok = (df.true_nmu_100MeV == 0) & (df.true_ne == 0)
-    return (df.true_nshower == 1) & (lepton_ok | ~true_in_active(df))
+    conv_in_fv = dist_to_active_boundary(df.true_shw1_conv_x, df.true_shw1_conv_y,
+                                         df.true_shw1_conv_z) >= SIGNAL_FV_INSET
+    hard_enough = true_in_fv(df) | (df.true_shw1_E >= OUT_FV_PHOTON_E_MIN)
+    return (df.true_nshower == 1) & conv_in_fv & (lepton_ok | ~true_in_active(df)) & hard_enough
 
 
 # --- Truth categories
@@ -94,13 +113,14 @@ CATEGORY_LABELS = {
     1: "1g: NC pi0",
     2: "1g: numu CC, mu < 100 MeV",
     3: "1g: NC other",
-    10: "1g: vertex outside AV",
+    10: "1g: vertex outside FV",
     4: ">=2 showers",
     5: "0 showers",
     6: "CC numu, mu >= 100 MeV",
     7: "CC nue (primary e)",
     8: "Outside AV, not 1g",
     9: "Cosmic / unmatched",
+    11: "1g, not signal (soft out-of-FV / converts < 10 cm in)",
 }
 SIGNAL_CATEGORIES = [0, 1, 2, 3, 10]
 
@@ -116,7 +136,8 @@ def truth_category(df):
     ncdelta = (df.true_isnc == 1) & (o == ORIGIN_PRIMARY) & (df.true_resnum == RESNUM_DELTA_1232)
     conds = [
         (is_cosmic(df), 9),
-        (sig & ~true_in_active(df), 10),
+        (sig & ~true_in_fv(df), 10),
+        (~true_in_active(df) & (df.true_nshower == 1), 11),
         (~true_in_active(df), 8),
         (df.true_ne > 0, 7),
         (df.true_nmu_100MeV > 0, 6),
@@ -124,6 +145,7 @@ def truth_category(df):
         (sig & (df.true_isnc == 1) & (o == 111), 1),
         (sig & (df.true_iscc == 1), 2),
         (sig, 3),
+        (df.true_nshower == 1, 11),
         (df.true_nshower >= 2, 4),
         (df.true_nshower == 0, 5),
     ]
@@ -140,8 +162,10 @@ def truth_category(df):
 #               valid = 0 events have no candidates, so cutflow applies it
 #               to the true neutrinos (EVENT_CUTS)
 #   vertex      has_vertex == 1: a vertex was found, so the taggers ran
-#   fv          reco vertex >= 5 cm from the anodes and the cathode (drift
-#               direction only, as MicroBooNE)
+#   fv          reco vertex >= 10 cm from every AV face (the signal FV) and
+#               >= 5 cm from the cathode. MicroBooNE cut 5 cm in the drift
+#               direction only; with the 10 cm signal FV, single photons
+#               from outside it pile up near the walls (purity 27% -> 32%).
 #
 # Not cut here, unlike MicroBooNE:
 #   * the generic neutrino selection's TGM/STM/light-mismatch flags: SBND
@@ -154,12 +178,13 @@ def truth_category(df):
 #   * >= 1 EM shower: nearly implied by vertex_shower below (removing it
 #     changed the final efficiency by +0.05%).
 
-FV_INSET = 5.0                 # cm
+FV_INSET = SIGNAL_FV_INSET     # cm, from every AV face
+CATHODE_INSET = 5.0            # cm, from the cathode (x = 0)
 
 
 def reco_in_fv(df, inset=FV_INSET):
-    ax = df.nu_x.abs()
-    return (ax >= inset) & (ax <= ACTIVE_VOLUME["x"][1] - inset)
+    d = dist_to_active_boundary(df.nu_x, df.nu_y, df.nu_z)
+    return pd.Series(d >= inset, index=df.index) & (df.nu_x.abs() >= CATHODE_INSET)
 
 
 EVENT_CUTS = {"wc_valid"}
