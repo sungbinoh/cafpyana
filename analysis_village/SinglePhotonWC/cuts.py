@@ -229,6 +229,11 @@ PRESELECTION = {
 #                   hadronic retype), so a second photon often comes out
 #                   as a mu/pi "shower" that one_shower does not count
 #                   (flat-CAF study: 10/12 two-photon backgrounds)
+#   back_traced     the counted shower, traced back from its start along its
+#                   axis, has > 80 cm of active volume behind it: a photon
+#                   entering from outside (dirt) has little. Removes 24/25
+#                   dirt single photons for ~9% of signal (Nov8 scan; the
+#                   optimum, 60-80 cm, holds in both halves of the files)
 #
 # MicroBooNE's ">= 1 shower > 20 MeV at the vertex" and "BDTs evaluable"
 # steps are not cut: one_shower and the BDT thresholds (NaN = not
@@ -241,6 +246,7 @@ UB_OTHER_MIN = -0.25
 UB_NCPI0_MIN = -0.05
 WC_NUMU_SCORE_MAX = 0.5
 WC_NUE_SCORE_MAX = 7.0
+BACK_DIST_MIN = 80.0   # cm, shw1_back_dist (make_wc_candidates)
 
 UB_SELECTION = {
     "wc_numu": lambda df: df.numu_score < WC_NUMU_SCORE_MAX,
@@ -250,6 +256,7 @@ UB_SELECTION = {
     "wc_nue": lambda df: df.nue_score < WC_NUE_SCORE_MAX,
     "one_shower": lambda df: df.shw_sp_n_20br1_showers == 1,
     "em_showers": lambda df: df.n_shower <= df.n_em,
+    "back_traced": lambda df: df.shw1_back_dist > BACK_DIST_MIN,
 }
 
 # Cut chains for cutflow.py
