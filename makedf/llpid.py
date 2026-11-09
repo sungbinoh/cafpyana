@@ -4,10 +4,10 @@ import numpy as np
 import pandas as pd
 
 ########## VERSION HISTORY #############
-#   v0: Initial Launch of parameters
+#   v1: Initial Launch of parameters
 #
 ########################################
-llpid_version = "v0" 
+llpid_version = "v1" 
 llpid_tables_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "analysis_village", "ll_pid", "tables")
 
 
