@@ -189,12 +189,6 @@ def _hit_pdf(dedx, pitch, KE, mass, table):
     return np.clip(_lookup_binned(lam, kap, bet, table) / jac, 1e-12, None).reshape(shape)
 
 
-# def _lookup_binned(lam, kappa, beta2, table):
-#     """Lookup the binned PDF given the (kappa, beta2), then return the PDF at the lambda position (landau parameter)"""
-#     idx = tuple(np.clip(np.searchsorted(e, x, side="right") - 1, 0, len(e) - 2)
-#                 for e, x in zip(table["edges"], (lam, kappa, beta2)))
-#     return table["vav_pdf"][idx]
-
 def _lookup_binned(lam, kappa, beta2, table):
     """PDF at (lambda, kappa, beta2): nearest bin in lambda and kappa, linear between bin centres in beta2,
     so the likelihood has no step at the beta2 bin edges for the dL scan to lock onto"""
