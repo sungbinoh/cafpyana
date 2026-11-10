@@ -20,7 +20,14 @@ from makedf.util import *
 
 SBND_CUTS = {
     "max_opening_angle": 160,
+    # Pandora trackScore: used ONLY at level="trk" (the production's muon-candidate
+    # choice, maple/makedf.py). The analysis (level="slc") cuts on coltopo instead.
     "musel_track_score_min": 0.5,
+    # coltopo track/shower score of the muon candidate (sbn-rewgted-26+; shower-like:
+    # muons near 0, e/gamma near 1), cut coltopo_trkscore < max (NaN fails).
+    # N-1 eff*purity optimum on sbn-rewgted-26, 1p+Mp, 2026-11-03
+    # (coltopo_opt_gumple.py, plots-gumple-2026-11-03-rewgted26/coltopo_opt/).
+    "musel_coltopo_max": 0.89,
     "musel_muscore_th": 38,
     "musel_pscore_th": 82,
     "musel_len_th_min": 40,
@@ -31,7 +38,8 @@ SBND_CUTS = {
 
 ICARUS_CUTS = {
     "max_opening_angle": 160,
-    "musel_track_score_min": 0.5,
+    "musel_track_score_min": 0.5,  # level="trk" only, see SBND_CUTS
+    "musel_coltopo_max": 0.895,    # Run2+Run4 combined optimum, see SBND_CUTS
     # The chi2-under-muon-hypothesis (chi2u) cut on the ICARUS muon candidate is
     # deliberately disabled: the ICARUS muon candidate is PID'd by the
     # proton-hypothesis chi2 (musel_pscore_th) alone. The key is kept -- rather
@@ -81,12 +89,9 @@ SBNDFVCuts = {
     }
 }
 
+# Run 2 FV: West cryostat (C1) only. TPC EE was off in Run 2 and TPC EW is
+# excluded as well, so the whole East cryostat (C0) is out of the Run 2 FV.
 ICARUSRun2FVCuts = {
-    "C0": {
-        "x": {"min": -210.22, "max": -61.94}, # exluce EE in Run 2
-        "y": {"min": -181.86, "max": 134.96},
-        "z": {"min": -894.950652270838, "max": 894.950652270838}
-    },
     "C1": {
         "x": {"min": 61.94, "max": 358.49},
         "y": {"min": -181.86, "max": 134.96},
@@ -156,10 +161,10 @@ def _fv_cut(df, inx=10, iny=10, inzfront=10, inzback=50):
               (df.y > ICARUSCableCuts['WW']['y']['min']) &\
               (df.z > ICARUSCableCuts['WW']['z']['min'])
 
-    FVRun2 = (((df.x < (ICARUSRun2FVCuts['C0']['x']['max'] - inx)) & (df.x > (ICARUSRun2FVCuts['C0']['x']['min'] + inx))) |\
-            ((df.x < (ICARUSRun2FVCuts['C1']['x']['max'] - inx)) & (df.x > (ICARUSRun2FVCuts['C1']['x']['min'] + inx)))) &\
-             (df.y < (ICARUSRun2FVCuts['C0']['y']['max'] - iny)) & (df.y > (ICARUSRun2FVCuts['C0']['y']['min'] + iny)) &\
-             (df.z < (ICARUSRun2FVCuts['C0']['z']['max'] - inzback)) & (df.z > (ICARUSRun2FVCuts['C0']['z']['min'] + inzfront)) &\
+    # Run 2: West cryostat only (no C0, see ICARUSRun2FVCuts)
+    FVRun2 = ((df.x < (ICARUSRun2FVCuts['C1']['x']['max'] - inx)) & (df.x > (ICARUSRun2FVCuts['C1']['x']['min'] + inx))) &\
+             (df.y < (ICARUSRun2FVCuts['C1']['y']['max'] - iny)) & (df.y > (ICARUSRun2FVCuts['C1']['y']['min'] + iny)) &\
+             (df.z < (ICARUSRun2FVCuts['C1']['z']['max'] - inzback)) & (df.z > (ICARUSRun2FVCuts['C1']['z']['min'] + inzfront)) &\
              ~inCable
 
     FVRun4 = (((df.x < (ICARUSRun4FVCuts['C0']['x']['max'] - inx)) & (df.x > (ICARUSRun4FVCuts['C0']['x']['min'] + inx))) |\
@@ -350,16 +355,27 @@ def trk_cut(df):
     # evt df as diagnostics.
     return df.cut_np & df.has_muon
 
+def coltopo_cut(df):
+    """Muon-candidate coltopo track/shower score cut (NaN fails)."""
+    return df["coltopo_trkscore"] < _det_cut_th(df.detector, "musel_coltopo_max")
+
 def get_base_muon_mask(df, level="slc"):
     if level == "trk":
         pref = ""
     elif level == "slc":
         pref = "mu_"
 
+    if level == "trk":
+        # production candidate choice: per-pfp Pandora track score
+        score_mask = df[pref+"trackScore"] >= _det_cut_th(df.detector, "musel_track_score_min")
+    else:
+        # analysis: slice-level coltopo score of the stored muon candidate
+        score_mask = coltopo_cut(df)
+
     base_mask = (
             df[pref+"end_x"].notna()
             & df[pref+"len"].notna()
-            & (df[pref+"trackScore"] >= _det_cut_th(df.detector, "musel_track_score_min"))
+            & score_mask
             & (df[pref+"dist_start"] <= 10.0)
             & df[pref+"len"].between(_det_cut_th(df.detector, "musel_len_th_min"), _det_cut_th(df.detector, "musel_len_th_max"))
             & df[pref+"prim_pfp"]

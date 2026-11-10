@@ -195,6 +195,16 @@ g4_syst = [
  'reinteractions_proton_Geant4',
 ]
 
+# Inflation of the Geant4 reinteraction uncertainty: each universe's deviation from
+# the CV is scaled per system, w -> 1 + G4_UNC_SCALE*(w - 1) (clipped at 0), before
+# building g4_univ (G4Systematic) and the multisim_* columns (PROfit). Enters the MC
+# cache key.
+G4_UNC_SCALE = 2.0
+
+def _scale_g4(w):
+    """Scale the universe weight(s) w (Series or DataFrame) by G4_UNC_SCALE about 1."""
+    return (1 + G4_UNC_SCALE*(w - 1)).clip(lower=0)
+
 truthvars = {
   "baseline": ("baseline", ""),
   "true_E": ("nu_E", ""),
@@ -824,7 +834,7 @@ def load_one(fname, idf,
         with h5py.File(fname, "r") as _f:
             _is_data = (mcname % idf) not in _f
         data_cut_key = dict(beam_quality=beam_quality, data_quality=data_quality,
-                            run_list=dq.RUN_LIST_HASH) if _is_data else dict(mc_pe_scale=MC_PE_SCALE[detector])
+                            run_list=dq.RUN_LIST_HASH) if _is_data else dict(mc_pe_scale=MC_PE_SCALE[detector], g4_unc_scale=G4_UNC_SCALE)
         # the cached off-beam POT depends on the gates/POT constant (on-beam unchanged)
         if offbeampot:
             data_cut_key["offbeam_gates_per_5e12pot"] = OFFBEAM_GATES_PER_5e12POT[detector]
@@ -1140,7 +1150,7 @@ def load_one(fname, idf,
 
     if g4_univ:
         for i in range(min(100, nuniv)):
-            skim["g4_univ%i" % i] = np.prod([wgt[s]["univ_%i" % i] for s in g4_syst], axis=0)
+            skim["g4_univ%i" % i] = np.prod([_scale_g4(wgt[s]["univ_%i" % i]) for s in g4_syst], axis=0)
 
     if pot_univ:
         rng = np.random.default_rng(seed=24601) # repeatable random numbers
@@ -1211,7 +1221,7 @@ def load_one(fname, idf,
             else:
                 col_str = s
             multisim_cols.append(col_str)
-            w = wgt[s]
+            w = _scale_g4(wgt[s][["univ_%i" % i for i in range(min(100, nuniv))]])
             if lightmem:
                 float64_cols = w.select_dtypes(include=["float64"]).columns
                 if len(float64_cols) > 0:
