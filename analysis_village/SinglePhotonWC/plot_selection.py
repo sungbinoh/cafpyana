@@ -8,6 +8,10 @@ truth category, per 1e20 POT with MC-statistics errors on the total:
                              ncpi0 BDTs), each with every other cut applied
   selection_sequential.png   every cut variable in cut order, with the
                              earlier cuts applied, signal vs background
+  presel_shower_multiplicity.png
+                             true EM particles vs Wire-Cell primary e/gamma
+                             showers (T_pf pf_n_em_primary) after
+                             preselection, row-normalised
 
 Input: configs/sp_mc.py outputs (wc + mcnu + wcevt) and the MicroBooNE BDT
 XMLs (the ub_* scores).
@@ -21,6 +25,7 @@ import os
 import sys
 
 import numpy as np
+import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -165,6 +170,58 @@ def plot_sequential(w, chain, sc, pot, out):
     plt.close(fig)
 
 
+MULT_TEXT = (
+    "RECO  pf_n_em_primary\n"
+    "Wire-Cell particle-flow tree (T_pf):\n"
+    "e/$\\gamma$ showers (PDG 11) with no real\n"
+    "particle above them in the tree:\n"
+    "  - attached at the neutrino vertex, or\n"
+    "  - displaced, linked to the vertex through a\n"
+    "    pseudo photon / $\\pi^0$\n"
+    "Showers below a $\\mu$, $\\pi$, p or a pseudo\n"
+    "neutron are secondaries and not counted.\n"
+    "No energy threshold.\n\n"
+    "TRUTH  per matched true neutrino\n"
+    "  - photons from $\\pi^0$/$\\eta$/hadron decays,\n"
+    "    any energy\n"
+    "  - GENIE-primary photons $\\geq$ 20 MeV\n"
+    "  - primary e$^\\pm$\n"
+    "  no containment, conversion or merging\n\n"
+    "Candidates: after preselection (wc_valid,\n"
+    "vertex, 10 cm FV, 5 cm cathode), matched to a\n"
+    "true neutrino (%d; cosmics excluded).")
+
+
+def plot_multiplicity(w, pot, out, var="pf_n_em_primary", L=5):
+    p = w[cuts.passes(w, cuts.PRESELECTION)]
+    nu = p[p.true_E.notna() & (p.tmatch_idx >= 0) & p[var].notna()]
+    true_em = nu.true_ngamma_20MeV + nu.true_ndecayg_soft + nu.true_ne
+    M = pd.crosstab(true_em.clip(upper=L), nu[var].clip(upper=L)).reindex(index=range(L + 1), columns=range(L + 1), fill_value=0)
+    R = M.div(M.sum(1).replace(0, np.nan), axis=0)
+    tk = [str(i) for i in range(L)] + ["$\\geq$%d" % L]
+    fig = plt.figure(figsize=(14.5, 7.4))
+    a = fig.add_axes([0.03, 0.11, 0.47, 0.74], anchor="E")
+    cax = fig.add_axes([0.515, 0.11, 0.012, 0.74])
+    im = a.imshow(R.values, origin="lower", cmap="Blues", vmin=0, vmax=1)
+    for i in range(L + 1):
+        for k in range(L + 1):
+            if M.values[i, k]:
+                a.text(k, i, "%.0f%%\n%d" % (100 * R.values[i, k], M.values[i, k]), ha="center", va="center", fontsize=8.5,
+                       color="white" if R.values[i, k] > 0.55 else "#222")
+    a.set_xticks(range(L + 1)); a.set_xticklabels(tk); a.set_yticks(range(L + 1))
+    a.set_yticklabels(["%s  (%d)" % (t, n) for t, n in zip(tk, M.sum(1))])
+    a.set_xlabel("RECO: %s" % var); a.set_ylabel("TRUE: prompt photons + primary e$^\\pm$  (candidates)")
+    d0 = M.values[0, 0] / M.values[0].sum(); d1 = np.trace(M.values[1:L, 1:L]) / M.values[1:].sum()
+    a.set_title("reco = truth: %.0f%% of candidates with true $\\geq$1, %.0f%% with true 0" % (100 * d1, 100 * d0), fontsize=10.5)
+    fig.colorbar(im, cax=cax, label="fraction of the true row")
+    fig.text(0.6, 0.85, MULT_TEXT % len(nu), va="top", fontsize=10)
+    fig.suptitle("Wire-Cell primary e/$\\gamma$ shower count vs truth after preselection (%.2e POT)\n"
+                 "row-normalised %%, MC candidates below" % pot, fontsize=11.5)
+    fig.savefig(os.path.join(out, "presel_shower_multiplicity.png"), dpi=140)
+    plt.close(fig)
+    return R
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-i", "--inputs", nargs="+", required=True, help=".df files, directories or globs")
@@ -177,6 +234,10 @@ def main():
     plot_energy(w, chain, sc, args.outdir)
     plot_scores(w, chain, sc, pot, args.outdir)
     plot_sequential(w, chain, sc, pot, args.outdir)
+    if "pf_n_em_primary" in w and w.pf_n_em_primary.notna().any():
+        plot_multiplicity(w, pot, args.outdir)
+    else:
+        print("no pf_n_em_primary (dataframes made before T_pf): skipping presel_shower_multiplicity.png")
     print("wrote final_shower_energy.png, final_scores_nminus1.png, selection_sequential.png to %s (%.3g POT)" % (args.outdir, pot))
 
 
