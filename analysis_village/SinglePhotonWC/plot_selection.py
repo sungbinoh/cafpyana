@@ -4,6 +4,8 @@ truth category, per 1e20 POT with MC-statistics errors on the total:
 
   final_shower_energy.png    reco energy of the counted shower
                              (shw_sp_energy) after the full selection
+  (stacked by truth category; MC statistics on the total as a hatched band;
+  no under/overflow bins, the ranges cover the selected candidates)
   final_scores_nminus1.png   the score cuts (WC numu/nue, uB numu/other/
                              ncpi0 BDTs), each with every other cut applied
   selection_sequential.png   every cut variable in cut order, with the
@@ -51,20 +53,25 @@ GROUPS = [
 # Score cuts: cut name in cuts.UB_SELECTION, column, label, bins, threshold, kept side
 SCORES = [
     ("wc_numu", "numu_score", "Wire-Cell $\\nu_\\mu$ CC score", np.linspace(-3, 3, 31), cuts.WC_NUMU_SCORE_MAX, "<"),
-    ("ub_numu", "ub_numu", "uB $\\nu_\\mu$ BDT", np.linspace(-2, 4, 31), cuts.UB_NUMU_MIN, ">"),
-    ("ub_other", "ub_other", "uB 'other' BDT", np.linspace(-3, 3, 31), cuts.UB_OTHER_MIN, ">"),
-    ("ub_ncpi0", "ub_ncpi0", "uB NC $\\pi^0$ BDT", np.linspace(-2, 3.5, 23), cuts.UB_NCPI0_MIN, ">"),
-    ("wc_nue", "nue_score", "Wire-Cell $\\nu_e$ score", np.linspace(-15, 15, 31), cuts.WC_NUE_SCORE_MAX, "<"),
+    ("ub_numu", "ub_numu", "uB $\\nu_\\mu$ BDT", np.arange(-3.6, 4.01, 0.2), cuts.UB_NUMU_MIN, ">"),
+    ("ub_other", "ub_other", "uB 'other' BDT", np.arange(-4.4, 3.01, 0.2), cuts.UB_OTHER_MIN, ">"),
+    ("ub_ncpi0", "ub_ncpi0", "uB NC $\\pi^0$ BDT", np.arange(-3.0, 3.51, 0.25), cuts.UB_NCPI0_MIN, ">"),
+    ("wc_nue", "nue_score", "Wire-Cell $\\nu_e$ score", np.arange(-15.5, 17.6, 1.0), cuts.WC_NUE_SCORE_MAX, "<"),
 ]
 
 
 def stack(ax, q, var, bins, sc, logy=False):
-    x = q[var].clip(bins[0], bins[-1] - 1e-6)   # under/overflow into the end bins
+    x = q[var]
+    out = ((x < bins[0]) | (x >= bins[-1])).sum()
+    if out:
+        print("warning: %d candidates outside the %s range, not drawn" % (out, var))
     vals = [x[q.cat.isin(cs)] for _, cs, _ in GROUPS]
     ax.hist(vals, bins=bins, stacked=True, color=[c for *_, c in GROUPS], weights=[np.full(len(v), sc) for v in vals],
             label=["%s (%.0f)" % (g, len(v) * sc) for (g, *_), v in zip(GROUPS, vals)], edgecolor="white", linewidth=0.6)
     n, _ = np.histogram(x, bins)
-    ax.errorbar(0.5 * (bins[1:] + bins[:-1]), n * sc, np.sqrt(n) * sc, fmt="none", ecolor="#444", lw=1)
+    lo, hi = (n - np.sqrt(n)) * sc, (n + np.sqrt(n)) * sc     # MC statistics on the total, shaded
+    ax.fill_between(bins, np.r_[lo, lo[-1]], np.r_[hi, hi[-1]], step="post", facecolor="none", edgecolor="#3d3c39",
+                    hatch="////", linewidth=0, label="MC stat. uncertainty")
     if logy:
         ax.set_yscale("log")
     ax.grid(axis="y", alpha=0.25, lw=0.5)
@@ -74,9 +81,9 @@ def plot_energy(w, chain, sc, out):
     sel = w[cuts.passes(w, chain)]
     s = cuts.is_signal_cat(sel.cat)
     fig, ax = plt.subplots(figsize=(9, 5.6))
-    stack(ax, sel, "shw_sp_energy", np.arange(0, 1201, 60), sc)
-    ax.set_xlabel("reco energy of the counted shower, shw_sp_energy [MeV] (overflow in last bin)")
-    ax.set_ylabel("candidates / 1e20 POT / 60 MeV")
+    stack(ax, sel, "shw_sp_energy", np.arange(0, 2401, 100), sc)
+    ax.set_xlabel("reco energy of the counted shower, shw_sp_energy [MeV]")
+    ax.set_ylabel("candidates / 1e20 POT / 100 MeV")
     ax.set_title("After full selection: %.0f signal + %.0f background / 1e20 POT (%d MC candidates); purity %.0f%%"
                  % (s.sum() * sc, (~s).sum() * sc, len(sel), 100 * s.mean()), fontsize=10, loc="left")
     ax.legend(frameon=False, fontsize=8.5)
@@ -103,7 +110,7 @@ def plot_scores(w, chain, sc, pot, out):
     h, l = axs[0].get_legend_handles_labels()
     axs[-1].axis("off")
     axs[-1].legend(h, [x.rsplit(" (", 1)[0] for x in l], frameon=False, fontsize=10, loc="center")
-    fig.suptitle("Score distributions with every other selection cut applied (N$-$1), %.2e POT; error bars: MC statistics" % pot,
+    fig.suptitle("Score distributions with every other selection cut applied (N$-$1), %.2e POT; hatched band: MC statistics" % pot,
                  fontsize=12)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     fig.savefig(os.path.join(out, "final_scores_nminus1.png"), dpi=140)
