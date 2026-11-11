@@ -16,6 +16,10 @@ Everything Wire-Cell writes about a candidate in one row, for selection work:
     to the candidate (kine_energy_included == 1): counts per PID label and
     leading energies. The unclear-link leftover showers (== 3) are counted
     apart, n_unclear / E_unclear; kine_reco_Enu includes both.
+  * particle-flow tree (T_pf, MC only; NaN on data): pf_n_em (every e/gamma
+    shower), pf_n_em_primary (no real particle above it: at the vertex,
+    pf_n_em_attached, or displaced through a pseudo photon/pi0,
+    pf_n_em_displaced), pf_n_em_primary_20MeV, pf_E_em_primary_1/2 [MeV]
   * segments (T_segment) and charge points (T_rec_charge): counts, lengths
   * leading EM shower geometry from its charge points (T_rec_charge points
     mapped to particles through T_segment): shw1_start_* (point nearest the
@@ -100,6 +104,47 @@ def _charge(f, index):
     return pd.DataFrame({"n_charge_points": n}, index=index).fillna(0).astype(int)
 
 
+def _pf(f, index):
+    """e/gamma counts from the T_pf particle-flow tree. A shower is primary
+    when no real (non-pseudo) particle is above it: attached to the vertex
+    (depth 0) or displaced through pseudo photons / pi0s. A pseudo neutron
+    above it makes it secondary. NaN when the file has no T_pf (data)."""
+    cols = ["pf_n_em", "pf_n_em_primary", "pf_n_em_primary_20MeV", "pf_n_em_attached",
+            "pf_n_em_displaced", "pf_E_em_primary_1", "pf_E_em_primary_2"]
+    t = wc.make_wc_pfdf(f)
+    if not len(t):
+        return pd.DataFrame(np.nan, index=index, columns=cols)
+    t = t.reset_index("row", drop=True).set_index(["nu_index", "node_id"], append=True)
+    t = t[~t.index.duplicated()]
+    entry, nu = t.index.get_level_values(0), t.index.get_level_values(1)
+    cur = t.parent_id.to_numpy()
+    real_above = np.zeros(len(t), int); n_above = np.zeros(len(t), bool)
+    for _ in range(50):
+        up = cur >= 0
+        if not up.any():
+            break
+        p = t.reindex(pd.MultiIndex.from_arrays([entry, nu, cur]))
+        ok = up & p.parent_id.notna().to_numpy()
+        pseudo = p.is_pseudo.to_numpy() == 1
+        real_above += ok & ~pseudo
+        n_above |= ok & pseudo & (p.pdg.abs().to_numpy() == 2112)
+        cur = np.where(ok, p.parent_id.fillna(-1).to_numpy(), -1).astype(int)
+    em = (t.pdg.abs() == 11) & (t.is_pseudo == 0)
+    prim = em & (real_above == 0) & ~n_above
+    by = lambda m: m.groupby(level=LEVELS).sum()
+    T = pd.DataFrame(index=index)
+    T["pf_n_em"] = by(em)
+    T["pf_n_em_primary"] = by(prim)
+    T["pf_n_em_primary_20MeV"] = by(prim & (t.ke_mev > 20))
+    T["pf_n_em_attached"] = by(prim & (t.depth == 0))
+    T["pf_n_em_displaced"] = by(prim & (t.depth > 0))
+    T = T.fillna(0).astype(int)
+    E = t.ke_mev[prim].droplevel("node_id")
+    T["pf_E_em_primary_1"] = _nth(E, 1)
+    T["pf_E_em_primary_2"] = _nth(E, 2)
+    return T
+
+
 def _back_dist(p, u):
     """Distance from p along -u to the active-volume boundary (p inside)."""
     b = cuts.ACTIVE_VOLUME
@@ -181,5 +226,5 @@ def make_wc_candidate_df(f):
     b = b[["reason", "n_main"]].add_prefix("bundle_")
     D = D.join(b)
 
-    D = D.join(_particles(f, D.index)).join(_segments(f, D.index)).join(_charge(f, D.index))
+    D = D.join(_particles(f, D.index)).join(_pf(f, D.index)).join(_segments(f, D.index)).join(_charge(f, D.index))
     return D.join(_shower_geom(f, D))

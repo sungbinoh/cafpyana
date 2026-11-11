@@ -189,6 +189,10 @@ wcbundlebranches = ["gid", "reason", "nu_index", "n_main", "sel_cluster_id", "se
 wcsegmentbranches = ["nu_index", "segment_id", "kine_index", "pdg", "flag_shower", "dirsign",
                      "length_cm", "ke_mev", "in_enu"]
 wcchargebranches = ["x", "y", "z", "q", "rr", "nu_index", "sub_cluster_id"]
+# T_pf: one row per particle-flow node. depth 0 hangs off the neutrino vertex;
+# is_pseudo nodes (pdg 22, 111, 2112, kine_index -1) are invisible links to
+# displaced daughters, e.g. a pseudo photon whose child is the e/gamma shower.
+wcpfbranches = ["nu_index", "node_id", "parent_id", "depth", "pdg", "is_pseudo", "kine_index", "ke_mev"]
 
 
 def make_wc_tabledf(f, group, leaves):
@@ -225,6 +229,11 @@ def make_wc_segmentdf(f, leaves=wcsegmentbranches):
 
 def make_wc_chargedf(f, leaves=wcchargebranches):
     return make_wc_tabledf(f, "T_rec_charge", leaves)
+
+
+def make_wc_pfdf(f, leaves=wcpfbranches):
+    """Particle-flow nodes, index (entry, row). MC only (truth_match gate)."""
+    return make_wc_tabledf(f, "T_pf", leaves)
 
 
 def make_wc_flashbothtpcdf(f):
