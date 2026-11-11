@@ -41,7 +41,7 @@ GROUPS = [
     ("Signal: NC $\\pi^0$ 1$\\gamma$", [1], "#2a78d6"),
     ("Signal: NC $\\Delta\\to N\\gamma$", [0], "#e87ba4"),
     ("Signal: other ($\\nu_\\mu$CC, NC other, out-of-FV)", [2, 3, 10], "#6250d6"),
-    ("$\\geq$2 visible photons", [4], "#eb6834"),
+    ("$\\geq$2 reconstructable photons (truth)", [4], "#eb6834"),
     ("CC $\\nu_e$", [7], "#1baf7a"),
     ("CC $\\nu_\\mu$ ($\\mu\\geq$100 MeV)", [6], "#eda100"),
     ("Cosmic / unmatched", [9], "#e34948"),
