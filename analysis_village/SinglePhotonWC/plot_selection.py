@@ -6,6 +6,8 @@ truth category, per 1e20 POT with MC-statistics errors on the total:
                              (shw_sp_energy) after the full selection
   final_scores_nminus1.png   the score cuts (WC numu/nue, uB numu/other/
                              ncpi0 BDTs), each with every other cut applied
+  selection_sequential.png   every cut variable in cut order, with the
+                             earlier cuts applied, signal vs background
 
 Input: configs/sp_mc.py outputs (wc + mcnu + wcevt) and the MicroBooNE BDT
 XMLs (the ub_* scores).
@@ -103,6 +105,66 @@ def plot_scores(w, chain, sc, pot, out):
     plt.close(fig)
 
 
+def _fv_wall(df):
+    return cuts.dist_to_active_boundary(df.nu_x, df.nu_y, df.nu_z)
+
+
+# Sequential cut variables: cut name, column or function, label, bins, threshold, kept side.
+# fv is two panels: the distance to the AV walls, then |x| to the cathode.
+SEQUENTIAL = [
+    ("fv", _fv_wall, "reco vertex distance to the AV wall [cm]", np.linspace(-20, 200, 45), cuts.FV_INSET, ">"),
+    ("fv", lambda df: df.nu_x.abs(), "reco vertex |x|, distance to the cathode [cm]", np.linspace(0, 200, 41), cuts.CATHODE_INSET, ">"),
+] + [(c, v, l, b, t, s) for c, v, l, b, t, s in SCORES] + [
+    ("one_shower", "shw_sp_n_20br1_showers", "SP-tagger showers (shw_sp_n_20br1_showers)", np.arange(-0.5, 6.5), None, "== 1"),
+    ("em_showers", lambda df: df.n_shower - df.n_em, "showers labelled $\\mu/\\pi/p$ (n_shower $-$ n_em)", np.arange(-0.5, 5.5), 0.5, "<"),
+    ("back_traced", "shw1_back_dist", "counted shower traced back to the AV wall [cm]", np.linspace(0, 500, 26), cuts.BACK_DIST_MIN, ">"),
+]
+SIG_BKG = [("signal", "#2a78d6"), ("background", "#a3a29d")]
+
+
+def plot_sequential(w, chain, sc, pot, out):
+    """Each cut's variable for the candidates that passed every earlier cut,
+    signal and background stacked; the title gives what the cut removes."""
+    names = list(chain)
+    fig, axs = plt.subplots(3, 4, figsize=(22, 14))
+    axs = axs.ravel()
+    for a, (cut, var, lab, bins, thr, sense) in zip(axs, SEQUENTIAL):
+        before = names[names.index(cut) - 1]
+        q = w[cuts.passes(w, chain, upto=before)]
+        if lab.startswith("reco vertex |x|"):   # second half of fv: the wall part already applied
+            q = q[_fv_wall(q) >= cuts.FV_INSET]
+        x = (var(q) if callable(var) else q[var])
+        x = np.clip(np.asarray(x, float), bins[0], bins[-1] - 1e-6)
+        sig = cuts.is_signal_cat(q.cat).to_numpy()
+        a.hist([x[sig], x[~sig]], bins=bins, stacked=True, color=[c for _, c in SIG_BKG], edgecolor="white", linewidth=0.6,
+               weights=[np.full(sig.sum(), sc), np.full((~sig).sum(), sc)], label=[n for n, _ in SIG_BKG])
+        a.set_yscale("log")
+        a.grid(axis="y", alpha=0.25, lw=0.5)
+        if thr is None:   # one_shower: keep the == 1 bin
+            keep = x == 1
+            a.axvspan(0.5, 1.5, color="#2a78d6", alpha=0.08)
+            a.text(1, 0.95, "keep", transform=a.get_xaxis_transform(), ha="center", va="center", fontsize=9.5)
+        else:
+            keep = x > thr if sense == ">" else x < thr
+            a.axvline(thr, color="#222", lw=1.6, ls="--")
+            a.text(thr, 0.95, "  keep $\\rightarrow$" if sense == ">" else "$\\leftarrow$ keep  ", transform=a.get_xaxis_transform(),
+                   ha="left" if sense == ">" else "right", va="center", fontsize=9.5)
+        part = " (cathode part)" if lab.startswith("reco vertex |x|") else (" (wall part)" if var is _fv_wall else "")
+        a.set_title("%s%s, after %s: %.0f sig + %.0f bkg / 1e20 POT\nremoves %.0f%% of signal, %.0f%% of background reaching it"
+                    % (cut, part, "fv wall part" if part == " (cathode part)" else before, sig.sum() * sc, (~sig).sum() * sc,
+                       100 * (~keep[sig]).mean(), 100 * (~keep[~sig]).mean()), fontsize=10, loc="left")
+        a.set_xlabel(lab)
+        a.set_ylabel("candidates / 1e20 POT")
+    for a in axs[len(SEQUENTIAL):]:
+        a.axis("off")
+    axs[len(SEQUENTIAL)].legend(*axs[0].get_legend_handles_labels(), frameon=False, fontsize=13, loc="center")
+    fig.suptitle("Selection variables in cut order: each panel has every earlier cut applied (%.2e POT). "
+                 "Candidates; wc_valid and vertex are not shown." % pot, fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.965))
+    fig.savefig(os.path.join(out, "selection_sequential.png"), dpi=130)
+    plt.close(fig)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-i", "--inputs", nargs="+", required=True, help=".df files, directories or globs")
@@ -114,7 +176,8 @@ def main():
     chain, sc = cuts.CHAINS["presel+uboone"], 1e20 / pot
     plot_energy(w, chain, sc, args.outdir)
     plot_scores(w, chain, sc, pot, args.outdir)
-    print("wrote final_shower_energy.png, final_scores_nminus1.png to %s (%.3g POT)" % (args.outdir, pot))
+    plot_sequential(w, chain, sc, pot, args.outdir)
+    print("wrote final_shower_energy.png, final_scores_nminus1.png, selection_sequential.png to %s (%.3g POT)" % (args.outdir, pot))
 
 
 if __name__ == "__main__":
