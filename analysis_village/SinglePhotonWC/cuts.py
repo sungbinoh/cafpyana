@@ -215,9 +215,9 @@ PRESELECTION = {
 #   wc_numu         not numu CC-like: numu_score < 0.5
 #   ub_numu         MicroBooNE numu BDT > 1 (MicroBooNE: 0.4; tighter on SBND,
 #                   tuned out-of-fold, as wc_numu already cut)
-#   ub_other        MicroBooNE other BDT > -0.25 (MicroBooNE: 0.2; it barely
-#                   separates on SBND, so looser keeps ~30% more signal at
-#                   the same purity; tuned two-fold on the Nov6 MC)
+#   ub_other        MicroBooNE other BDT > 0.2, as MicroBooNE. A looser -0.25
+#                   paid off before em_showers and back_traced; with them
+#                   (Nov11) it costs purity 44% -> 37.5% for +9% efficiency
 #   ub_ncpi0        MicroBooNE NC pi0 BDT > -0.05, as MicroBooNE (log10
 #                   score scale, see microboone_bdt)
 #   wc_nue          not nue-like: nue_score < 7 (MicroBooNE's nue selection
@@ -242,7 +242,7 @@ PRESELECTION = {
 # MicroBooNE BDT cascade (each trained on events passing the previous ones;
 # the NC pi0 BDT has no separation before "other"), so tune them in order.
 UB_NUMU_MIN = 1.0
-UB_OTHER_MIN = -0.25
+UB_OTHER_MIN = 0.2
 UB_NCPI0_MIN = -0.05
 WC_NUMU_SCORE_MAX = 0.5
 WC_NUE_SCORE_MAX = 7.0
