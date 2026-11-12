@@ -25,12 +25,7 @@ from analysis_village.SinglePhotonWC import cuts  # noqa: E402
 from analysis_village.SinglePhotonWC import dfio  # noqa: E402
 
 INK2 = "#52514e"
-plt.rcParams.update({
-    "axes.spines.top": False, "axes.spines.right": False,
-    "axes.edgecolor": INK2, "xtick.color": INK2, "ytick.color": INK2,
-    "axes.grid": True, "grid.color": "#e6e5e1", "grid.linewidth": 0.6,
-    "axes.axisbelow": True, "font.size": 9, "legend.frameon": False,
-})
+plt.style.use(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dune.mplstyle"))
 SIG_COLOR, BKG_COLOR = "#2a78d6", "#a3a29d"
 
 GROUPS = {   # signal solid, background dashed
@@ -67,14 +62,14 @@ def pi0_reason(d):
 
 
 def page_rates(pdf, m, pot):
-    fig, axs = plt.subplots(1, 2, figsize=(13, 4.6), gridspec_kw=dict(width_ratios=[1.4, 1]))
+    fig, axs = plt.subplots(1, 2, figsize=(22, 7), gridspec_kw=dict(width_ratios=[1.4, 1]))
     ax = axs[0]
     rate = m.cat.value_counts().reindex(cuts.CATEGORY_LABELS.keys()).fillna(0).drop(9) / pot * 1e20
     y = np.arange(len(rate))
     ax.barh(y, rate.values, height=0.65,
             color=[SIG_COLOR if c in cuts.SIGNAL_CATEGORIES else BKG_COLOR for c in rate.index])
     for yi, v in zip(y, rate.values):
-        ax.text(v, yi, "  %.3g" % v, va="center", color=INK2, fontsize=8)
+        ax.text(v, yi, "  %.3g" % v, va="center", color=INK2, fontsize=12)
     ax.set_yticks(y, [cuts.CATEGORY_LABELS[c] for c in rate.index])
     ax.invert_yaxis()
     ax.set_xscale("log")
@@ -94,13 +89,13 @@ def page_rates(pdf, m, pot):
     ax.set_xlabel("fraction of pi0 signal (%d)" % len(sp))
     ax.set_title("pi0 signal: why only one shower", loc="left")
     ax.grid(False)
-    fig.subplots_adjust(left=0.15, right=0.97, bottom=0.12, wspace=0.75)
+    fig.tight_layout()
     pdf.savefig(fig)
     return fig
 
 
 def page_kinematics(pdf, G):
-    fig, axs = plt.subplots(2, 3, figsize=(15, 8.4))
+    fig, axs = plt.subplots(2, 3, figsize=(24, 13))
     hist(axs[0, 0], G, "true_shw1_E", np.linspace(0, 1000, 41), "leading shower E [MeV]", scale=1000.)
     axs[0, 0].set_title("Leading reconstructable shower energy", loc="left")
     hist(axs[0, 1], G, "true_shw1_gap", np.linspace(0, 100, 41), "vertex to shower start [cm]")
@@ -113,26 +108,26 @@ def page_kinematics(pdf, G):
     axs[1, 1].set_title("Proton multiplicity", loc="left")
     hist(axs[1, 2], G, "true_nshower", np.arange(0, 6) - 0.5, "reconstructable showers", discrete=True)
     axs[1, 2].set_title("Shower multiplicity", loc="left")
-    axs[0, 0].legend(fontsize=8)
+    axs[0, 0].legend(fontsize=13)
     fig.tight_layout()
     pdf.savefig(fig)
     return fig
 
 
 def page_extra(pdf, m):
-    fig, axs = plt.subplots(1, 3, figsize=(15, 4.2))
+    fig, axs = plt.subplots(1, 3, figsize=(24, 7))
     G = groups(m)
     hist(axs[0], {k: G[k] for k in ["bkg: >=2 showers"]}, "true_shw2_E",
          np.linspace(0, 400, 41), "sub-leading shower E [MeV]", scale=1000.)
     axs[0].set_title("Sub-leading shower (signal: none)", loc="left")
-    axs[0].legend(fontsize=8)
+    axs[0].legend(fontsize=13)
     cc1 = m[(m.true_iscc == 1) & (m.true_nshower == 1) & (m.true_ne == 0) & (m.cat != 8)]
     axs[1].hist((cc1.true_mu_KE * 1000).clip(0, 999), bins=np.linspace(0, 1000, 41), histtype="step", lw=2,
                 color=INK2)
     axs[1].axvline(cuts.MUON_KE_MAX * 1000, color="#eb6834", lw=1.5)
     axs[1].set_xlabel("leading muon KE [MeV] (last bin: overflow)")
     axs[1].set_ylabel("true neutrinos")
-    axs[1].set_title("CC numu with one shower: muon KE (line: 100 MeV)", loc="left")
+    axs[1].set_title("CC numu, one shower: muon KE", loc="left")
     hist(axs[2], G, "true_npipm", np.arange(0, 5) - 0.5, "charged pions (any KE)", discrete=True)
     axs[2].set_title("Charged-pion multiplicity", loc="left")
     fig.tight_layout()

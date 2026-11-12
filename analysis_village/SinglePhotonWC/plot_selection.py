@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from analysis_village.SinglePhotonWC import cuts  # noqa: E402
 from analysis_village.SinglePhotonWC.cutflow import load  # noqa: E402
 
-plt.rcParams.update({"font.size": 10, "axes.spines.top": False, "axes.spines.right": False})
+plt.style.use(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dune.mplstyle"))
 
 GROUPS = [   # label, truth categories, colour
     ("Signal: NC $\\pi^0$ 1$\\gamma$", [1], "#2a78d6"),
@@ -142,7 +142,7 @@ def plot_sequential(w, chain, sc, pot, out):
     """Each cut's variable for the candidates that passed every earlier cut,
     signal and background stacked; the title gives what the cut removes."""
     names = list(chain)
-    fig, axs = plt.subplots(3, 4, figsize=(22, 14))
+    fig, axs = plt.subplots(3, 4, figsize=(30, 17))
     axs = axs.ravel()
     for a, (cut, var, lab, bins, thr, sense) in zip(axs, SEQUENTIAL):
         before = names[names.index(cut) - 1]
