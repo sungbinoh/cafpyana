@@ -1,40 +1,22 @@
 """One row per Wire-Cell neutrino candidate, index (entry, nu_index).
 
-Everything Wire-Cell writes about a candidate in one row, for selection work:
+Columns:
+  * event: run/subrun/evt, n_nu, Trun flash and bundle counts
+  * every scalar T_tagger leaf (~1030: flags, scores and BDT inputs) and the
+    T_kine scalars (MeV), under their Wire-Cell names; on MC the T_match
+    truth match (tmatch_idx: row in rec.mc.nu, -1 none; tmatch_iou_q/_n)
+  * main_cluster_*: the T_cluster row of cluster_id; bundle_*: the T_bundle
+    row (reason 0 main, 1 demoted main; codes in make_wc_events.py)
+  * T_kine particles connected to the candidate (kine_energy_included ==
+    1): counts per PID and leading energies; the unclear-link leftovers
+    apart (n_unclear, E_unclear)
+  * pf_*: e/gamma counts from the particle-flow tree (MC only, see _pf)
+  * T_segment / T_rec_charge counts and lengths
+  * leading EM shower from its charge points (see _shower_geom): start,
+    axis, shw1_back_dist (back along the axis to the AV boundary; short for
+    a photon entering from outside), vtx_other_q, other_q_frac
 
-  * event: run/subrun/evt, candidates in the event (n_nu), Trun flash and
-    bundle counts
-  * every scalar T_tagger leaf (~1030: the summary flags and scores plus
-    the inputs of Wire-Cell's BDTs, shw_sp_*, pio_*, numu_cc_*, cosmict_*,
-    the nue-tagger blocks, ssm_*), under their T_tagger names; T_kine
-    scalars (energies in MeV, as in the CAF); on MC the T_match level-3
-    truth match
-  * main cluster (T_cluster row of T_tagger.cluster_id): main_cluster_*
-  * flash bundle (T_bundle row with this nu_index): bundle_*; bundle_reason
-    0 main candidate, 1 demoted main (codes in make_wc_events.py)
-  * particle list (T_kine vectors), summarised over the particles connected
-    to the candidate (kine_energy_included == 1): counts per PID label and
-    leading energies. The unclear-link leftover showers (== 3) are counted
-    apart, n_unclear / E_unclear; kine_reco_Enu includes both.
-  * particle-flow tree (T_pf, MC only; NaN on data): pf_n_em (every e/gamma
-    shower), pf_n_em_primary (no real particle above it: at the vertex,
-    pf_n_em_attached, or displaced through a pseudo photon/pi0,
-    pf_n_em_displaced), pf_n_em_primary_20MeV, pf_E_em_primary_1/2 [MeV]
-  * segments (T_segment) and charge points (T_rec_charge): counts, lengths
-  * leading EM shower geometry from its charge points (T_rec_charge points
-    mapped to particles through T_segment): shw1_start_* (point nearest the
-    reco vertex), shw1_dir_* (principal axis of the points within
-    SHW_AXIS_RADIUS of the start, pointing away from it), shw1_back_dist
-    (from the start back along the axis to the active-volume boundary; short
-    for a photon entering from outside), shw1_start_vtx_dist, shw1_npts;
-    vtx_other_q (candidate charge within VTX_RADIUS of the reco vertex not
-    in that shower) and other_q_frac (candidate charge not in it)
-  * MC only: the T_match truth match, tmatch_idx (row in rec.mc.nu, -1: no
-    match) and its charge / point IoU. Absent on data.
-
-Reco only: truth is the separate mcnu table (make_truth.py), joined on
-(file, __ntuple, entry, tmatch_idx) by cutflow.load. Events without a
-candidate have no row here; mcnu gives the efficiency denominators.
+Reco only: truth is the mcnu table (make_truth.py), joined by cutflow.load.
 """
 
 import numpy as np
@@ -104,22 +86,14 @@ def _charge(f, index):
     return pd.DataFrame({"n_charge_points": n}, index=index).fillna(0).astype(int)
 
 
-def _pf(f, index):
-    """e/gamma counts from the T_pf particle-flow tree. A shower is primary
-    when no real (non-pseudo) particle is above it: attached to the vertex
-    (depth 0) or displaced through pseudo photons / pi0s. A pseudo neutron
-    above it makes it secondary. NaN when the file has no T_pf (data)."""
-    cols = ["pf_n_em", "pf_n_em_primary", "pf_n_em_primary_20MeV", "pf_n_em_attached",
-            "pf_n_em_displaced", "pf_E_em_primary_1", "pf_E_em_primary_2"]
-    t = wc.make_wc_pfdf(f)
-    if not len(t):
-        return pd.DataFrame(np.nan, index=index, columns=cols)
-    t = t.reset_index("row", drop=True).set_index(["nu_index", "node_id"], append=True)
-    t = t[~t.index.duplicated()]
+def _pf_ancestors(t, max_depth=50):
+    """Per T_pf node: real (non-pseudo) nodes above it, and whether a pseudo
+    neutron is above it."""
     entry, nu = t.index.get_level_values(0), t.index.get_level_values(1)
     cur = t.parent_id.to_numpy()
-    real_above = np.zeros(len(t), int); n_above = np.zeros(len(t), bool)
-    for _ in range(50):
+    real_above = np.zeros(len(t), int)
+    neutron_above = np.zeros(len(t), bool)
+    for _ in range(max_depth):
         up = cur >= 0
         if not up.any():
             break
@@ -127,10 +101,26 @@ def _pf(f, index):
         ok = up & p.parent_id.notna().to_numpy()
         pseudo = p.is_pseudo.to_numpy() == 1
         real_above += ok & ~pseudo
-        n_above |= ok & pseudo & (p.pdg.abs().to_numpy() == 2112)
+        neutron_above |= ok & pseudo & (p.pdg.abs().to_numpy() == 2112)
         cur = np.where(ok, p.parent_id.fillna(-1).to_numpy(), -1).astype(int)
+    return real_above, neutron_above
+
+
+def _pf(f, index):
+    """e/gamma counts from the T_pf particle-flow tree. A shower is primary
+    when no real particle and no pseudo neutron is above it: attached to the
+    vertex (depth 0) or displaced through pseudo photons / pi0s. NaN when
+    the file has no T_pf (data)."""
+    cols = ["pf_n_em", "pf_n_em_primary", "pf_n_em_primary_20MeV", "pf_n_em_attached",
+            "pf_n_em_displaced", "pf_E_em_primary_1", "pf_E_em_primary_2"]
+    t = wc.make_wc_pfdf(f)
+    if not len(t):
+        return pd.DataFrame(np.nan, index=index, columns=cols)
+    t = t.reset_index("row", drop=True).set_index(["nu_index", "node_id"], append=True)
+    t = t[~t.index.duplicated()]
+    real_above, neutron_above = _pf_ancestors(t)
     em = (t.pdg.abs() == 11) & (t.is_pseudo == 0)
-    prim = em & (real_above == 0) & ~n_above
+    prim = em & (real_above == 0) & ~neutron_above
     by = lambda m: m.groupby(level=LEVELS).sum()
     T = pd.DataFrame(index=index)
     T["pf_n_em"] = by(em)
@@ -156,7 +146,27 @@ def _back_dist(p, u):
     return max(t, 0.0)
 
 
+def _shower_axis(p, q, vtx):
+    """(start, unit axis) of a shower's charge points p with charges q, or
+    None with too few points: the start is the point nearest the vertex, the
+    axis the charge-weighted principal axis of the points within
+    SHW_AXIS_RADIUS of it, pointing away from it."""
+    w = np.clip(q, 0, None)
+    start = p[np.argmin(np.linalg.norm(p - vtx, axis=1))]
+    m = np.linalg.norm(p - start, axis=1) < SHW_AXIS_RADIUS
+    if m.sum() < 3:
+        return None
+    if w[m].sum() <= 0:
+        w = np.ones_like(w)
+    c = np.average(p[m], axis=0, weights=w[m])
+    u = np.linalg.svd((p[m] - c) * np.sqrt(w[m])[:, None], full_matrices=False)[2][0]
+    return start, (-u if np.dot(c - start, u) < 0 else u)
+
+
 def _shower_geom(f, D):
+    """Leading EM shower geometry from the T_rec_charge points mapped to it
+    through T_segment, plus the candidate charge outside it: vtx_other_q
+    (within VTX_RADIUS of the vertex) and other_q_frac (all)."""
     cols = ["shw1_start_x", "shw1_start_y", "shw1_start_z", "shw1_dir_x", "shw1_dir_y", "shw1_dir_z",
             "shw1_back_dist", "shw1_start_vtx_dist", "shw1_npts", "vtx_other_q", "other_q_frac"]
     out = pd.DataFrame(np.nan, index=D.index, columns=cols)
@@ -181,19 +191,10 @@ def _shower_geom(f, D):
         near = np.linalg.norm(xyz - vtx, axis=1) < VTX_RADIUS
         out.loc[key, "vtx_other_q"] = q[near & ~sh].sum()
         out.loc[key, "other_q_frac"] = q[~sh].sum() / tot if tot > 0 else np.nan
-        if sh.sum() < 3:
+        axis = _shower_axis(xyz[sh], q[sh], vtx) if sh.sum() >= 3 else None
+        if axis is None:
             continue
-        p = xyz[sh]; w = np.clip(q[sh], 0, None)
-        start = p[np.argmin(np.linalg.norm(p - vtx, axis=1))]
-        m = np.linalg.norm(p - start, axis=1) < SHW_AXIS_RADIUS
-        if m.sum() < 3:
-            continue
-        if w[m].sum() <= 0:
-            w = np.ones_like(w)
-        c = np.average(p[m], axis=0, weights=w[m])
-        u = np.linalg.svd((p[m] - c) * np.sqrt(w[m])[:, None], full_matrices=False)[2][0]
-        if np.dot(c - start, u) < 0:
-            u = -u
+        start, u = axis
         out.loc[key, ["shw1_start_x", "shw1_start_y", "shw1_start_z"]] = start
         out.loc[key, ["shw1_dir_x", "shw1_dir_y", "shw1_dir_z"]] = u
         out.loc[key, "shw1_back_dist"] = _back_dist(start, u)

@@ -1,43 +1,28 @@
-"""Truth table for the inclusive single-photon search (see cuts.py for the
-signal definition).
-
-One row per true neutrino (rec.mc.nu), index (entry, nu index), so Wire-Cell
+"""Truth table for the inclusive single-photon search (signal definition:
+cuts.py). One row per true neutrino (rec.mc.nu), index (entry, nu), so
 candidates join on (entry, tmatch_idx). Columns, all prefixed true_:
 
-  * E, pdg, iscc, isnc, genie_mode, w, resnum, vtx_x/y/z: rec.mc.nu
-  * primary counts: npi0, neta, npipm, np_35MeV (protons above 35 MeV KE),
-    nn, nmu, nmu_100MeV, mu_KE (leading muon, GeV), ne (e+-)
+  * rec.mc.nu: E, pdg, iscc, isnc, genie_mode, w, resnum, vtx_x/y/z
+  * primary counts: npi0, neta, npipm, np_35MeV, nn, nmu, nmu_100MeV, ne
+    (e+-), mu_KE (leading muon, GeV)
   * prompt photons (GENIE primaries and decay photons of primary hadrons):
-      ngamma_20MeV  photons with E >= 20 MeV
-      ngamma_rec    of those, reconstructable (shower starts >=
-                    cuts.SHOWER_INSET inside the TPC)
-      ngamma_out    of those, not reconstructable: converts outside the TPC
-                    or closer than SHOWER_INSET to its boundary
-      ngamma_edge   of ngamma_out, converts inside the TPC within
-                    SHOWER_INSET of its boundary (visible, but not counted)
-      ndecayg_soft  decay photons below 20 MeV
-      nshower       reconstructable showers after merging photons < 20 deg
-                    apart; nmerged = ngamma_rec - nshower
-  * Wire-Cell charge bookkeeping (MC truth-match trees; NaN without them):
-      wc_q_dep      charge the neutrino's particles deposited (T_truth_track
-                    q_readout), wc_q_img the part imaged into blobs
-      wc_f_cand / wc_f_sameflash / wc_f_otherflash / wc_f_noflash
-                    where its imaged charge went (T_match level 0, cluster
-                    vs interaction): clusters in its matched candidate's
-                    particle flow, other clusters on that candidate's flash
-                    (incl. unused bundle companions), clusters on
-                    another flash (incl. other candidates), unmatched
-                    clusters. Fractions of the cluster-matched charge; with
-                    no matched candidate everything is "otherflash"/"noflash"
-  * shw1_* / shw2_*: the two most energetic showers. E [GeV] (sum of its
-    photons), gap [cm] (vertex to the nearest conversion point), costh (of
-    its leading photon, to the beam), conv_x/y/z [cm] (conversion point of
-    its leading photon), nphot, origin (22 for a GENIE-primary photon, else
-    the pdg of the primary hadron it comes from: 111, 221, ...)
+    ngamma_20MeV (E >= 20 MeV); of those ngamma_rec (shower starts >=
+    cuts.SHOWER_INSET inside the TPC) and ngamma_out (the rest), of which
+    ngamma_edge convert inside the TPC; ndecayg_soft (decay photons < 20
+    MeV); nshower (ngamma_rec after merging photons < 20 deg apart) and
+    nmerged = ngamma_rec - nshower
+  * wc_q_dep / wc_q_img: charge the neutrino deposited / that was imaged;
+    wc_f_cand / _sameflash / _otherflash / _noflash: fractions of its
+    cluster-matched charge in its candidate's particle flow, other clusters
+    on that candidate's flash, clusters on another flash, unmatched clusters
+    (MC truth-match trees; NaN without them)
+  * shw1_* / shw2_*, the two most energetic showers: E [GeV], gap (vertex to
+    nearest conversion, cm), costh (to the beam), conv_x/y/z, nphot, origin
+    (22: GENIE primary, else the parent hadron pdg)
 
-The shower start is the photon trajectory end: SBND's Geant4 does not keep
-EM shower daughters, and the CAF stores only in-TPC points (-9999 if none),
-so an escaping photon ends on the boundary and fails the inset.
+The shower start is the photon trajectory end: SBND's Geant4 keeps no EM
+shower daughters and the CAF stores only in-TPC points, so an escaping
+photon ends on the boundary and fails the inset.
 """
 
 import numpy as np
@@ -108,13 +93,41 @@ def _merge_showers(r):
     return r
 
 
-def _nested(t, base, n_entries):
+def _nested(t, base):
     """vector<vector> leaf -> per entry, list of per-row arrays."""
     a = t.arrays([base, base + "..length", base + "..idx"], library="np")
     return [[v[i:i + l] for i, l in zip(I, L)] for v, L, I in zip(a[base], a[base + "..length"], a[base + "..idx"])]
 
 
+def _cluster_charge_by_nu(l0, match_obj, match_q):
+    """{true nu: [(cluster_id, shared charge)]} from one entry's level-0
+    T_match rows (side 0 clusters, side 1 interactions)."""
+    truth = l0[l0.side == 1]
+    truth_nu = dict(zip(truth.obj, truth.truth_nu_idx))
+    acc = {}
+    for row, r in l0[l0.side == 0].iterrows():
+        for o, sq in zip(match_obj[row], match_q[row]):
+            nu = truth_nu.get(o, -1)
+            if nu >= 0:
+                acc.setdefault(nu, []).append((int(r.cluster_id), float(sq)))
+    return acc
+
+
+def _charge_fractions(clusters, cand_clusters, flash, cand_flash):
+    """Fractions of the charge in `clusters` on the candidate, its flash,
+    another flash and no flash."""
+    tot = sum(x for _, x in clusters) or np.nan
+    fc = fs = fo = fn = 0.0
+    for c, x in clusters:
+        if c in cand_clusters: fc += x
+        elif flash.get(c, -1) < 0: fn += x
+        elif cand_flash is not None and flash.get(c) == cand_flash: fs += x
+        else: fo += x
+    return [fc / tot, fs / tot, fo / tot, fn / tot]
+
+
 def _wc_charge_destination(f, N):
+    """Where each true neutrino's charge went (true_wc_* columns)."""
     cols = ["wc_q_dep", "wc_q_img", "wc_f_cand", "wc_f_sameflash", "wc_f_otherflash", "wc_f_noflash"]
     out = pd.DataFrame(np.nan, index=N.index, columns=cols)
     if not wc.has_wc(f) or "wc.T_match.level" not in f[wc.WC_TREE].keys():
@@ -126,49 +139,36 @@ def _wc_charge_destination(f, N):
     q.index.names = N.index.names
     out["wc_q_dep"] = q.q_readout.reindex(N.index)
     out["wc_q_img"] = q.q_in_blobs.reindex(N.index)
+
     m = wc.make_wc_tabledf(f, "T_match", ["level", "side", "obj", "cluster_id", "truth_nu_idx"])
-    mo = _nested(t, "wc.T_match.match_obj", None); ms = _nested(t, "wc.T_match.match_shared_q", None)
+    mo, ms = _nested(t, "wc.T_match.match_obj"), _nested(t, "wc.T_match.match_shared_q")
     cl = wc.make_wc_clusterdf(f, ["cluster_id", "matched_flash_gid"])
     tag = wc.make_wc_taggerdf(f, ["matched_flash_gid"])
     tm = wc.make_wc_tmatchdf(f)
     ov = wc.make_wc_tabledf(f, "T_overlap", ["nu_index", "cluster_id", "in_pf"])
+    has = lambda df, entry: entry in df.index.get_level_values(0)
     for entry in np.unique(m.index.get_level_values("entry")):
         me = m.loc[entry]
-        l0 = me[me.level == 0]
-        truth_nu = dict(zip(l0[l0.side == 1].obj, l0[l0.side == 1].truth_nu_idx))
-        flash = dict(zip(cl.loc[entry].cluster_id, cl.loc[entry].matched_flash_gid)) if entry in cl.index.get_level_values(0) else {}
-        acc = {}
-        for row, r in l0[l0.side == 0].iterrows():
-            for o, sq in zip(mo[entry][row], ms[entry][row]):
-                nu = truth_nu.get(o, -1)
-                if nu >= 0:
-                    acc.setdefault(nu, []).append((int(r.cluster_id), float(sq)))
-        cand = {}
-        if entry in tm.index.get_level_values(0):
-            te = tm.loc[entry]
-            for nu_index, r in te.iterrows():
+        acc = _cluster_charge_by_nu(me[me.level == 0], mo[entry], ms[entry])
+        flash = dict(zip(cl.loc[entry].cluster_id, cl.loc[entry].matched_flash_gid)) if has(cl, entry) else {}
+        cand = {}   # true nu -> matched candidates
+        if has(tm, entry):
+            for nu_index, r in tm.loc[entry].iterrows():
                 if r.tmatch_idx >= 0:
                     cand.setdefault(int(r.tmatch_idx), []).append(nu_index)
-        for nu, lst in acc.items():
+        for nu, clusters in acc.items():
             key = (entry, nu)
             if key not in out.index:
                 continue
             cset, cflash = set(), None
             if nu in cand:
                 ci = cand[nu][0]
-                if entry in ov.index.get_level_values(0):
+                if has(ov, entry):
                     oe = ov.loc[entry]
                     cset = set(oe[(oe.nu_index == ci) & (oe.in_pf == 1)].cluster_id)
                 if (entry, ci) in tag.index:
                     cflash = tag.loc[(entry, ci), "matched_flash_gid"]
-            tot = sum(x for _, x in lst) or np.nan
-            fc = fs = fo = fn = 0.0
-            for c, x in lst:
-                if c in cset: fc += x
-                elif flash.get(c, -1) < 0: fn += x
-                elif cflash is not None and flash.get(c) == cflash: fs += x
-                else: fo += x
-            out.loc[key, ["wc_f_cand", "wc_f_sameflash", "wc_f_otherflash", "wc_f_noflash"]] = [fc / tot, fs / tot, fo / tot, fn / tot]
+            out.loc[key, cols[2:]] = _charge_fractions(clusters, cset, flash, cflash)
     return out
 
 

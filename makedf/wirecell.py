@@ -1,27 +1,19 @@
 """Dataframe makers for the SBND Wire-Cell reconstruction (recTreeWireCell).
 
-The Wire-Cell output is a separate tree, entry-aligned with recTree (same
-run/subrun/evt per entry), with branches "wc.<T_tree>.<leaf>". Each T_* tree is
-a vector per event; T_tagger and T_kine have one row per Wire-Cell neutrino
-candidate, keyed by nu_index. All makers here return frames indexed by
-(entry, nu_index) or (entry, nu_index, <row>) so they join directly.
-Format and production: github.com/HaiwangYu/sbnd-wirecell-production (aurora/).
+The Wire-Cell tree is entry-aligned with recTree; its branches are
+"wc.<T_tree>.<leaf>", each T_* tree a vector per event. T_tagger and T_kine
+have one row per neutrino candidate (nu_index), so the per-candidate makers
+index by (entry, nu_index) and the table makers by (entry, row).
+Format: github.com/HaiwangYu/sbnd-wirecell-production (aurora/); source:
+github.com/HaiwangYu/wire-cell-toolkit, branch sbnd-wc-flatcaf.
 
-- wc.valid = 0: no Wire-Cell output for the CAF event (a failed or partial
-  job, or an event lost upstream); all its trees are empty. make_wc_evtdf
-  keeps it, the per-candidate makers simply have no rows. valid = 1 with no
-  T_tagger rows is a processed event without a candidate; T_bundle.reason
-  says why.
-- T_pf, T_match, T_overlap, T_truth_track are written only with the step-2
-  truth_match option, which needs MC truth. T_pf is a reco object (each
-  candidate's particle-flow tree) but is gated the same way, so on data these
-  branches always have 0 rows and reco quantities must not be built from T_pf.
-- Source: github.com/HaiwangYu/wire-cell-toolkit, branch sbnd-wc-flatcaf
-  (Trun.wct_version records the commit).
+- wc.valid = 0: no Wire-Cell output for the event (failed job or lost
+  upstream), all trees empty. valid = 1 without T_tagger rows is a processed
+  event with no candidate; T_bundle.reason says why.
+- T_pf, T_match, T_overlap and T_truth_track are written only with the
+  truth match (MC). T_pf is reco but gated the same way: empty on data.
 
-Units are as in the CAF: Wire-Cell energies are MeV (kine_*, ke_mev), the
-truth tables (T_truth_nu.E) are GeV, lengths cm.
-
+Units as in the CAF: Wire-Cell energies MeV, truth tables GeV, lengths cm.
 Only pyanalib is imported, so this module does not need CVMFS.
 """
 
@@ -33,14 +25,10 @@ from pyanalib.pandas_helpers import loadbranches
 WC_TREE = "recTreeWireCell"
 WC_NU_LEVELS = ["entry", "nu_index"]
 
-# T_tagger leaves loaded by default: vertex, flash, and the summary flags and
-# BDT scores. wc_tagger_leaves(f) lists every scalar leaf (the BDT inputs).
-# cosmict_flag is the overall cosmic verdict (OR of cosmict_flag_1..10);
-# cosmic_flag is only one sub-tagger's shower cross-check and defaults to 1.
-# neutrino_type bits: 2 cosmic, 4 numu CC, 8 NC (numu tagger: not CC), 32 nue;
-# 0 when no vertex was found.
-# cluster_id is the main cluster after the vertex finder, which can switch it
-# from the selected cluster to a companion on the same flash.
+# T_tagger defaults (wc_tagger_leaves(f) lists every scalar leaf).
+# cosmict_flag is the overall cosmic verdict; neutrino_type bits: 2 cosmic,
+# 4 numu CC, 8 NC, 32 nue (0: no vertex). cluster_id is the main cluster
+# after the vertex finder.
 wctaggerbranches = [
     "nu_x", "nu_y", "nu_z", "has_vertex", "neutrino_type",
     "cluster_id", "matched_flash_gid",
@@ -48,7 +36,6 @@ wctaggerbranches = [
     "match_isFC", "cosmict_flag", "numu_cc_flag", "photon_flag",
     "numu_score", "nue_score",
 ]
-
 wckinebranches = [
     "kine_reco_Enu", "kine_reco_add_energy",
     "kine_nu_x_corr", "kine_nu_y_corr", "kine_nu_z_corr",
@@ -57,13 +44,27 @@ wckinebranches = [
     "kine_pio_energy_2", "kine_pio_theta_2", "kine_pio_phi_2", "kine_pio_dis_2",
     "kine_energy_excluded", "kine_n_excluded", "kine_main_vertex_id",
 ]
-
-# Per-particle vectors inside each T_kine row
-wckineparticlebranches = [
+wckineparticlebranches = [   # per-particle vectors inside each T_kine row
     "kine_energy_particle", "kine_particle_type", "kine_energy_info",
     "kine_energy_included", "kine_particle_id", "kine_particle_is_shower",
     "kine_particle_cluster_id", "kine_particle_nseg", "kine_particle_pool",
 ]
+wcrunbranches = [
+    "nu_n_flashes", "nu_n_flashes_in_window", "nu_n_bundles", "nu_n_candidates",
+    "beam_window_low_us", "beam_window_high_us",
+]
+# tgm / stm: through-going / stopping muon; lm: -1 unset, 1 low energy, 2 light mismatch
+wcclusterbranches = ["cluster_id", "is_main", "beam_flash", "fc", "tgm", "stm", "lm",
+                     "npoints", "length_cm", "flash_time_us", "flash_pe"]
+wcbundlebranches = ["gid", "reason", "nu_index", "n_main", "sel_cluster_id", "sel_length_cm",
+                    "flash_time_us", "flash_pe"]
+wcsegmentbranches = ["nu_index", "segment_id", "kine_index", "pdg", "flag_shower", "dirsign",
+                     "length_cm", "ke_mev", "in_enu"]
+wcchargebranches = ["x", "y", "z", "q", "rr", "nu_index", "sub_cluster_id"]
+# T_pf nodes: depth 0 hangs off the vertex; is_pseudo nodes (pdg 22, 111,
+# 2112) are invisible links to displaced daughters
+wcpfbranches = ["nu_index", "node_id", "parent_id", "depth", "pdg", "is_pseudo", "kine_index", "ke_mev"]
+
 
 def has_wc(f):
     return WC_TREE in f
@@ -82,125 +83,17 @@ def _index_by_nu(df):
     return df
 
 
-def make_wc_evtdf(f):
-    """One row per CAF event: run, subrun, evt, valid, n_nu (candidates)."""
-    names = {"wc.run": "run", "wc.subrun": "subrun", "wc.evt": "evt", "wc.valid": "valid",
-             "wc.T_tagger..length": "n_nu"}
-    df = _wc_tree(f).arrays(list(names), library="pd").rename(columns=names)
-    df.index.name = "entry"
-    return df
+def _nested_leaf(t, group, leaf, names):
+    c = loadbranches(t, ["wc.%s.%s" % (group, leaf)]).wc[group][leaf]
+    c.index.names = names
+    return c
 
 
-def wc_tagger_leaves(f):
-    """Scalar-per-candidate T_tagger leaves; the ~200 nested
-    (vector-per-candidate) leaves are excluded."""
-    keys = _wc_tree(f).keys()
-    head = "wc.T_tagger."
-    nested = {k[len(head):].split("..")[0] for k in keys if k.startswith(head) and k.endswith("..idx")}
-    return [k[len(head):] for k in keys
-            if k.startswith(head) and ".." not in k and k[len(head):] not in nested]
-
-
-def make_wc_taggerdf(f, leaves=wctaggerbranches):
-    leaves = ["nu_index"] + [l for l in leaves if l != "nu_index"]
-    return _index_by_nu(make_wc_tabledf(f, "T_tagger", leaves))
-
-
-def make_wc_kinedf(f, leaves=wckinebranches):
-    leaves = ["nu_index"] + [l for l in leaves if l != "nu_index"]
-    return _index_by_nu(make_wc_tabledf(f, "T_kine", leaves))
-
-
-def make_wc_kineparticledf(f, leaves=wckineparticlebranches):
-    """One row per T_kine particle, index (entry, nu_index, kine_particle)."""
-    t = _wc_tree(f)
-    # loadbranches needs one vector structure per call, so one leaf at a time
-    cols = []
-    for l in leaves:
-        c = loadbranches(t, ["wc.T_kine." + l]).wc.T_kine[l]
-        c.index.names = ["entry", "kine_row", "kine_particle"]
-        cols.append(c)
-    df = pd.concat(cols, axis=1)
-    nu = loadbranches(t, ["wc.T_kine.nu_index"]).wc.T_kine.nu_index
-    nu.index.names = ["entry", "kine_row"]
-    df = df.join(nu, on=["entry", "kine_row"])
-    df = df.reset_index(level="kine_row", drop=True).set_index("nu_index", append=True)
-    return df.reorder_levels(["entry", "nu_index", "kine_particle"])
-
-
-def make_wc_tmatchdf(f, level=3):
-    """Truth neutrino matched to each Wire-Cell candidate, from T_match.
-
-    T_match rows are reco (side 0) or truth (side 1) objects at a level:
-    0 cluster, 1 particle (T_kine row vs prong), 2 candidate (T_kine particles
-    vs interaction), 3 candidate (particle-flow tree vs interaction). The
-    candidate is the side-0 row with nu_index >= 0; its match_obj lists up to
-    3 side-1 'obj' ids at the same level, by decreasing point IoU (ties:
-    charge IoU; clus/inc/WireCellClus/TruthMatch.h).
-
-    tmatch_idx is the index into rec.mc.nu (T_truth_nu is in the same order);
-    -1 when nothing matched. tmatch_iou_q / _n are the charge / point IoU.
-    """
-    t = _wc_tree(f)
-    if "wc.T_match.level" not in t.keys():
-        raise KeyError("no T_match: this file was made without the Wire-Cell truth match (WC_TRUTH_MATCH=0 or schema v1).")
-    m = make_wc_tabledf(f, "T_match", ["level", "side", "obj", "nu_index", "truth_nu_idx"])
-    nested = {}
-    for l in ["match_obj", "match_iou_q", "match_iou_n"]:
-        c = loadbranches(t, ["wc.T_match." + l]).wc.T_match[l]
-        c.index.names = ["entry", "row", "imatch"]
-        nested[l] = c
-    nested = pd.DataFrame(nested)
-
-    m = m[m.level == level]
-    reco = m[(m.side == 0) & (m.nu_index >= 0)]
-    truth = m[m.side == 1].reset_index()[["entry", "obj", "truth_nu_idx"]]
-
-    # partners are ranked by point IoU, so the first is the best match
-    cand = nested[nested.index.droplevel(-1).isin(reco.index)]
-    best = cand.xs(0, level="imatch")
-
-    out = reco[["nu_index"]].join(best)
-    out = out.reset_index().merge(truth.rename(columns={"obj": "match_obj"}),
-                                  on=["entry", "match_obj"], how="left")
-    out = out.set_index(WC_NU_LEVELS)
-    return pd.DataFrame({
-        "tmatch_idx": out.truth_nu_idx.fillna(-1).astype(int),
-        "tmatch_iou_q": out.match_iou_q,
-        "tmatch_iou_n": out.match_iou_n,
-    })
-
-
-# ---------------------------------------------------------------------------
-# Tree tables: one row per row of a wc.T_* tree, index (entry, row). Inputs
-# for per-candidate dataframes (join on nu_index / cluster_id / tmatch_idx).
-# ---------------------------------------------------------------------------
-
-wcrunbranches = [
-    "nu_n_flashes", "nu_n_flashes_in_window", "nu_n_bundles", "nu_n_candidates",
-    "beam_window_low_us", "beam_window_high_us",
-]
-# tgm / stm: through-going / stopping muon flags; lm: Q/L lm_flag (-1 unset,
-# 1 low energy, 2 light mismatch); fc: TaggerCheck fully contained
-wcclusterbranches = ["cluster_id", "is_main", "beam_flash", "fc", "tgm", "stm", "lm",
-                     "npoints", "length_cm", "flash_time_us", "flash_pe"]
-wcbundlebranches = ["gid", "reason", "nu_index", "n_main", "sel_cluster_id", "sel_length_cm",
-                    "flash_time_us", "flash_pe"]
-wcsegmentbranches = ["nu_index", "segment_id", "kine_index", "pdg", "flag_shower", "dirsign",
-                     "length_cm", "ke_mev", "in_enu"]
-wcchargebranches = ["x", "y", "z", "q", "rr", "nu_index", "sub_cluster_id"]
-# T_pf: one row per particle-flow node. depth 0 hangs off the neutrino vertex;
-# is_pseudo nodes (pdg 22, 111, 2112, kine_index -1) are invisible links to
-# displaced daughters, e.g. a pseudo photon whose child is the e/gamma shower.
-wcpfbranches = ["nu_index", "node_id", "parent_id", "depth", "pdg", "is_pseudo", "kine_index", "ke_mev"]
-
+# --- Tables: one row per row of a wc.T_* tree, index (entry, row)
 
 def make_wc_tabledf(f, group, leaves):
-    """Flat per-row leaves of wc.<group>, index (entry, row).
-
-    A tree with no rows in the file (MC-only trees on data) gives an empty
-    frame with the right columns.
-    """
+    """Flat per-row leaves of wc.<group>. A tree with no rows (MC-only trees
+    on data) gives an empty frame with the right columns."""
     t = _wc_tree(f)
     br = ["wc.%s.%s" % (group, l) for l in leaves]
     a = t.arrays(br, library="np")
@@ -232,14 +125,88 @@ def make_wc_chargedf(f, leaves=wcchargebranches):
 
 
 def make_wc_pfdf(f, leaves=wcpfbranches):
-    """Particle-flow nodes, index (entry, row). MC only (truth_match gate)."""
+    """Particle-flow nodes. MC only (truth-match gate)."""
     return make_wc_tabledf(f, "T_pf", leaves)
 
 
+# --- Per event and per candidate
+
+def make_wc_evtdf(f):
+    """One row per CAF event: run, subrun, evt, valid, n_nu (candidates)."""
+    names = {"wc.run": "run", "wc.subrun": "subrun", "wc.evt": "evt", "wc.valid": "valid",
+             "wc.T_tagger..length": "n_nu"}
+    df = _wc_tree(f).arrays(list(names), library="pd").rename(columns=names)
+    df.index.name = "entry"
+    return df
+
+
+def wc_tagger_leaves(f):
+    """Scalar-per-candidate T_tagger leaves (the nested ones are excluded)."""
+    keys = _wc_tree(f).keys()
+    head = "wc.T_tagger."
+    nested = {k[len(head):].split("..")[0] for k in keys if k.startswith(head) and k.endswith("..idx")}
+    return [k[len(head):] for k in keys
+            if k.startswith(head) and ".." not in k and k[len(head):] not in nested]
+
+
+def make_wc_taggerdf(f, leaves=wctaggerbranches):
+    leaves = ["nu_index"] + [l for l in leaves if l != "nu_index"]
+    return _index_by_nu(make_wc_tabledf(f, "T_tagger", leaves))
+
+
+def make_wc_kinedf(f, leaves=wckinebranches):
+    leaves = ["nu_index"] + [l for l in leaves if l != "nu_index"]
+    return _index_by_nu(make_wc_tabledf(f, "T_kine", leaves))
+
+
+def make_wc_kineparticledf(f, leaves=wckineparticlebranches):
+    """One row per T_kine particle, index (entry, nu_index, kine_particle)."""
+    t = _wc_tree(f)
+    # loadbranches takes one vector structure per call, so one leaf at a time
+    df = pd.concat([_nested_leaf(t, "T_kine", l, ["entry", "kine_row", "kine_particle"]) for l in leaves], axis=1)
+    nu = loadbranches(t, ["wc.T_kine.nu_index"]).wc.T_kine.nu_index
+    nu.index.names = ["entry", "kine_row"]
+    df = df.join(nu, on=["entry", "kine_row"])
+    df = df.reset_index(level="kine_row", drop=True).set_index("nu_index", append=True)
+    return df.reorder_levels(["entry", "nu_index", "kine_particle"])
+
+
+def make_wc_tmatchdf(f, level=3):
+    """Truth neutrino matched to each candidate, from T_match.
+
+    T_match rows are reco (side 0) or truth (side 1) objects at a level: 0
+    cluster, 1 particle, 2 candidate (T_kine particles), 3 candidate
+    (particle-flow tree). A candidate's match_obj lists up to 3 truth ids by
+    decreasing point IoU (ties: charge IoU), so the first is the best.
+    tmatch_idx indexes rec.mc.nu (-1: no match); tmatch_iou_q / _n are the
+    charge / point IoU.
+    """
+    t = _wc_tree(f)
+    if "wc.T_match.level" not in t.keys():
+        raise KeyError("no T_match: this file was made without the Wire-Cell truth match (WC_TRUTH_MATCH=0 or schema v1).")
+    m = make_wc_tabledf(f, "T_match", ["level", "side", "obj", "nu_index", "truth_nu_idx"])
+    nested = pd.DataFrame({l: _nested_leaf(t, "T_match", l, ["entry", "row", "imatch"])
+                           for l in ["match_obj", "match_iou_q", "match_iou_n"]})
+
+    m = m[m.level == level]
+    reco = m[(m.side == 0) & (m.nu_index >= 0)]
+    truth = m[m.side == 1].reset_index()[["entry", "obj", "truth_nu_idx"]]
+    best = nested[nested.index.droplevel(-1).isin(reco.index)].xs(0, level="imatch")
+
+    out = reco[["nu_index"]].join(best)
+    out = out.reset_index().merge(truth.rename(columns={"obj": "match_obj"}),
+                                  on=["entry", "match_obj"], how="left")
+    out = out.set_index(WC_NU_LEVELS)
+    return pd.DataFrame({
+        "tmatch_idx": out.truth_nu_idx.fillna(-1).astype(int),
+        "tmatch_iou_q": out.match_iou_q,
+        "tmatch_iou_n": out.match_iou_n,
+    })
+
+
 def make_wc_flashbothtpcdf(f):
-    """flash_both_tpc per candidate: 1 if its matched flash was also seen in
-    the other TPC, i.e. its flash group (flashes on different TPCs within
-    Trun.flash_pair_dt_us, 0.05 us) holds a flash of each TPC; else 0."""
+    """flash_both_tpc per candidate: 1 if its matched flash's group (flashes
+    on different TPCs within Trun.flash_pair_dt_us) has a flash in each TPC."""
     fl = make_wc_tabledf(f, "T_flash", ["gid", "tpc", "flash_group"]).reset_index("row", drop=True)
     ntpc = fl.groupby(["entry", "flash_group"]).tpc.nunique().rename("ntpc")
     fl = fl.join(ntpc, on=["entry", "flash_group"]).set_index("gid", append=True)
@@ -249,10 +216,9 @@ def make_wc_flashbothtpcdf(f):
 
 
 def make_wc_nudf(f, tagger_leaves=wctaggerbranches, kine_leaves=wckinebranches, include_tmatch=None):
-    """T_tagger + T_kine (+ T_match truth match on MC), one row per candidate,
-    plus flash_both_tpc (make_wc_flashbothtpcdf)."""
-    tag = make_wc_taggerdf(f, tagger_leaves)
-    tag = tag.join(make_wc_flashbothtpcdf(f))
+    """T_tagger + T_kine + flash_both_tpc (+ the T_match truth match on MC),
+    one row per candidate."""
+    tag = make_wc_taggerdf(f, tagger_leaves).join(make_wc_flashbothtpcdf(f))
     kine = make_wc_kinedf(f, kine_leaves)
     df = tag.join(kine.drop(columns=[c for c in kine.columns if c in tag.columns]), how="left")
     if include_tmatch is None:

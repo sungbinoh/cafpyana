@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""Post-selection plots of the presel+uboone chain (cuts.py), stacked by
-truth category, per 1e20 POT with MC-statistics errors on the total:
+"""Plots of the presel+uboone chain (cuts.py), per 1e20 POT:
 
-  final_shower_energy.png    reco energy of the counted shower
-                             (shw_sp_energy) after the full selection
-  (stacked by truth category; MC statistics on the total as a hatched band;
-  no under/overflow bins, the ranges cover the selected candidates)
-  final_scores_nminus1.png   the score cuts (WC numu/nue, uB numu/other/
-                             ncpi0 BDTs), each with every other cut applied
-  selection_sequential.png   every cut variable in cut order, with the
-                             earlier cuts applied, signal vs background
+  final_shower_energy.png    shw_sp_energy after the full selection
+  final_scores_nminus1.png   each score cut with every other cut applied
+  selection_sequential.png   each cut variable with the earlier cuts
+                             applied, signal vs background
   presel_shower_multiplicity.png
-                             true EM particles vs Wire-Cell primary e/gamma
-                             showers (T_pf pf_n_em_primary) after
+                             true EM particles vs pf_n_em_primary after
                              preselection, row-normalised
+
+The first two are stacked by truth category with the MC statistics on the
+total as a hatched band and no under/overflow bins.
 
 Input: configs/sp_mc.py outputs (wc + mcnu + wcevt) and the MicroBooNE BDT
 XMLs (the ub_* scores).
@@ -38,8 +35,7 @@ from analysis_village.SinglePhotonWC.cutflow import load  # noqa: E402
 
 plt.rcParams.update({"font.size": 10, "axes.spines.top": False, "axes.spines.right": False})
 
-# Stacked groups: label, truth categories, colour
-GROUPS = [
+GROUPS = [   # label, truth categories, colour
     ("Signal: NC $\\pi^0$ 1$\\gamma$", [1], "#2a78d6"),
     ("Signal: NC $\\Delta\\to N\\gamma$", [0], "#e87ba4"),
     ("Signal: other ($\\nu_\\mu$CC, NC other, out-of-FV)", [2, 3, 10], "#6250d6"),
@@ -50,14 +46,20 @@ GROUPS = [
     ("Other bkg (0 showers, outside AV, dirt, soft 1$\\gamma$)", [5, 8, 11, 12], "#008300"),
 ]
 
-# Score cuts: cut name in cuts.UB_SELECTION, column, label, bins, threshold, kept side
-SCORES = [
+SCORES = [   # cut name in cuts.UB_SELECTION, column, label, bins, threshold, kept side
     ("wc_numu", "numu_score", "Wire-Cell $\\nu_\\mu$ CC score", np.linspace(-3, 3, 31), cuts.WC_NUMU_SCORE_MAX, "<"),
     ("ub_numu", "ub_numu", "uB $\\nu_\\mu$ BDT", np.arange(-3.6, 4.01, 0.2), cuts.UB_NUMU_MIN, ">"),
     ("ub_other", "ub_other", "uB 'other' BDT", np.arange(-4.4, 3.01, 0.2), cuts.UB_OTHER_MIN, ">"),
     ("ub_ncpi0", "ub_ncpi0", "uB NC $\\pi^0$ BDT", np.arange(-3.0, 3.51, 0.25), cuts.UB_NCPI0_MIN, ">"),
     ("wc_nue", "nue_score", "Wire-Cell $\\nu_e$ score", np.arange(-15.5, 17.6, 1.0), cuts.WC_NUE_SCORE_MAX, "<"),
 ]
+
+
+def keep_marker(ax, thr, sense, **kw):
+    """Dashed line at the threshold, with an arrow to the kept side."""
+    ax.axvline(thr, color="#222", lw=1.6, ls="--")
+    ax.text(thr, 0.95, "  keep $\\rightarrow$" if sense == ">" else "$\\leftarrow$ keep  ", transform=ax.get_xaxis_transform(),
+            ha="left" if sense == ">" else "right", va="center", fontsize=9.5, **kw)
 
 
 def stack(ax, q, var, bins, sc, logy=False):
@@ -98,9 +100,7 @@ def plot_scores(w, chain, sc, pot, out):
     for a, (cut, var, lab, bins, thr, sense) in zip(axs, SCORES):
         q = w[cuts.passes(w, {k: v for k, v in chain.items() if k != cut})]
         stack(a, q, var, bins, sc, logy=True)
-        a.axvline(thr, color="#222", lw=1.6, ls="--")
-        a.text(thr, 0.95, "  keep $\\rightarrow$" if sense == ">" else "$\\leftarrow$ keep  ", transform=a.get_xaxis_transform(),
-               ha="left" if sense == ">" else "right", va="center", fontsize=9.5, color="#222")
+        keep_marker(a, thr, sense, color="#222")
         sig, keep = cuts.is_signal_cat(q.cat), chain[cut](q)
         a.set_title("%s  (cut %s %g)\nall other cuts applied: this cut keeps %.0f%% of signal, %.0f%% of background"
                     % (lab, sense, thr, 100 * keep[sig].mean(), 100 * keep[~sig].mean()), fontsize=9.5, loc="left")
@@ -121,12 +121,16 @@ def _fv_wall(df):
     return cuts.dist_to_active_boundary(df.nu_x, df.nu_y, df.nu_z)
 
 
-# Sequential cut variables: cut name, column or function, label, bins, threshold, kept side.
-# fv is two panels: the distance to the AV walls, then |x| to the cathode.
+def _fv_cathode(df):
+    return df.nu_x.abs()
+
+
+# cut name, column or function, label, bins, threshold, kept side. fv is two
+# panels: the distance to the AV walls, then (after it) |x| to the cathode.
 SEQUENTIAL = [
     ("fv", _fv_wall, "reco vertex distance to the AV wall [cm]", np.linspace(-20, 200, 45), cuts.FV_INSET, ">"),
-    ("fv", lambda df: df.nu_x.abs(), "reco vertex |x|, distance to the cathode [cm]", np.linspace(0, 200, 41), cuts.CATHODE_INSET, ">"),
-] + [(c, v, l, b, t, s) for c, v, l, b, t, s in SCORES] + [
+    ("fv", _fv_cathode, "reco vertex |x|, distance to the cathode [cm]", np.linspace(0, 200, 41), cuts.CATHODE_INSET, ">"),
+] + SCORES + [
     ("one_shower", "shw_sp_n_20br1_showers", "SP-tagger showers (shw_sp_n_20br1_showers)", np.arange(-0.5, 6.5), None, "== 1"),
     ("em_showers", lambda df: df.n_shower - df.n_em, "showers labelled $\\mu/\\pi/p$ (n_shower $-$ n_em)", np.arange(-0.5, 5.5), 0.5, "<"),
     ("back_traced", "shw1_back_dist", "counted shower traced back to the AV wall [cm]", np.linspace(0, 500, 26), cuts.BACK_DIST_MIN, ">"),
@@ -143,7 +147,7 @@ def plot_sequential(w, chain, sc, pot, out):
     for a, (cut, var, lab, bins, thr, sense) in zip(axs, SEQUENTIAL):
         before = names[names.index(cut) - 1]
         q = w[cuts.passes(w, chain, upto=before)]
-        if lab.startswith("reco vertex |x|"):   # second half of fv: the wall part already applied
+        if var is _fv_cathode:
             q = q[_fv_wall(q) >= cuts.FV_INSET]
         x = (var(q) if callable(var) else q[var])
         x = np.clip(np.asarray(x, float), bins[0], bins[-1] - 1e-6)
@@ -158,10 +162,8 @@ def plot_sequential(w, chain, sc, pot, out):
             a.text(1, 0.95, "keep", transform=a.get_xaxis_transform(), ha="center", va="center", fontsize=9.5)
         else:
             keep = x > thr if sense == ">" else x < thr
-            a.axvline(thr, color="#222", lw=1.6, ls="--")
-            a.text(thr, 0.95, "  keep $\\rightarrow$" if sense == ">" else "$\\leftarrow$ keep  ", transform=a.get_xaxis_transform(),
-                   ha="left" if sense == ">" else "right", va="center", fontsize=9.5)
-        part = " (cathode part)" if lab.startswith("reco vertex |x|") else (" (wall part)" if var is _fv_wall else "")
+            keep_marker(a, thr, sense)
+        part = {_fv_wall: " (wall part)", _fv_cathode: " (cathode part)"}.get(var, "") if callable(var) else ""
         a.set_title("%s%s, after %s: %.0f sig + %.0f bkg / 1e20 POT\nremoves %.0f%% of signal, %.0f%% of background reaching it"
                     % (cut, part, "fv wall part" if part == " (cathode part)" else before, sig.sum() * sc, (~sig).sum() * sc,
                        100 * (~keep[sig]).mean(), 100 * (~keep[~sig]).mean()), fontsize=10, loc="left")
@@ -245,7 +247,7 @@ def main():
         plot_multiplicity(w, pot, args.outdir)
     else:
         print("no pf_n_em_primary (dataframes made before T_pf): skipping presel_shower_multiplicity.png")
-    print("wrote final_shower_energy.png, final_scores_nminus1.png, selection_sequential.png to %s (%.3g POT)" % (args.outdir, pot))
+    print("wrote the plots to %s (%.3g POT)" % (args.outdir, pot))
 
 
 if __name__ == "__main__":

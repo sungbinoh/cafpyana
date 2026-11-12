@@ -33,8 +33,7 @@ plt.rcParams.update({
 })
 SIG_COLOR, BKG_COLOR = "#2a78d6", "#a3a29d"
 
-# Compared samples: signal solid, background dashed
-GROUPS = {
+GROUPS = {   # signal solid, background dashed
     "signal (inclusive 1g)": dict(cats=[0, 1, 2, 3], color="#2a78d6", ls="-"),
     "bkg: >=2 showers":      dict(cats=[4], color="#1baf7a", ls="--"),
     "bkg: CC numu mu>=100":  dict(cats=[6], color="#eda100", ls="--"),

@@ -1,69 +1,44 @@
-"""Signal definition and truth categories for the inclusive single-photon
-search with Wire-Cell (SBND).
+"""Signal definition, truth categories and reco cuts for the SBND inclusive
+single-photon search with Wire-Cell.
 
-Signal, adapted from the MicroBooNE inclusive photon-like LEE search
-(PRL, doi:10.1103/89qs-4lcp), which is modelled on MiniBooNE's single
-Cherenkov ring:
+Signal, adapted from the MicroBooNE inclusive photon-like LEE search (PRL,
+doi:10.1103/89qs-4lcp):
+  * exactly one reconstructable photon shower: true E >= 20 MeV, shower
+    start >= SHOWER_INSET inside the TPC; photons < 20 deg apart are one
+    shower. No other such photon anywhere in the TPC.
+  * that shower starts >= SIGNAL_FV_INSET = 10 cm inside (MicroBooNE: 3 cm)
+  * vertex in the active volume; vertex outside the FV needs E >= 100 MeV
+  * no primary muon with KE >= 100 MeV, no primary e+-; anything else allowed
+Photons are the prompt ones: GENIE primaries and decay photons of primary
+hadrons. Unlike MicroBooNE, single photons from outside the AV (dirt) are
+background (category 12).
 
-  * exactly one reconstructable photon shower. A reconstructable photon has
-    true E >= 20 MeV and starts its shower (pair conversion) >= 3 cm inside
-    the TPC boundary. Photons from the same vertex closer than 20 deg are
-    one shower.
-  * that photon converts inside the FV, SIGNAL_FV_INSET = 10 cm from the
-    TPC boundary (SBND's usual FV; MicroBooNE used 3 cm)
-  * no other photon (>= 20 MeV) converting anywhere inside the TPC: a
-    second visible shower outside the FV still makes the event not
-    single-photon. (true_nshower counts photons >= SHOWER_INSET = 3 cm in,
-    true_ngamma_edge those converting 0.5-3 cm in; the 20 deg merging is
-    not applied to the latter.)
-  * vertex inside the active volume, no primary muon with KE >= 100 MeV
-    (below MiniBooNE's threshold) and no primary electron/positron
-  * vertex less than 10 cm inside (outside the FV): photon true E >= 100
-    MeV. Wire-Cell's cosmic veto removes softer out-of-FV photons by
-    design (lone, low-light clusters).
-  * any number of protons, charged pions, neutrons; any number of photons
-    that are not reconstructable (soft, escaping, converting near a wall)
-
-Unlike MicroBooNE, single photons from vertices outside the AV ("dirt" in
-the broad sense: mostly the uninstrumented argon around the TPC) are
-background (category 12): they are hard to model.
-
-The signal categories: NC pi0 1g (one photon lost or the two merged), NC
-Delta 1g, NC other 1g, numu CC 1g (muon < 100 MeV, any photon origin) and
-1g with the vertex in the AV but outside the FV. Photons are the prompt
-ones from the interaction: GENIE primaries and the decay photons of primary
-hadrons (pi0, eta, ...); photons from secondary interactions in the argon
-do not count.
-
-Truth columns are those of make_truth.make_sp_truthdf, joined to candidates
-on (entry, tmatch_idx); a candidate with no match is "cosmic".
-
-Reco selections (one row per Wire-Cell candidate, make_wc_candidates.py):
-PRESELECTION and the MicroBooNE reference UB_SELECTION, cut chains applied
-in order by passes().
+Truth columns come from make_truth.make_sp_truthdf; candidates join them on
+(entry, tmatch_idx) and an unmatched candidate is cosmic. Reco cut chains
+(PRESELECTION, UB_SELECTION) are applied in order by passes().
 """
 
 import numpy as np
 import pandas as pd
 
-# --- Geometry (SBND only)
+# --- Geometry and signal definition
 
-# Active volume: the TPC box, no insets [cm]
-ACTIVE_VOLUME = {"x": (-200.0, 200.0), "y": (-200.0, 200.0), "z": (0.0, 500.0)}
+ACTIVE_VOLUME = {"x": (-200.0, 200.0), "y": (-200.0, 200.0), "z": (0.0, 500.0)}  # cm, SBND TPC
 
-# --- Signal definition
-
-PHOTON_E_MIN = 0.020       # GeV, true photon energy
-SHOWER_INSET = 3.0         # cm, photon visibility: shower start from the TPC boundary
-SIGNAL_FV_INSET = 10.0     # cm, FV for the signal photon's conversion and the vertex
+PHOTON_E_MIN = 0.020         # GeV, true photon energy
+SHOWER_INSET = 3.0           # cm, shower start from the TPC boundary for a visible photon
+SIGNAL_FV_INSET = 10.0       # cm, FV for the signal photon's conversion and the vertex
 OUT_FV_PHOTON_E_MIN = 0.100  # GeV, signal photon energy for vertices outside the FV
-MERGE_ANGLE = 20.0         # deg, photons closer than this are one shower
-MUON_KE_MAX = 0.100        # GeV, primary muons below this are allowed
+MERGE_ANGLE = 20.0           # deg, photons closer than this are one shower
+MUON_KE_MAX = 0.100          # GeV, primary muons below this are allowed
+
+RESNUM_DELTA_1232 = 0        # genie::EResonance kP33_1232
+ORIGIN_PRIMARY = 22          # true_shw1_origin of a GENIE-primary photon
 
 
 def dist_to_active_boundary(x, y, z):
-    """Signed distance [cm] to the active-volume boundary, positive inside.
-    NaN coordinates give NaN."""
+    """Signed distance [cm] to the active-volume boundary, positive inside
+    (NaN for NaN coordinates)."""
     x, y, z = (np.asarray(v, dtype=float) for v in (x, y, z))
     b = ACTIVE_VOLUME
     d = np.minimum.reduce([
@@ -75,10 +50,16 @@ def dist_to_active_boundary(x, y, z):
     return d
 
 
+def _true_vtx_dist(df):
+    return dist_to_active_boundary(df.true_vtx_x, df.true_vtx_y, df.true_vtx_z)
+
+
 def true_in_active(df):
-    return pd.Series(
-        dist_to_active_boundary(df.true_vtx_x, df.true_vtx_y, df.true_vtx_z) > 0,
-        index=df.index)
+    return pd.Series(_true_vtx_dist(df) > 0, index=df.index)
+
+
+def true_in_fv(df):
+    return pd.Series(_true_vtx_dist(df) >= SIGNAL_FV_INSET, index=df.index)
 
 
 def is_cosmic(df):
@@ -89,31 +70,20 @@ def is_cosmic(df):
     return m
 
 
-def true_in_fv(df):
-    return pd.Series(
-        dist_to_active_boundary(df.true_vtx_x, df.true_vtx_y, df.true_vtx_z) >= SIGNAL_FV_INSET,
-        index=df.index)
+def one_shower_in_fv(df):
+    """Exactly one visible photon in the TPC, its shower starting in the FV.
+    true_ngamma_edge (converting 0.5-3 cm in) also counts as visible."""
+    conv = dist_to_active_boundary(df.true_shw1_conv_x, df.true_shw1_conv_y, df.true_shw1_conv_z)
+    return (df.true_nshower == 1) & (df.true_ngamma_edge == 0) & (conv >= SIGNAL_FV_INSET)
 
 
 def is_signal(df):
-    """One visible photon shower starting inside the FV, vertex in the AV,
-    no muon >= 100 MeV or electron; >= 100 MeV if the vertex is outside the
-    FV."""
     lepton_ok = (df.true_nmu_100MeV == 0) & (df.true_ne == 0)
     hard_enough = true_in_fv(df) | (df.true_shw1_E >= OUT_FV_PHOTON_E_MIN)
     return one_shower_in_fv(df) & true_in_active(df) & lepton_ok & hard_enough
 
 
-def one_shower_in_fv(df):
-    """Exactly one visible photon in the TPC, its shower starting in the FV."""
-    conv = dist_to_active_boundary(df.true_shw1_conv_x, df.true_shw1_conv_y, df.true_shw1_conv_z)
-    return (df.true_nshower == 1) & (df.true_ngamma_edge == 0) & (conv >= SIGNAL_FV_INSET)
-
-
 # --- Truth categories
-
-RESNUM_DELTA_1232 = 0   # genie::EResonance kP33_1232
-ORIGIN_PRIMARY = 22     # true_shw1_origin of a GENIE-primary photon
 
 CATEGORY_LABELS = {
     0: "1g: NC Delta->Ngamma",
@@ -165,29 +135,13 @@ def truth_category(df):
 
 # --- Reco preselection (Wire-Cell candidate columns)
 #
-#   wc_valid    Wire-Cell output exists for the event (wcevt valid = 1; 0 is
-#               a production failure, not a reco outcome). An event cut:
-#               valid = 0 events have no candidates, so cutflow applies it
-#               to the true neutrinos (EVENT_CUTS)
-#   vertex      has_vertex == 1: a vertex was found, so the taggers ran
-#   fv          reco vertex >= 10 cm from every AV face (the signal FV) and
-#               >= 5 cm from the cathode. MicroBooNE cut 5 cm in the drift
-#               direction only; with the 10 cm signal FV, single photons
-#               from outside it pile up near the walls (purity 27% -> 32%).
-#
-# Not cut here, unlike MicroBooNE:
-#   * the generic neutrino selection's TGM/STM/light-mismatch flags: SBND
-#     Wire-Cell makes no candidate from a flagged cluster (nu_skip_cosmic),
-#     so the cut removed 0.04% of candidates. The cosmic tagger (cosmict_*)
-#     feeds the "other" BDT, as in MicroBooNE.
-#   * the > 15 cm main-cluster length: it removed ~20% of signal (soft
-#     photons) at no purity gain. Wire-Cell's own 15 cm floor exempts the
-#     event's longest cluster, so it does not do this.
-#   * >= 1 EM shower: nearly implied by vertex_shower below (removing it
-#     changed the final efficiency by +0.05%).
+# Not cut, unlike MicroBooNE: the TGM/STM/light-mismatch flags (Wire-Cell
+# makes no candidate from a flagged cluster; 0.04% effect), the > 15 cm
+# main-cluster length (-20% signal, no purity gain) and >= 1 EM shower
+# (implied by one_shower).
 
-FV_INSET = SIGNAL_FV_INSET     # cm, from every AV face
-CATHODE_INSET = 5.0            # cm, from the cathode (x = 0)
+FV_INSET = SIGNAL_FV_INSET   # cm, from every AV face
+CATHODE_INSET = 5.0          # cm, from the cathode (x = 0); purity 27% -> 32%
 
 
 def reco_in_fv(df, inset=FV_INSET):
@@ -195,58 +149,31 @@ def reco_in_fv(df, inset=FV_INSET):
     return pd.Series(d >= inset, index=df.index) & (df.nu_x.abs() >= CATHODE_INSET)
 
 
+# Cuts on true neutrinos (cutflow applies them to mcnu): wc_valid = 0 is a
+# production failure, such events have no candidates.
 EVENT_CUTS = {"wc_valid"}
 
 PRESELECTION = {
     "wc_valid": lambda df: df.wc_valid == 1,
-    "vertex": lambda df: df.has_vertex == 1,
+    "vertex": lambda df: df.has_vertex == 1,   # the taggers ran
     "fv": reco_in_fv,
 }
 
 
 # --- MicroBooNE reference selection (microboone_single_photon_selection.yaml)
 #
-# On the MicroBooNE numu, other and NC pi0 BDT scores, columns ub_<name>
-# (microboone_bdt.score; NaN = not evaluable), plus the SBND Wire-Cell
-# tagger scores: numu_score (removes CC numu the MicroBooNE numu BDT keeps)
-# and nue_score instead of the MicroBooNE nue BDT (~2x the signal at the
-# same purity). The yaml's MicroBooNE-geometry FV is replaced by
-# the SBND fv cut of the preselection.
-#   wc_numu         not numu CC-like: numu_score < 0.5
-#   ub_numu         MicroBooNE numu BDT > 1 (MicroBooNE: 0.4; tighter on SBND,
-#                   tuned out-of-fold, as wc_numu already cut)
-#   ub_other        MicroBooNE other BDT > 0.2, as MicroBooNE. A looser -0.25
-#                   paid off before em_showers and back_traced; with them
-#                   (Nov11) it costs purity 44% -> 37.5% for +9% efficiency
-#   ub_ncpi0        MicroBooNE NC pi0 BDT > -0.05, as MicroBooNE (log10
-#                   score scale, see microboone_bdt)
-#   wc_nue          not nue-like: nue_score < 7 (MicroBooNE's nue selection
-#                   is nue_score > 7)
-#   one_shower      exactly one EM shower > 20 MeV at the vertex passing the
-#                   single-photon tagger's first reconstruction check
-#   em_showers      no shower in the candidate labelled mu/pi/p. Wire-Cell
-#                   labels a shower by its start segment's PID (and the A5
-#                   hadronic retype), so a second photon often comes out
-#                   as a mu/pi "shower" that one_shower does not count
-#                   (flat-CAF study: 10/12 two-photon backgrounds)
-#   back_traced     the counted shower, traced back from its start along its
-#                   axis, has > 80 cm of active volume behind it: a photon
-#                   entering from outside (dirt) has little. Removes 24/25
-#                   dirt single photons for ~9% of signal (Nov8 scan; the
-#                   optimum, 60-80 cm, holds in both halves of the files)
-#
-# MicroBooNE's ">= 1 shower > 20 MeV at the vertex" and "BDTs evaluable"
-# steps are not cut: one_shower and the BDT thresholds (NaN = not
-# evaluable fails them) imply both.
-# The cuts are ANDed, so the order only shapes the cut flow. It follows the
-# MicroBooNE BDT cascade (each trained on events passing the previous ones;
-# the NC pi0 BDT has no separation before "other"), so tune them in order.
-UB_NUMU_MIN = 1.0
-UB_OTHER_MIN = 0.2
-UB_NCPI0_MIN = -0.05
+# MicroBooNE numu / other / NC pi0 BDTs (ub_*, microboone_bdt.score, NaN =
+# not evaluable, which fails the cut) plus the SBND Wire-Cell numu_score and
+# nue_score (the latter replaces the MicroBooNE nue BDT: ~2x the signal at
+# the same purity). The cuts are ANDed; the order follows the MicroBooNE BDT
+# cascade, each BDT trained on events passing the previous ones.
+
 WC_NUMU_SCORE_MAX = 0.5
-WC_NUE_SCORE_MAX = 7.0
-BACK_DIST_MIN = 80.0   # cm, shw1_back_dist (make_wc_candidates)
+UB_NUMU_MIN = 1.0      # MicroBooNE: 0.4; tighter after wc_numu, tuned out-of-fold
+UB_OTHER_MIN = 0.2     # as MicroBooNE; -0.25 costs purity 44% -> 37.5% for +9% eff (Nov11)
+UB_NCPI0_MIN = -0.05   # as MicroBooNE
+WC_NUE_SCORE_MAX = 7.0  # MicroBooNE's nue selection is nue_score > 7
+BACK_DIST_MIN = 80.0   # cm; removes 24/25 dirt single photons for ~9% of signal (Nov8)
 
 UB_SELECTION = {
     "wc_numu": lambda df: df.numu_score < WC_NUMU_SCORE_MAX,
@@ -254,12 +181,15 @@ UB_SELECTION = {
     "ub_other": lambda df: df.ub_other > UB_OTHER_MIN,
     "ub_ncpi0": lambda df: df.ub_ncpi0 > UB_NCPI0_MIN,
     "wc_nue": lambda df: df.nue_score < WC_NUE_SCORE_MAX,
+    # one EM shower > 20 MeV at the vertex passing the SP tagger's first check
     "one_shower": lambda df: df.shw_sp_n_20br1_showers == 1,
+    # no shower labelled mu/pi/p: a second photon often gets a mu/pi start
+    # segment, and one_shower does not count it
     "em_showers": lambda df: df.n_shower <= df.n_em,
+    # active volume behind the shower start along its axis; short for dirt
     "back_traced": lambda df: df.shw1_back_dist > BACK_DIST_MIN,
 }
 
-# Cut chains for cutflow.py
 CHAINS = {
     "presel": PRESELECTION,
     "uboone": UB_SELECTION,
