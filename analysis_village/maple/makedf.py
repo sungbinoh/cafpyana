@@ -1627,6 +1627,10 @@ g4_weights = [
 
 gump_genie_reknob_systematics = gump_ar23_weights + gump_ar23p_weights + extra_weights + g4_weights
 
+# multisim universes saved for flux and Geant4 reinteraction weights (CAF stores 1000).
+# GENIE multisims only carry 100 in the CAF, so they are unaffected.
+MAPLE_MULTISIM_NUNIV = 250
+
 # =====================================================================
 # wgt builder
 # =====================================================================
@@ -1649,7 +1653,8 @@ def make_maple_wgtdf(f):
     missing = len(geniesyst.regen_systematics) + len(g4_weights) - len(systs)
     if missing:
         print("make_maple_wgtdf: %d requested GENIE systematics absent in file, using %d" % (missing, len(systs)))
-    return make_mcnudf(f, include_weights=True, multisim_nuniv=100, genie_systematics=systs)
+    return make_mcnudf(f, include_weights=True, multisim_nuniv=MAPLE_MULTISIM_NUNIV,
+                       genie_multisim_nuniv=MAPLE_MULTISIM_NUNIV, genie_systematics=systs)
 
 
 def make_maple_rewgtdf(f):
@@ -1662,6 +1667,7 @@ def make_maple_rewgtdf(f):
 
     syst = gump_genie_reknob_systematics + g4_weights
     ret = make_mcnudf(f, include_weights=True, slim=False,
+                       multisim_nuniv=MAPLE_MULTISIM_NUNIV, genie_multisim_nuniv=MAPLE_MULTISIM_NUNIV,
                        genie_systematics=list(set(syst)))
 
     return ret
