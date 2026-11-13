@@ -89,9 +89,13 @@ SBNDFVCuts = {
     }
 }
 
-# Run 2 FV: West cryostat (C1) only. TPC EE was off in Run 2 and TPC EW is
-# excluded as well, so the whole East cryostat (C0) is out of the Run 2 FV.
+# Run 2 FV: TPC EE was off in Run 2, so the East cryostat (C0) covers TPC EW only.
 ICARUSRun2FVCuts = {
+    "C0": {
+        "x": {"min": -210.22, "max": -61.94}, # exclude EE in Run 2
+        "y": {"min": -181.86, "max": 134.96},
+        "z": {"min": -894.950652270838, "max": 894.950652270838}
+    },
     "C1": {
         "x": {"min": 61.94, "max": 358.49},
         "y": {"min": -181.86, "max": 134.96},
@@ -161,8 +165,9 @@ def _fv_cut(df, inx=10, iny=10, inzfront=10, inzback=50):
               (df.y > ICARUSCableCuts['WW']['y']['min']) &\
               (df.z > ICARUSCableCuts['WW']['z']['min'])
 
-    # Run 2: West cryostat only (no C0, see ICARUSRun2FVCuts)
-    FVRun2 = ((df.x < (ICARUSRun2FVCuts['C1']['x']['max'] - inx)) & (df.x > (ICARUSRun2FVCuts['C1']['x']['min'] + inx))) &\
+    # Run 2: TPC EW + West cryostat (EE off, see ICARUSRun2FVCuts)
+    FVRun2 = (((df.x < (ICARUSRun2FVCuts['C0']['x']['max'] - inx)) & (df.x > (ICARUSRun2FVCuts['C0']['x']['min'] + inx))) |\
+            ((df.x < (ICARUSRun2FVCuts['C1']['x']['max'] - inx)) & (df.x > (ICARUSRun2FVCuts['C1']['x']['min'] + inx)))) &\
              (df.y < (ICARUSRun2FVCuts['C1']['y']['max'] - iny)) & (df.y > (ICARUSRun2FVCuts['C1']['y']['min'] + iny)) &\
              (df.z < (ICARUSRun2FVCuts['C1']['z']['max'] - inzback)) & (df.z > (ICARUSRun2FVCuts['C1']['z']['min'] + inzfront)) &\
              ~inCable
