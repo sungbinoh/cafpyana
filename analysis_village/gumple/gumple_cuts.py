@@ -266,8 +266,19 @@ def good_beam_pot(bnbdf):
     tor = bnbdf.TOR875
     return tor[beam_quality_cut(bnbdf, prefix="") & np.isfinite(tor) & (tor > 0)].sum()
 
+# SBND slice-vertex FV excludes the APA-frame gap region SBND_VTX_ZGAP[0] < z <
+# SBND_VTX_ZGAP[1] (2026-11-13). Vertex only: _fv_cut / prefix_fv_cut (track-end
+# containment, truth FV) are unchanged, so tracks may still cross or stop in it.
+# GUMPLE_SBND_VTX_ZGAP=0 in the environment turns it off (cross-checks); read at
+# import so spawned loader workers see it. Enters the loaddf cache key for SBND.
+SBND_VTX_ZGAP = None if os.environ.get("GUMPLE_SBND_VTX_ZGAP") == "0" else (250., 254.)
+
 def slcfv_cut(df):
-    return prefix_fv_cut(df, "slc_vtx")
+    fv = prefix_fv_cut(df, "slc_vtx")
+    if SBND_VTX_ZGAP is not None:
+        ingap = (df.detector == "SBND") & (df.slc_vtx_z > SBND_VTX_ZGAP[0]) & (df.slc_vtx_z < SBND_VTX_ZGAP[1])
+        fv = fv & ~ingap
+    return fv
 
 def intersects_prism_vectorized(p1_array, p2_array, prism_min=(-200., 100., 250.), prism_max=(200., 200., 500.), solid=True):
     """

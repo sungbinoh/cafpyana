@@ -838,6 +838,10 @@ def load_one(fname, idf,
         # the cached off-beam POT depends on the gates/POT constant (on-beam unchanged)
         if offbeampot:
             data_cut_key["offbeam_gates_per_5e12pot"] = OFFBEAM_GATES_PER_5e12POT[detector]
+        # SBND slice-vertex APA-gap exclusion (gmpl.slcfv_cut, 2026-11-13): the
+        # preselection body changed without its qualname, so key on it explicitly
+        if detector == "SBND":
+            data_cut_key["sbnd_vtx_zgap"] = gmpl.SBND_VTX_ZGAP
         cache_hash = _cache_key(fname, idf, **data_cut_key, detector=detector, include_syst=include_syst,
             nuniv=nuniv, spline=spline, xsec_univ=xsec_univ, xsec_spline=xsec_spline, reweight_aFF=reweight_aFF, pot_univ=pot_univ,
             flux_univ=flux_univ, sep_flux_univ=sep_flux_univ, g4_univ=g4_univ,
