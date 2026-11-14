@@ -40,6 +40,7 @@ GROUPS = [   # label, truth categories, colour
     ("Signal: NC $\\Delta\\to N\\gamma$", [0], "#e87ba4"),
     ("Signal: other 1$\\gamma$", [3], "#6250d6"),
     ("$\\geq$2 reconstructable photons (truth)", [4], "#eb6834"),
+    ("1$\\gamma$ + escaping $\\gamma$ (not contained)", [13], "#a05a2c"),
     ("CC $\\nu_e$", [7], "#1baf7a"),
     ("Primary $\\mu$ (CC $\\nu_\\mu$)", [6], "#eda100"),
     ("Cosmic / unmatched", [9], "#e34948"),

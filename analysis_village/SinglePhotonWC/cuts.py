@@ -8,6 +8,8 @@ doi:10.1103/89qs-4lcp):
     a pair < 20 deg apart is two photons (MicroBooNE counts it as one
     shower: MERGED_PAIRS_ARE_SIGNAL).
   * true vertex and shower start >= SIGNAL_FV_INSET = 10 cm inside the TPC
+  * contained: no prompt photon >= 20 MeV escapes the TPC (or converts
+    < SHOWER_INSET from its boundary), e.g. the other photon of a pi0
   * no primary muon or e+- (MicroBooNE allows muons < 100 MeV KE); any
     number of protons, charged pions and neutrons
 Photons are the prompt ones: GENIE primaries and decay photons of primary
@@ -82,8 +84,12 @@ def one_shower_in_fv(df):
     return (n_visible(df) == 1) & (df.true_ngamma_edge == 0) & (conv >= SIGNAL_FV_INSET)
 
 
+def contained(df):
+    return df.true_ngamma_out == 0
+
+
 def is_signal(df):
-    return one_shower_in_fv(df) & true_in_fv(df) & (df.true_nmu == 0) & (df.true_ne == 0)
+    return one_shower_in_fv(df) & true_in_fv(df) & contained(df) & (df.true_nmu == 0) & (df.true_ne == 0)
 
 
 # --- Truth categories
@@ -100,6 +106,7 @@ CATEGORY_LABELS = {
     9: "Cosmic / unmatched",
     11: "1g, not signal (vertex or conversion < 10 cm in)",
     12: "1g from outside the AV (dirt)",
+    13: "1g + escaping photon (not contained)",
 }
 SIGNAL_CATEGORIES = [0, 1, 3]
 
@@ -123,6 +130,7 @@ def truth_category(df):
         (sig & ncdelta, 0),
         (sig & (df.true_isnc == 1) & (o == 111), 1),
         (sig, 3),
+        (one_shower_in_fv(df) & ~contained(df), 13),
         (nvis + df.true_ngamma_edge >= 2, 4),
         (nvis == 1, 11),
         (nvis == 0, 5),
