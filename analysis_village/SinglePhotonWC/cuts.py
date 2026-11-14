@@ -3,15 +3,16 @@ single-photon search with Wire-Cell.
 
 Signal, adapted from the MicroBooNE inclusive photon-like LEE search (PRL,
 doi:10.1103/89qs-4lcp):
-  * exactly one reconstructable photon shower: true E >= 20 MeV, shower
-    start >= SHOWER_INSET inside the TPC; photons < 20 deg apart are one
-    shower. No other such photon anywhere in the TPC.
-  * that shower starts >= SIGNAL_FV_INSET = 10 cm inside (MicroBooNE: 3 cm)
-  * vertex in the active volume; vertex outside the FV needs E >= 100 MeV
-  * no primary muon with KE >= 100 MeV, no primary e+-; anything else allowed
+  * exactly one reconstructable photon: true E >= 20 MeV, shower start >=
+    SHOWER_INSET inside the TPC. No other such photon anywhere in the TPC;
+    a pair < 20 deg apart is two photons (MicroBooNE counts it as one
+    shower: MERGED_PAIRS_ARE_SIGNAL).
+  * true vertex and shower start >= SIGNAL_FV_INSET = 10 cm inside the TPC
+  * no primary muon or e+- (MicroBooNE allows muons < 100 MeV KE); any
+    number of protons, charged pions and neutrons
 Photons are the prompt ones: GENIE primaries and decay photons of primary
 hadrons. Unlike MicroBooNE, single photons from outside the AV (dirt) are
-background (category 12).
+background (category 12), as are those from 0-10 cm inside (category 11).
 
 Truth columns come from make_truth.make_sp_truthdf; candidates join them on
 (entry, tmatch_idx) and an unmatched candidate is cosmic. Reco cut chains
@@ -27,10 +28,9 @@ ACTIVE_VOLUME = {"x": (-200.0, 200.0), "y": (-200.0, 200.0), "z": (0.0, 500.0)} 
 
 PHOTON_E_MIN = 0.020         # GeV, true photon energy
 SHOWER_INSET = 3.0           # cm, shower start from the TPC boundary for a visible photon
-SIGNAL_FV_INSET = 10.0       # cm, FV for the signal photon's conversion and the vertex
-OUT_FV_PHOTON_E_MIN = 0.100  # GeV, signal photon energy for vertices outside the FV
-MERGE_ANGLE = 20.0           # deg, photons closer than this are one shower
-MUON_KE_MAX = 0.100          # GeV, primary muons below this are allowed
+SIGNAL_FV_INSET = 10.0       # cm, FV for the signal vertex and photon conversion
+MERGE_ANGLE = 20.0           # deg, photons closer than this are one shower (true_nshower)
+MERGED_PAIRS_ARE_SIGNAL = False  # True: count showers (MicroBooNE), False: count photons
 
 RESNUM_DELTA_1232 = 0        # genie::EResonance kP33_1232
 ORIGIN_PRIMARY = 22          # true_shw1_origin of a GENIE-primary photon
@@ -70,17 +70,20 @@ def is_cosmic(df):
     return m
 
 
+def n_visible(df):
+    """Reconstructable showers (merged pairs as one) or photons."""
+    return df.true_nshower if MERGED_PAIRS_ARE_SIGNAL else df.true_ngamma_rec
+
+
 def one_shower_in_fv(df):
     """Exactly one visible photon in the TPC, its shower starting in the FV.
     true_ngamma_edge (converting 0.5-3 cm in) also counts as visible."""
     conv = dist_to_active_boundary(df.true_shw1_conv_x, df.true_shw1_conv_y, df.true_shw1_conv_z)
-    return (df.true_nshower == 1) & (df.true_ngamma_edge == 0) & (conv >= SIGNAL_FV_INSET)
+    return (n_visible(df) == 1) & (df.true_ngamma_edge == 0) & (conv >= SIGNAL_FV_INSET)
 
 
 def is_signal(df):
-    lepton_ok = (df.true_nmu_100MeV == 0) & (df.true_ne == 0)
-    hard_enough = true_in_fv(df) | (df.true_shw1_E >= OUT_FV_PHOTON_E_MIN)
-    return one_shower_in_fv(df) & true_in_active(df) & lepton_ok & hard_enough
+    return one_shower_in_fv(df) & true_in_fv(df) & (df.true_nmu == 0) & (df.true_ne == 0)
 
 
 # --- Truth categories
@@ -88,19 +91,17 @@ def is_signal(df):
 CATEGORY_LABELS = {
     0: "1g: NC Delta->Ngamma",
     1: "1g: NC pi0",
-    2: "1g: numu CC, mu < 100 MeV",
-    3: "1g: NC other",
-    10: "1g: vertex in AV, outside FV",
+    3: "1g: other",
     4: ">=2 visible photons",
     5: "0 showers",
-    6: "CC numu, mu >= 100 MeV",
+    6: "Primary muon (CC numu)",
     7: "CC nue (primary e)",
     8: "Outside AV, not 1g",
     9: "Cosmic / unmatched",
-    11: "1g, not signal (soft out-of-FV / converts < 10 cm in)",
+    11: "1g, not signal (vertex or conversion < 10 cm in)",
     12: "1g from outside the AV (dirt)",
 }
-SIGNAL_CATEGORIES = [0, 1, 2, 3, 10]
+SIGNAL_CATEGORIES = [0, 1, 3]
 
 
 def is_signal_cat(cat):
@@ -111,21 +112,20 @@ def truth_category(df):
     """Integer category per row (CATEGORY_LABELS); first match wins."""
     o = df.true_shw1_origin
     sig = is_signal(df)
+    nvis = n_visible(df)
     ncdelta = (df.true_isnc == 1) & (o == ORIGIN_PRIMARY) & (df.true_resnum == RESNUM_DELTA_1232)
     conds = [
         (is_cosmic(df), 9),
-        (sig & ~true_in_fv(df), 10),
         (~true_in_active(df) & one_shower_in_fv(df), 12),
         (~true_in_active(df), 8),
         (df.true_ne > 0, 7),
-        (df.true_nmu_100MeV > 0, 6),
+        (df.true_nmu > 0, 6),
         (sig & ncdelta, 0),
         (sig & (df.true_isnc == 1) & (o == 111), 1),
-        (sig & (df.true_iscc == 1), 2),
         (sig, 3),
-        (df.true_nshower + df.true_ngamma_edge >= 2, 4),
-        (df.true_nshower == 1, 11),
-        (df.true_nshower == 0, 5),
+        (nvis + df.true_ngamma_edge >= 2, 4),
+        (nvis == 1, 11),
+        (nvis == 0, 5),
     ]
     cat = pd.Series(-1, index=df.index)
     for m, c in reversed(conds):

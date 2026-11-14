@@ -38,12 +38,12 @@ plt.style.use(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dune.mpl
 GROUPS = [   # label, truth categories, colour
     ("Signal: NC $\\pi^0$ 1$\\gamma$", [1], "#2a78d6"),
     ("Signal: NC $\\Delta\\to N\\gamma$", [0], "#e87ba4"),
-    ("Signal: other ($\\nu_\\mu$CC, NC other, out-of-FV)", [2, 3, 10], "#6250d6"),
+    ("Signal: other 1$\\gamma$", [3], "#6250d6"),
     ("$\\geq$2 reconstructable photons (truth)", [4], "#eb6834"),
     ("CC $\\nu_e$", [7], "#1baf7a"),
-    ("CC $\\nu_\\mu$ ($\\mu\\geq$100 MeV)", [6], "#eda100"),
+    ("Primary $\\mu$ (CC $\\nu_\\mu$)", [6], "#eda100"),
     ("Cosmic / unmatched", [9], "#e34948"),
-    ("Other bkg (0 showers, outside AV, dirt, soft 1$\\gamma$)", [5, 8, 11, 12], "#008300"),
+    ("Other bkg (0 showers, outside AV, dirt, 1$\\gamma$ outside FV)", [5, 8, 11, 12], "#008300"),
 ]
 
 SCORES = [   # cut name in cuts.UB_SELECTION, column, label, bins, threshold, kept side

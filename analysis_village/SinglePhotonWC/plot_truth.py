@@ -29,9 +29,9 @@ plt.style.use(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dune.mpl
 SIG_COLOR, BKG_COLOR = "#2a78d6", "#a3a29d"
 
 GROUPS = {   # signal solid, background dashed
-    "signal (inclusive 1g)": dict(cats=[0, 1, 2, 3], color="#2a78d6", ls="-"),
+    "signal (inclusive 1g)": dict(cats=cuts.SIGNAL_CATEGORIES, color="#2a78d6", ls="-"),
     "bkg: >=2 showers":      dict(cats=[4], color="#1baf7a", ls="--"),
-    "bkg: CC numu mu>=100":  dict(cats=[6], color="#eda100", ls="--"),
+    "bkg: primary muon":     dict(cats=[6], color="#eda100", ls="--"),
     "bkg: CC nue":           dict(cats=[7], color="#7f5bd5", ls="--"),
 }
 PI0_REASONS = ["photons merged (< 20 deg)", "other photon escapes / < %g cm from wall" % cuts.SHOWER_INSET,
@@ -78,7 +78,7 @@ def page_rates(pdf, m, pot):
     ax.grid(axis="y", visible=False)
 
     ax = axs[1]
-    sp = m[m.cat.isin([1, 2])]
+    sp = m[m.cat == 1]
     v = pi0_reason(sp).value_counts(normalize=True).reindex(PI0_REASONS).fillna(0)
     ax.barh(np.arange(len(v)), v.values, color=SIG_COLOR, height=0.6)
     for yi, w in enumerate(v.values):
@@ -124,7 +124,6 @@ def page_extra(pdf, m):
     cc1 = m[(m.true_iscc == 1) & (m.true_nshower == 1) & (m.true_ne == 0) & (m.cat != 8)]
     axs[1].hist((cc1.true_mu_KE * 1000).clip(0, 999), bins=np.linspace(0, 1000, 41), histtype="step", lw=2,
                 color=INK2)
-    axs[1].axvline(cuts.MUON_KE_MAX * 1000, color="#eb6834", lw=1.5)
     axs[1].set_xlabel("leading muon KE [MeV] (last bin: overflow)")
     axs[1].set_ylabel("true neutrinos")
     axs[1].set_title("CC numu, one shower: muon KE", loc="left")

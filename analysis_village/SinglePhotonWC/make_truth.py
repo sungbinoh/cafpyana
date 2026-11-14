@@ -36,6 +36,7 @@ from analysis_village.SinglePhotonWC import cuts
 
 PROTON_MASS = 0.938272   # GeV
 MUON_MASS = 0.105658     # GeV
+MUON_KE_100MEV = 0.100   # GeV, nmu_100MeV (MicroBooNE's muon threshold)
 G4_DECAY = 3             # caf::g4_process_ kG4Decay
 LEPTONS = [11, 12, 13, 14, 15, 16]
 MAX_DECAY_DEPTH = 4      # eta -> 3pi0 -> 6gamma needs 2
@@ -193,7 +194,7 @@ def make_sp_truthdf(f):
     N["np_35MeV"] = cnt((pdg == 2212) & (prim.genE - PROTON_MASS > 0.035), nu)
     N["nn"] = cnt(pdg == 2112, nu)
     N["nmu"] = cnt(pdg == 13, nu)
-    N["nmu_100MeV"] = cnt(muKE >= cuts.MUON_KE_MAX, nu)
+    N["nmu_100MeV"] = cnt(muKE >= MUON_KE_100MEV, nu)
     N["mu_KE"] = muKE.groupby(nu).max().reindex(N.index)
     N["ne"] = cnt(pdg == 11, nu)
 
