@@ -294,7 +294,7 @@ def maple_truth_classdf(f, det, run):
 # =====================================================================
 # Per-pfp candidate machinery (chi2-free; chi2 cuts live in maple_sel)
 # =====================================================================
-def _find_candidates(P, use_chi2=True):
+def _find_candidates(P, use_chi2=True, mu_trkscore_gate=True):
     """Muon + candidate-pfp finding and fixed pfp counting.
 
     P: flat per-pfp frame (index entry, slc, pfp), with the nominal chi2
@@ -312,7 +312,8 @@ def _find_candidates(P, use_chi2=True):
         calo still yields a muon, as in legacy GUMP.  The candidate is
         FIXED under calorimetric variations (legacy semantics: variations
         re-evaluate the chi2 cuts on the fixed candidate, never the
-        choice).
+        choice).  mu_trkscore_gate=False drops the trackScore > 0 term
+        (study option; the analysis cuts on coltopo_trkscore downstream).
       use_chi2=False -- chi2-free MAPLE rule: the longest track passing
         get_base_muon_mask (trackScore >= 0.5, dist_start <= 10,
         len in [40, 400], primary, contained, same-side).
@@ -327,7 +328,9 @@ def _find_candidates(P, use_chi2=True):
     """
 
     if use_chi2:
-        keep = (P.trackScore > 0.0) & (P.dist_start < 10.0) & (P.len > 40.0)
+        keep = (P.dist_start < 10.0) & (P.len > 40.0)
+        if mu_trkscore_gate:
+            keep = keep & (P.trackScore > 0.0)
     else:
         keep = gmpl.get_base_muon_mask(P, level="trk")
 
@@ -835,7 +838,8 @@ def PID_calcs(f, P, DETECTOR, ismc, do_calo_syst=True, do_alt_chi2=False,
     return P
 
 def fetch_candidates(S, P, do_calo_syst, use_chi2=True, do_alt_chi2=False,
-                     do_cafana_chi2=False, do_ind_chi2=False, return_mu_ilocs=False):
+                     do_cafana_chi2=False, do_ind_chi2=False, return_mu_ilocs=False,
+                     mu_trkscore_gate=True):
     # ------------------------------------------------------------------
     # fixed candidates; chi2 cuts are applied post-hoc (maple_sel)
     # ------------------------------------------------------------------
@@ -852,7 +856,7 @@ def fetch_candidates(S, P, do_calo_syst, use_chi2=True, do_alt_chi2=False,
                 key = "%s_%s" % (tag, flavor)
                 chi2_suffixes[key] = key
 
-    mu_ilocs, is_prot_cand, counts = _find_candidates(P, use_chi2=use_chi2)
+    mu_ilocs, is_prot_cand, counts = _find_candidates(P, use_chi2=use_chi2, mu_trkscore_gate=mu_trkscore_gate)
     counts = counts.reindex(S.index).fillna(0).astype(int)
     has_mu = pd.Series(False, index=S.index)
     if len(mu_ilocs):
@@ -1160,7 +1164,8 @@ def _mu_endhits(trkhitdf, mu_ilocs, rr_max=MU_ENDHIT_RR_MAX):
 # Main evt builder
 # =====================================================================
 def make_maple_evt_df(f, selection="none", do_calo_syst=True, use_chi2=True, do_alt_chi2=False,
-                      do_cafana_chi2=False, do_ind_chi2=False, save_mu_endhits=False, do_coltopo=True):
+                      do_cafana_chi2=False, do_ind_chi2=False, save_mu_endhits=False, do_coltopo=True,
+                      mu_trkscore_gate=True):
     # use_chi2: muon-candidate selection behavior -- True (default) picks the
     # legacy-GUMP min-chi2u/chi2p-ratio track (len > 40 cm), False the
     # longest chi2-free base-mask track (see _find_candidates).
@@ -1169,6 +1174,7 @@ def make_maple_evt_df(f, selection="none", do_calo_syst=True, use_chi2=True, do_
     # do_coltopo: add the muon candidate's end-point topology BDT score
     # coltopo_trkscore (and the ang2_med-shifted coltopo_trkscore_a2shift, MC
     # only), computed from the same end hits (see coltopo.py).
+    # mu_trkscore_gate: require trackScore > 0 for the muon candidate (use_chi2=True path).
     # Get a slice level df (S) a pfp level df (P) and some meta-data
     S, P, DETECTOR, RUN, ismc = fetch_info(f)
 
@@ -1197,7 +1203,7 @@ def make_maple_evt_df(f, selection="none", do_calo_syst=True, use_chi2=True, do_
                             return_trkhitdf=True)
     S, mu_ilocs = fetch_candidates(S, P, do_calo_syst, use_chi2=use_chi2, do_alt_chi2=do_alt_chi2,
                                    do_cafana_chi2=do_cafana_chi2, do_ind_chi2=do_ind_chi2,
-                                   return_mu_ilocs=True)
+                                   return_mu_ilocs=True, mu_trkscore_gate=mu_trkscore_gate)
     if save_mu_endhits or do_coltopo:
         mu_endhits = _mu_endhits(trkhitdf, mu_ilocs)
     del trkhitdf
@@ -1230,6 +1236,14 @@ def make_maple_evt_df(f, selection="none", do_calo_syst=True, use_chi2=True, do_
     S["flash_maxpe_cryo0"] = S.flash_maxpe_cryo0
     S["flash_maxpe_cryo1"] = S.flash_maxpe_cryo1
 
+    # coltopo before the cut chain: the muon cut (get_base_muon_mask) uses it
+    if do_coltopo:
+        # slices without a muon candidate (or without end hits) get NaN
+        C = coltopo_scores(mu_endhits, DETECTOR, ismc)
+        S = S.copy()
+        for c in C.columns:
+            S[c] = C[c].reindex(S.index).to_numpy()
+
     chain = gmpl.maple_cut_chain(S)
     S["cut_presel"] = chain.cut_presel
     S["cut_cosmic"] = chain.cut_cosmic
@@ -1256,16 +1270,9 @@ def make_maple_evt_df(f, selection="none", do_calo_syst=True, use_chi2=True, do_
     else:
         raise ValueError("selection must be 'none', 'presel', or 'full'")
 
-    if save_mu_endhits or do_coltopo:
+    if save_mu_endhits:
         # keep only the hits of slices surviving the selection
         keep = mu_endhits.index.droplevel(-1).isin(S.index)
-    if do_coltopo:
-        # slices without a muon candidate (or without end hits) get NaN
-        C = coltopo_scores(mu_endhits[keep], DETECTOR, ismc)
-        S = S.copy()
-        for c in C.columns:
-            S[c] = C[c].reindex(S.index).to_numpy()
-    if save_mu_endhits:
         # one file at a time per process, so drop anything left over from a
         # previous file
         _MU_ENDHIT_CACHE.clear()
