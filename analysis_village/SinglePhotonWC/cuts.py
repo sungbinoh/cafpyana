@@ -168,10 +168,10 @@ PRESELECTION = {
 # the same purity). The cuts are ANDed; the order follows the MicroBooNE BDT
 # cascade, each BDT trained on events passing the previous ones.
 
-WC_NUMU_SCORE_MAX = 0.5
-UB_NUMU_MIN = 1.0      # MicroBooNE: 0.4; tighter after wc_numu, tuned out-of-fold
-UB_OTHER_MIN = 0.2     # as MicroBooNE; -0.25 costs purity 44% -> 37.5% for +9% eff (Nov11)
-UB_NCPI0_MIN = -0.05   # as MicroBooNE
+WC_NUMU_SCORE_MAX = 0.4  # 0.2-3 within 10% of the best eff x purity (Nov14 scan)
+UB_NUMU_MIN = 1.0      # MicroBooNE: 0.4; best of the Nov14 scan (0.8-1.2 equivalent)
+UB_OTHER_MIN = 0.2     # as MicroBooNE; best of the Nov14 scan
+UB_NCPI0_MIN = -0.1    # highest purity on both file halves (Nov14; MicroBooNE: -0.05)
 WC_NUE_SCORE_MAX = 7.0  # MicroBooNE's nue selection is nue_score > 7
 BACK_DIST_MIN = 80.0   # cm; removes 24/25 dirt single photons for ~9% of signal (Nov8)
 
