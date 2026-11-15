@@ -116,24 +116,6 @@ class NTupleProc(object):
         self.f = data["f"]
         self.name = data["name"]
 
-<<<<<<< HEAD
-def _open_with_retries(path, attempts=5, sleep=2.0, timeout=NTUPLE_OPEN_TIMEOUT):
-    last_exc = None
-    candidates = _candidate_paths(path)
-    for k in range(attempts):
-        for candidate in candidates:
-            try:
-                return uproot.open(candidate, timeout=timeout)
-            except (OSError, ValueError, RuntimeError, TimeoutError) as e:
-                last_exc = e
-                continue
-
-        if k + 1 < attempts:
-            # Add jitter so many workers do not stampede back at once.
-            wait_s = sleep * (k + 1) * (1.0 + 0.25 * random.random())
-            time.sleep(wait_s)
-
-=======
 def _open_with_retries(path, attempts=3, sleep=5.0):
     last_exc = None
 
@@ -155,7 +137,6 @@ def _open_with_retries(path, attempts=3, sleep=5.0):
 
     # If streaming fails after all attempts, raise the exception
     # so _loaddf can trigger the local copy failover.
->>>>>>> e14fcdedd0a8db860cb8f7fca1ee16f1a6bd787c
     raise last_exc
 
 def _execute_load(f, applyfs, index, fname):
@@ -209,9 +190,6 @@ def _execute_load(f, applyfs, index, fname):
 
 def _loaddf(applyfs, preprocess, g):
     index, fname = g
-<<<<<<< HEAD
-    fname = _normalize_remote_path(fname)
-=======
     original_fname = fname
 
     # Convert pnfs to xroot URL's
@@ -219,7 +197,6 @@ def _loaddf(applyfs, preprocess, g):
         fname = fname.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
     elif fname.startswith("xroot"):
         fname = fname[1:]
->>>>>>> e14fcdedd0a8db860cb8f7fca1ee16f1a6bd787c
 
     dfs = []
     tempfiles = []
@@ -236,80 +213,6 @@ def _loaddf(applyfs, preprocess, g):
 
     dfs = None
     try:
-<<<<<<< HEAD
-        for attempt in range(max(1, NTUPLE_READ_RETRIES)):
-            try:
-                # Open AND close strictly within the context manager
-                with _open_with_retries(fname, sleep=NTUPLE_RETRY_SLEEP) as f:
-                    dfs = []
-                    totevt = f["TotalEvents"].values()[0] if "TotalEvents" in f else 0.0
-
-                    if "recTree" not in f:
-                        print("File (%s) missing recTree. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
-                    elif totevt < 1e-6:
-                        print("File (%s) has 0 in TotalEvents. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
-                    else:
-                        for applyf in applyfs:
-                            df = applyf(f)  # must fully read from 'f' here
-                            if df is None:
-                                dfs.append(None)
-                                continue
-
-                            # --- CRITICAL: detach from file-backed/lazy data ---
-                            # If it's a pandas obj, deep-copy; if not, try to materialize.
-                            if isinstance(df, pd.DataFrame):
-                                df = df.copy(deep=True)
-                            elif hasattr(df, "to_numpy"):  # Series / array-like
-                                df = pd.DataFrame(df.to_numpy()).copy(deep=True)
-                            # ---------------------------------------------------
-
-                            # Tag with __ntuple and move it to front of MultiIndex
-                            df["__ntuple"] = index
-                            df.set_index("__ntuple", append=True, inplace=True)
-                            new_order = [df.index.nlevels - 1] + list(range(df.index.nlevels - 1))
-                            df = df.reorder_levels(new_order)
-
-                            dfs.append(df)
-
-                    df_histpot = make_histpotdf(f).copy(deep=True)
-                    if "TotalPOT" not in f:
-                        print(f"File ({fname}) missing TotalPOT histogram. Using empty DataFrame.")
-                    df_histpot["__ntuple"] = index
-                    df_histpot.set_index("__ntuple", append=True, inplace=True)
-                    new_order = [df_histpot.index.nlevels - 1] + list(range(df_histpot.index.nlevels - 1))
-                    df_histpot = df_histpot.reorder_levels(new_order)
-                    dfs.append(df_histpot)
-
-                    df_histgenevt = make_histgenevtdf(f).copy(deep=True)
-                    if "TotalGenEvents" not in f:
-                        print(f"File ({fname}) missing TotalGenEvents histogram. Using empty DataFrame.")
-                    df_histgenevt["__ntuple"] = index
-                    df_histgenevt.set_index("__ntuple", append=True, inplace=True)
-                    new_order = [df_histgenevt.index.nlevels - 1] + list(range(df_histgenevt.index.nlevels - 1))
-                    df_histgenevt = df_histgenevt.reorder_levels(new_order)
-                    dfs.append(df_histgenevt)
-
-                break
-            except (OSError, ValueError, RuntimeError, TimeoutError) as e:
-                dfs = None
-                if attempt + 1 < NTUPLE_READ_RETRIES and _is_transient_io_error(e):
-                    wait_s = NTUPLE_RETRY_SLEEP * (attempt + 1)
-                    print(f"Transient read error for ({fname}) [attempt {attempt + 1}/{NTUPLE_READ_RETRIES}]. Retrying in {wait_s:.1f}s...")
-                    print(e)
-                    time.sleep(wait_s)
-                    continue
-
-                print(f"Could not process file ({fname}). Skipping...")
-                print(e)
-                break
-    finally:
-        for f in tempfiles:
-            if os.path.exists(f):
-                os.remove(f)
-            
-    if not dfs:
-        return None
-=======
         # ATTEMPT 1: Normal Streaming
         try:
             with _open_with_retries(fname) as f:
@@ -353,7 +256,6 @@ def _loaddf(applyfs, preprocess, g):
             os.remove(local_copy_path)
         except Exception as e:
             print(f"Cleanup error for {local_copy_path}: {e}")
->>>>>>> e14fcdedd0a8db860cb8f7fca1ee16f1a6bd787c
 
     return dfs if (dfs and len(dfs) > 0) else None
 
@@ -380,16 +282,8 @@ class NTupleGlob(object):
 
         if nproc == "auto":
             CPU_COUNT_use = int(CPU_COUNT * 0.8)
-<<<<<<< HEAD
-            remote_inputs = sum(1 for path in thisglob if _is_remote_path(str(path)))
-            if len(thisglob) > 0 and remote_inputs == len(thisglob):
-                CPU_COUNT_use = min(CPU_COUNT_use, NTUPLE_MAX_REMOTE_NPROC)
-            nproc = max(1, min(CPU_COUNT_use, len(thisglob)))
-            print("CPU_COUNT : " + str(CPU_COUNT) + ", len(thisglob): " + str(len(thisglob)) + ", nproc: " + str(nproc))
-=======
             nproc = min(CPU_COUNT_use, len(thisglob))
         print("CPU_COUNT : " + str(CPU_COUNT) + ", len(thisglob): " + str(len(thisglob)) + ", nproc: " + str(nproc))
->>>>>>> e14fcdedd0a8db860cb8f7fca1ee16f1a6bd787c
 
         ret = []
 
