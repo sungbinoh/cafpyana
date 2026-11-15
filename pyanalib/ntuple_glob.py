@@ -155,8 +155,7 @@ def _loaddf(applyfs, preprocess, g):
                 # Open AND close strictly within the context manager
                 with _open_with_retries(fname, sleep=NTUPLE_RETRY_SLEEP) as f:
                     dfs = []
-                    # totevt = f["TotalEvents"].values()[0] if "TotalEvents" in f else 0.0
-                    totevt=1.0
+                    totevt = f["TotalEvents"].values()[0] if "TotalEvents" in f else 0.0
 
                     if "recTree" not in f:
                         print("File (%s) missing recTree. Try only histpotdf & histgenevtdf and skipping other dfs..." % fname)
@@ -185,7 +184,7 @@ def _loaddf(applyfs, preprocess, g):
 
                             dfs.append(df)
 
-                    df_histpot = make_histpotdf(f)
+                    df_histpot = make_histpotdf(f).copy(deep=True)
                     if "TotalPOT" not in f:
                         print(f"File ({fname}) missing TotalPOT histogram. Using empty DataFrame.")
                     df_histpot["__ntuple"] = index
@@ -194,7 +193,7 @@ def _loaddf(applyfs, preprocess, g):
                     df_histpot = df_histpot.reorder_levels(new_order)
                     dfs.append(df_histpot)
 
-                    df_histgenevt = make_histgenevtdf(f)
+                    df_histgenevt = make_histgenevtdf(f).copy(deep=True)
                     if "TotalGenEvents" not in f:
                         print(f"File ({fname}) missing TotalGenEvents histogram. Using empty DataFrame.")
                     df_histgenevt["__ntuple"] = index
@@ -204,7 +203,7 @@ def _loaddf(applyfs, preprocess, g):
                     dfs.append(df_histgenevt)
 
                 break
-            except (OSError, ValueError, RuntimeError, TimeoutError, KeyError, TypeError) as e:
+            except (OSError, ValueError, RuntimeError, TimeoutError) as e:
                 dfs = None
                 if attempt + 1 < NTUPLE_READ_RETRIES and _is_transient_io_error(e):
                     wait_s = NTUPLE_RETRY_SLEEP * (attempt + 1)

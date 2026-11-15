@@ -10,6 +10,7 @@ from pyanalib.ntuple_glob import NTupleGlob
 import pandas as pd
 import warnings
 import re
+import sysconfig
 
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 warnings.filterwarnings("ignore", category=tables.exceptions.NaturalNameWarning)
@@ -163,7 +164,7 @@ def run_grid(inputfiles):
 
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu 7 -l ' + input_list_name
+        cmd = f"python run_df_maker.py -c {args.config} -o {args.output}_{i_flist}.df -ncpu {grid_params['cpu']} -l {input_list_name}"
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
             local_name = _get_short_filename(flist[i_f])
@@ -178,9 +179,9 @@ def run_grid(inputfiles):
     os.system('cp ./bin/grid_executable.sh %s' %MasterJobDir)
 
     # 5) prepare a package for xrootd
-    CAFPYANA_WD = os.environ['CAFPYANA_WD']
-    cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/XRootD " + MasterJobDir
-    cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/pyxrootd " + MasterJobDir
+    purelib = sysconfig.get_path('purelib') # This enables it to be XROOTD version independent, as the path can change with different versions of XROOTD
+    cp_XRootD = f"cp -r {purelib}/XRootD {MasterJobDir}"
+    cp_pyxrootd = f"cp -r {purelib}/pyxrootd {MasterJobDir}"
     os.system(cp_XRootD)
     os.system(cp_pyxrootd)
 
@@ -228,7 +229,6 @@ if __name__ == "__main__":
     else:
         ### Organize input list 
         InputSamples = []
-        StringForHash = ""
         if args.inputfilelist != "":
             lines = open(args.inputfilelist)
             for line in lines:
@@ -236,12 +236,10 @@ if __name__ == "__main__":
                     continue
                 line = line.strip('\n')
                 InputSamples.append(line)
-                StringForHash += line
         else:
             split_inputfiles = args.inputfiles.split(",")
             for split_inputfile in split_inputfiles:
                 InputSamples.append(split_inputfile)
-                StringForHash += args.inputfiles
 
         if(args.NFiles > 0 and len(InputSamples) > args.NFiles):
             InputSamples = InputSamples[:args.NFiles]

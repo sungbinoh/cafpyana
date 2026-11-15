@@ -2,6 +2,7 @@ import uproot
 import numpy as np
 import pandas as pd
 import awkward as ak
+import hashlib
 
 CHUNK_SIZE = "10 MB"
 
@@ -46,7 +47,7 @@ def _iter_filtered_wgts(rec_tree, nuniv, isyst_map, needed_syst_indices, step_si
         wgts["entry"] = wgts["entry"] + entry_offset
         wgts = wgts.set_index(["entry", "inu", "iwgt"]).drop(columns="subentry")
         wgts.columns = ["wgt"]
-        wgts = wgts.join(isyst_map)
+        wgts = wgts.join(isyst_map, on="iwgt")
         wgts = wgts[wgts.isyst.isin(needed_syst_indices)]
         if len(wgts):
             yield wgts
@@ -73,7 +74,6 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
         systs_slim = None
 
     step_size = CHUNK_SIZE
-    file_id = id(f)
     syst_chunks = {}
 
     for wgts in _iter_filtered_wgts(f["recTree"], nuniv, isyst_map, needed_syst_indices, step_size):
@@ -92,12 +92,13 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
 
                 if slim:
                     for i in range(multisim_nuniv):
-                        seed_input = s + str(i) + str(file_id)
-                        np.random.seed(hash(seed_input) % (2**32))
+                        seed_input = s + str(i)
+                        seed_int = int(hashlib.md5(seed_input.encode('utf-8')).hexdigest(), 16) % (2**32)
+                        np.random.seed(seed_int)
                         wgt = 1 + (s_morph - 1) * 2 * np.abs(np.random.normal(0, 1))
                         wgt = np.maximum(wgt, 0)
                         col = (slimname, f"univ_{i}")
-                        systs_slim.loc[wgt.index, col] = systs_slim.loc[wgt.index, col].values * wgt.values
+                        systs_slim.loc[wgt.index, col] = systs_slim.loc[wgt.index, col]* wgt
                 else:
                     this_systs.append(s_morph)
 
@@ -117,12 +118,13 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
 
                     if slim and isigma == 0:  # use ps1
                         for i in range(multisim_nuniv):
-                            seed_input = s + str(i) + str(file_id)
-                            np.random.seed(hash(seed_input) % (2**32))
+                            seed_input = s + str(i)
+                            seed_int = int(hashlib.md5(seed_input.encode('utf-8')).hexdigest(), 16) % (2**32)
+                            np.random.seed(seed_int)
                             wgt = 1 + (s_ps - 1) * np.random.normal(0, 1)
                             wgt = np.maximum(wgt, 0)
                             col = (slimname, f"univ_{i}")
-                            systs_slim.loc[wgt.index, col] = systs_slim.loc[wgt.index, col].values * wgt.values
+                            systs_slim.loc[wgt.index, col] = systs_slim.loc[wgt.index, col] * wgt
                     else:
                         this_systs.append(s_ps)
                         this_systs.append(s_ms)
@@ -182,8 +184,6 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
     if not systs.index.is_unique:
         raise Exception("Internal error: non-unique (entry, inu) index after chunk merge")
 
-    s_idx = systs.index.get_indexer(nuidx)
-    systs_match = systs.iloc[s_idx]
-    systs_match.loc[s_idx < 0, :] = 1.
+    systs_match = systs.reindex(nuidx, fill_value=1.0)
     systs_match.index = nuind.index
     return systs_match
