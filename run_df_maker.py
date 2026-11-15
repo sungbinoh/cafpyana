@@ -119,6 +119,10 @@ def run_pool(output, inputs, nproc):
         hdf_pd.put(key="split", value=split_df, format="fixed")
         print(f"Saved split info: {split_df.iloc[0]['n_split']} total splits")
 
+def grid_local_input_name(job_idx, file_idx, path):
+    base = path.split('/')[-1]
+    return 'job%d_in%04d__%s' % (job_idx, file_idx, base)
+
 def run_grid(inputfiles):
     # 1) dir/file name style
     JobStartTime = datetime.datetime.now()
@@ -150,16 +154,16 @@ def run_grid(inputfiles):
         flist = flistForEachJob[i_flist]
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu 1 -i'
+        out.write('set -euo pipefail\n')
+        local_names = []
         for i_f in range(0,len(flist)):
+            local_input = grid_local_input_name(i_flist, i_f, flist[i_f])
+            local_names.append(local_input)
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
-            if i_f == 0:
-                cmd += ' ' + flist[i_f].split('/')[-1]
-            else: 
-                cmd += ',' + flist[i_f].split('/')[-1]
-            out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
+            out.write('xrdcp -f ' + flist[i_f] + ' ' + local_input + '\n')
         out.write('ls -alh\n')
-        out.write(cmd)
+        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu 1 -i ' + ','.join(local_names)
+        out.write(cmd + '\n')
         out.close()
 
     os.system('cp ./bin/grid_executable.sh %s' %MasterJobDir)
