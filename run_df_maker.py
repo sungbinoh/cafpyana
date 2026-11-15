@@ -164,14 +164,14 @@ def run_grid(inputfiles):
 
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        cmd = f"python run_df_maker.py -c {args.config} -o {args.output}_{i_flist}.df -ncpu {grid_params['cpu']} -l {input_list_name}"
+        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu 1 -i'
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
-            local_name = _get_short_filename(flist[i_f])
-            out.write('xrdcp ' + flist[i_f] + ' ' + local_name + '\n') ## -- for checking auth
-        out.write('echo "[run_%s.sh] input list file: %s"\n'%(i_flist, input_list_name))
-        out.write('echo "[run_%s.sh] number of inputs:"\n'%(i_flist))
-        out.write('wc -l ' + input_list_name + '\n')
+            if i_f == 0:
+                cmd += ' ' + flist[i_f].split('/')[-1]
+            else: 
+                cmd += ',' + flist[i_f].split('/')[-1]
+            out.write('xrdcp ' + flist[i_f] + ' .\n') ## -- for checking auth
         out.write('ls -alh\n')
         out.write(cmd)
         out.close()
@@ -179,9 +179,9 @@ def run_grid(inputfiles):
     os.system('cp ./bin/grid_executable.sh %s' %MasterJobDir)
 
     # 5) prepare a package for xrootd
-    purelib = sysconfig.get_path('purelib') # This enables it to be XROOTD version independent, as the path can change with different versions of XROOTD
-    cp_XRootD = f"cp -r {purelib}/XRootD {MasterJobDir}"
-    cp_pyxrootd = f"cp -r {purelib}/pyxrootd {MasterJobDir}"
+    CAFPYANA_WD = os.environ['CAFPYANA_WD']
+    cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/XRootD " + MasterJobDir
+    cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/pyxrootd " + MasterJobDir
     os.system(cp_XRootD)
     os.system(cp_pyxrootd)
 
@@ -201,14 +201,14 @@ def run_grid(inputfiles):
 --role=Analysis \\
 --resource-provides="usage_model=DEDICATED,OPPORTUNISTIC" \\
 -l '+SingularityImage=\\"/cvmfs/singularity.opensciencegrid.org/fermilab/fnal-wn-el9\:9.7\\"' \\
---lines '+FERMIHTC_AutoRelease=True' --lines '+FERMIHTC_GraceMemory=2000' --lines '+FERMIHTC_GraceLifetime=3600' \\
+--lines '+FERMIHTC_AutoRelease=True' --lines '+FERMIHTC_GraceMemory=1000' --lines '+FERMIHTC_GraceLifetime=3600' \\
 --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)' \\
 --tar_file_name "dropbox://$(pwd)/bin_dir.tar" \\
--N {ngrid} \\
---disk {grid_params['disk']} \\
---cpu {grid_params['cpu']} \\
---memory {grid_params['memory']} \\
---expected-lifetime {grid_params['lifetime']} \\
+-N %d \\
+--disk 100GB \\
+--cpu 1 \\
+--memory 10GB \\
+--expected-lifetime 24h \\
 "file://$(pwd)/grid_executable.sh" \\
 "{OutputDir}" \\
 "{args.output}"'''

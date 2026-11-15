@@ -34,7 +34,7 @@ axes.titlesize: 26
 #  big swatches of them immediately adjacent may cause some discomfort for color-typical viewers.
 #  We'll see if we get complaints...)
 #                                  Black    Vermilion  Sky blue  Orange   Greenish  Purplish  Blue      Yellow
-axes.prop_cycle: cycler('color', ["#315031", "#d54c28", "#1e3f54", "#c89648", "#43140b", "#95af8b"])
+#axes.prop_cycle: cycler('color', ["#315031", "#d54c28", "#1e3f54", "#c89648", "#43140b", "#95af8b"])
 
 # Okabe-Ito variant #2
 # This one swaps the two blues so the darker one comes first.
@@ -45,7 +45,7 @@ axes.prop_cycle: cycler('color', ["#315031", "#d54c28", "#1e3f54", "#c89648", "#
 #axes.prop_cycle: cycler('color', ['000000', 'D55E00', '0072B2', 'E69F00', '009E73', 'CC79A7', '56B4E9', 'F0E442',])
 
 # We recommend Helvectica (consistent with ROOT).  The others are Helvetica "clones" in case Helvetica isn't directly available
-font.sans-serif:  Helvetica, Helvetica Neue, Nimbus Sans, Liberation Sans, Arial
+#font.sans-serif:  Helvetica, Helvetica Neue, Nimbus Sans, Liberation Sans, Arial, Franklin Gothic Medium
 
 # Cividis is Colo(u)r Vision Deficiency friendly
 image.cmap: cividis

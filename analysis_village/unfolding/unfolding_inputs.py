@@ -3,7 +3,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
-
 cmap = mpl.cm.viridis
 norm = mpl.colors.Normalize(vmin=0.0, vmax=1.0)
 

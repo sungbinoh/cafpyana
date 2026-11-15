@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 workspace_root = os.getcwd()
 sys.path.insert(0, workspace_root + "/../../")
 # Local imports
-import kinematics
+import analysis_village.gump.kinematics
 from makedf.util import *
-from gump_cuts import *
+from analysis_village.gump.gump_cuts import *
 
 import matplotlib as mpl
 
@@ -25,7 +25,7 @@ class PlotObj:
 # Colors for plots
 HAWKS_COLORS = ["#315031", "#d54c28", "#1e3f54", "#c89648", "#43140b", "#95af8b"]
 FONTSIZE = 14
-plt.style.use('dune.mplstyle')
+plt.style.use('/exp/sbnd/app/users/nrowe/cafpyana/analysis_village/gump/dune.mplstyle')
 
 def make_all_plots(df_nd, df_fd, cut_stage, mode_labels, top_labels, det_labels):
     sbnd_title = f"{cut_stage}"
