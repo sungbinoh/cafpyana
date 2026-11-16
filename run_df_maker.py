@@ -45,10 +45,10 @@ parser.add_argument('-split', dest='SplitSize', default=1.0, type=float, help="S
 args = parser.parse_args()
 
 DEFAULT_GRID_PARAMS = {
-    "memory":   "5GB",
+    "memory":   "10GB",
     "cpu":      7,
     "disk":     "100GB",
-    "lifetime": "1h",
+    "lifetime": "24h",
 }
 
 def run_pool(output, inputs, nproc):
@@ -195,23 +195,23 @@ def run_grid(inputfiles):
     os.system(tar_cmd)
 
     submitCMD = f'''jobsub_submit \\
--G sbnd \\
---auth-methods="token" \\
--e LC_ALL=C \\
---role=Analysis \\
---resource-provides="usage_model=DEDICATED,OPPORTUNISTIC" \\
--l '+SingularityImage=\\"/cvmfs/singularity.opensciencegrid.org/fermilab/fnal-wn-el9\:9.7\\"' \\
---lines '+FERMIHTC_AutoRelease=True' --lines '+FERMIHTC_GraceMemory=1000' --lines '+FERMIHTC_GraceLifetime=3600' \\
---append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)' \\
---tar_file_name "dropbox://$(pwd)/bin_dir.tar" \\
--N %d \\
---disk 100GB \\
---cpu 1 \\
---memory 10GB \\
---expected-lifetime 24h \\
-"file://$(pwd)/grid_executable.sh" \\
-"{OutputDir}" \\
-"{args.output}"'''
+    -G sbnd \\
+    --auth-methods="token" \\
+    -e LC_ALL=C \\
+    --role=Analysis \\
+    --resource-provides="usage_model=DEDICATED,OPPORTUNISTIC" \\
+    -l '+SingularityImage=\\"/cvmfs/singularity.opensciencegrid.org/fermilab/fnal-wn-el9\:9.7\\"' \\
+    --lines '+FERMIHTC_AutoRelease=True' --lines '+FERMIHTC_GraceMemory=2000' --lines '+FERMIHTC_GraceLifetime=3600' \\
+    --append_condor_requirements='(TARGET.HAS_SINGULARITY=?=true)' \\
+    --tar_file_name "dropbox://$(pwd)/bin_dir.tar" \\
+    -N {ngrid} \\
+    --disk {grid_params['disk']} \\
+    --cpu {grid_params['cpu']} \\
+    --memory {grid_params['memory']} \\
+    --expected-lifetime {grid_params['lifetime']} \\
+    "file://$(pwd)/grid_executable.sh" \\
+    "{OutputDir}" \\
+    "{args.output}"'''
 
     print(submitCMD)
     os.system(submitCMD)
