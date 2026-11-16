@@ -808,12 +808,59 @@ OFFBEAM_GATES_PER_5e12POT = {
 def _mc_pot_scale(detector, ismc):
     return SBND_MC_POT_SCALE if (ismc and detector == "SBND") else 1.
 
+# Generator-truth key for load_one(dedup_truth=True). Some productions re-use
+# generator events -- ICARUSRun4_GIBUU.df (sbn-rewgted-26) carries ~5% of its
+# neutrinos twice, in different __ntuple's with different (run, evt), so the
+# (run, evt, nu_E0) dedup does not see them. Two neutrinos with the same energy,
+# flavour, vertex and time are the same generated interaction. GENIE overlay is
+# nearly clean (ICARUSRun4_SpringMCOverlay_rewgt_0: 102 events of ~900k, repeated
+# across splits).
+TRUTH_DEDUP_COLS = ["nu_E", "pdg", "pos_x", "pos_y", "pos_z", "time"]
+
+_TRUTH_DUP_MEMO = {}
+
+def truth_dup_events(fname, mcname=MC):
+    """Events of `fname` holding a neutrino whose generator truth (TRUTH_DEDUP_COLS)
+    appears more than once anywhere in the file, across all splits.
+
+    Returns a MultiIndex of (idf, __ntuple, entry). Every occurrence is listed, not
+    just the extras. Memoized per file (path, size, mtime), so load() pays for
+    reading the mcnu tables once rather than once per split.
+    """
+    st = os.stat(fname)
+    memo_key = (os.path.abspath(fname), st.st_size, int(st.st_mtime), mcname)
+    if memo_key in _TRUTH_DUP_MEMO:
+        return _TRUTH_DUP_MEMO[memo_key]
+
+    with h5py.File(fname, "r") as f:
+        ndf = len([k for k in f.keys() if k.startswith("hdr")])
+        idfs = [i for i in range(ndf) if (mcname % i) in f]
+
+    def col(m, c):
+        v = m[c]
+        return v.iloc[:, 0] if isinstance(v, pd.DataFrame) else v
+
+    keys = {}
+    for i in idfs:
+        m = pd.read_hdf(fname, mcname % i)
+        keys[i] = pd.DataFrame({c: col(m, c) for c in TRUTH_DEDUP_COLS}, index=m.index)
+        del m
+    if keys:
+        allk = pd.concat(keys, names=["idf"])
+        dup = allk.duplicated(keep=False).to_numpy()
+        bad = allk.index[dup].droplevel(-1).unique()
+    else:
+        bad = pd.MultiIndex.from_arrays([[], [], []], names=["idf", "__ntuple", "entry"])
+    _TRUTH_DUP_MEMO[memo_key] = bad
+    return bad
+
 def load_one(fname, idf,
     detector=None, # One of SBND, ICARUS, ICARUS Run4
     include_syst=True, nuniv=100, spline=False, xsec_univ=False, xsec_spline=False,# systematic handling
     reweight_aFF=False, pot_univ=False, flux_univ=True, sep_flux_univ=False, g4_univ=True, sep_g4_univ=False,
     pot_spline=False, detvar_spline=False, spline_dir="rwt_outputs",
     load_truth=True, load_crt=False, load_evtrec=False, match_Enu=True, # load extra information
+    dedup_truth=True, # drop every event whose generator truth (TRUTH_DEDUP_COLS) repeats in the file (MC only)
     offbeampot=False, # POT handling
     data_quality=True, beam_quality=True, # data-only cuts: good-run list (on- and off-beam) and per-spill beam quality (on-beam), see dataquality.py
     preselection=None, # apply preselection cut
@@ -834,7 +881,8 @@ def load_one(fname, idf,
         with h5py.File(fname, "r") as _f:
             _is_data = (mcname % idf) not in _f
         data_cut_key = dict(beam_quality=beam_quality, data_quality=data_quality,
-                            run_list=dq.RUN_LIST_HASH) if _is_data else dict(mc_pe_scale=MC_PE_SCALE[detector], g4_unc_scale=G4_UNC_SCALE)
+                            run_list=dq.RUN_LIST_HASH) if _is_data else dict(mc_pe_scale=MC_PE_SCALE[detector], g4_unc_scale=G4_UNC_SCALE,
+                                                                              dedup_truth=dedup_truth)
         # the cached off-beam POT depends on the gates/POT constant (on-beam unchanged)
         if offbeampot:
             data_cut_key["offbeam_gates_per_5e12pot"] = OFFBEAM_GATES_PER_5e12POT[detector]
@@ -988,6 +1036,25 @@ def load_one(fname, idf,
     print(f"[{os.path.basename(fname)} idf={idf}] dedup: dropped "
           f"{n_dup_pairs} duplicated {tuple(dedup_cols)} keys ({n_dup_rows} hdr rows)")
 
+    # DROP DUPLICATED GENERATOR EVENTS
+    # Same generated interaction appearing more than once in the file (in this or
+    # another split), identified from the mcnu truth -- see TRUTH_DEDUP_COLS. Drop
+    # every event holding such a neutrino, all occurrences, as above. Disjoint from
+    # the (run, evt) drop above since it acts on what survived it.
+    n_truth_rows = 0
+    if dedup_truth and _has_mcnu:
+        bad = truth_dup_events(fname, mcname)
+        bad = bad[bad.get_level_values(0) == idf].droplevel(0)
+        evt_ind = lambda d: pd.MultiIndex.from_arrays(
+            [d.index.get_level_values("__ntuple"), d.index.get_level_values("entry")])
+        drop_match = evt_ind(match).isin(bad)
+        n_truth_rows = int(drop_match.sum())
+        if n_truth_rows > 0:
+            match = match[~drop_match]
+            df = df[~evt_ind(df).isin(bad)]
+        print(f"[{os.path.basename(fname)} idf={idf}] truth dedup: dropped "
+              f"{n_truth_rows} hdr rows with a repeated generator event {tuple(TRUTH_DEDUP_COLS)}")
+
     match = match.set_index(match_ind, append=True).droplevel([0,1]).sort_index()
 
     # LOAD POT
@@ -1022,8 +1089,8 @@ def load_one(fname, idf,
     # makes -- which is the best available: for MC the POT sits only on the
     # first_in_subrun records, so filtering `hdr` directly would charge the full
     # subrun POT to whichever record happened to be dropped.
-    if n_dup_rows > 0:
-        pot *= 1. - n_dup_rows / len(hdr)
+    if n_dup_rows + n_truth_rows > 0:
+        pot *= 1. - (n_dup_rows + n_truth_rows) / len(hdr)
 
 
     # LOAD TRUTH
