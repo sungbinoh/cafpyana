@@ -20,7 +20,17 @@ def _read_wgt_map_vals(globalTree, wgt_names):
             raise ValueError("wgts.map: expected bytecount at byte %i" % pos)
         return c & ~0x40000000
 
-    d = globalTree["global/wgts/wgts.map"].basket(0).data.tobytes()
+    # Read basket 0 by hand rather than with TBranch.basket(): that passes the
+    # numpy-int fBasketSeek through to the XRootD (fsspec) source, which
+    # rejects non-python-int offsets
+    branch = globalTree["global/wgts/wgts.map"]
+    start = int(branch.member("fBasketSeek")[0])
+    stop = start + int(branch.basket_compressed_bytes(0))
+    chunk = branch.file.source.chunk(start, stop)
+    basket = uproot.models.TBasket.Model_TBasket.read(
+        chunk, uproot.source.cursor.Cursor(start), {"basket_num": 0},
+        branch.file, branch.file, branch)
+    d = basket.data.tobytes()
     end = 4 + bytecount(0)
     vers, = struct.unpack(">H", d[4:6])
     if not vers & 0x4000:
