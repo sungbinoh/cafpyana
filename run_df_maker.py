@@ -164,7 +164,7 @@ def run_grid(inputfiles):
 
         out = open(MasterJobDir + '/run_%s.sh'%(i_flist),'w')
         out.write('#!/bin/bash\n')
-        cmd = 'python run_df_maker.py -c ' + args.config + ' -o ' + args.output + '_%d'%i_flist + '.df -ncpu 1 -i'
+        cmd = f"python run_df_maker.py -c {args.config} -o {args.output}_{i_flist}.df -ncpu 1 -split {args.SplitSize} -i"
         for i_f in range(0,len(flist)):
             out.write('echo "[run_%s.sh] input %d : %s"\n'%(i_flist, i_f, flist[i_f]))
             if i_f == 0:
@@ -217,7 +217,7 @@ def run_grid(inputfiles):
     os.system(submitCMD)
     
     # go back to working dir
-    os.chdir(CAFPYANA_WD)
+    os.chdir(os.environ['CAFPYANA_WD'])
     
 if __name__ == "__main__":
     printhelp = ((args.inputfiles == "" and args.inputfilelist == "") or args.config == "" or args.output == "")
