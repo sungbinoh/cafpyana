@@ -179,9 +179,9 @@ def run_grid(inputfiles):
     os.system('cp ./bin/grid_executable.sh %s' %MasterJobDir)
 
     # 5) prepare a package for xrootd
-    CAFPYANA_WD = os.environ['CAFPYANA_WD']
-    cp_XRootD = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/XRootD " + MasterJobDir
-    cp_pyxrootd = "cp -r " + CAFPYANA_WD + "/envs/xrootd-5.6.9/build/lib.linux-x86_64-cpython-310/pyxrootd " + MasterJobDir
+    purelib = sysconfig.get_path('purelib')
+    cp_XRootD = f"cp -r {purelib}/XRootD {MasterJobDir}"
+    cp_pyxrootd = f"cp -r {purelib}/pyxrootd {MasterJobDir}"
     os.system(cp_XRootD)
     os.system(cp_pyxrootd)
 
