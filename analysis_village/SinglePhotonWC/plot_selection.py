@@ -63,7 +63,7 @@ def keep_marker(ax, thr, sense, **kw):
             ha="left" if sense == ">" else "right", va="center", fontsize=9.5, **kw)
 
 
-def stack(ax, q, var, bins, sc, logy=False):
+def stack(ax, q, var, bins, sc):
     x = q[var]
     out = ((x < bins[0]) | (x >= bins[-1])).sum()
     if out:
@@ -75,8 +75,6 @@ def stack(ax, q, var, bins, sc, logy=False):
     lo, hi = (n - np.sqrt(n)) * sc, (n + np.sqrt(n)) * sc     # MC statistics on the total, shaded
     ax.fill_between(bins, np.r_[lo, lo[-1]], np.r_[hi, hi[-1]], step="post", facecolor="none", edgecolor="#3d3c39",
                     hatch="////", linewidth=0, label="MC stat. uncertainty")
-    if logy:
-        ax.set_yscale("log")
     ax.grid(axis="y", alpha=0.25, lw=0.5)
 
 
@@ -100,14 +98,13 @@ def plot_scores(w, chain, sc, pot, out):
     axs = axs.ravel()
     for a, (cut, var, lab, bins, thr, sense) in zip(axs, SCORES):
         q = w[cuts.passes(w, {k: v for k, v in chain.items() if k != cut})]
-        stack(a, q, var, bins, sc, logy=True)
+        stack(a, q, var, bins, sc)
         keep_marker(a, thr, sense, color="#222")
         sig, keep = cuts.is_signal_cat(q.cat), chain[cut](q)
         a.set_title("%s  (cut %s %g)\nall other cuts applied: this cut keeps %.0f%% of signal, %.0f%% of background"
                     % (lab, sense, thr, 100 * keep[sig].mean(), 100 * keep[~sig].mean()), fontsize=9.5, loc="left")
         a.set_xlabel(var)
         a.set_ylabel("candidates / 1e20 POT")
-        a.set_ylim(bottom=3)
     h, l = axs[0].get_legend_handles_labels()
     axs[-1].axis("off")
     axs[-1].legend(h, [x.rsplit(" (", 1)[0] for x in l], frameon=False, fontsize=10, loc="center")
@@ -139,6 +136,16 @@ SEQUENTIAL = [
 SIG_BKG = [("signal", "#2a78d6"), ("background", "#a3a29d")]
 
 
+def signal_scale(smax, bmax):
+    """1, 2, 5, 10, ... so the signal peak reaches about half the background
+    peak on a linear axis."""
+    if smax <= 0 or smax >= 0.3 * bmax:
+        return 1
+    k = 0.5 * bmax / smax
+    e = 10 ** np.floor(np.log10(k))
+    return max(1, max(m * e for m in (1, 2, 5) if m * e <= k))
+
+
 def plot_sequential(w, chain, sc, pot, out):
     """Each cut's variable for the candidates that passed every earlier cut,
     signal and background stacked; the title gives what the cut removes."""
@@ -153,9 +160,12 @@ def plot_sequential(w, chain, sc, pot, out):
         x = (var(q) if callable(var) else q[var])
         x = np.clip(np.asarray(x, float), bins[0], bins[-1] - 1e-6)
         sig = cuts.is_signal_cat(q.cat).to_numpy()
-        a.hist([x[sig], x[~sig]], bins=bins, stacked=True, color=[c for _, c in SIG_BKG], edgecolor="white", linewidth=0.6,
-               weights=[np.full(sig.sum(), sc), np.full((~sig).sum(), sc)], label=[n for n, _ in SIG_BKG])
-        a.set_yscale("log")
+        hb, _, _ = a.hist(x[~sig], bins=bins, color=SIG_BKG[1][1], edgecolor="white", linewidth=0.6,
+                          weights=np.full((~sig).sum(), sc), label="background")
+        hs, _ = np.histogram(x[sig], bins, weights=np.full(sig.sum(), sc))
+        k = signal_scale(hs.max(), hb.max())
+        a.stairs(hs * k, bins, color=SIG_BKG[0][1], lw=2.5, label="signal" + (" × %g" % k if k > 1 else ""))
+        a.legend(fontsize=12, loc="upper right")
         a.grid(axis="y", alpha=0.25, lw=0.5)
         if thr is None:   # one_shower: keep the == 1 bin
             keep = x == 1
@@ -172,7 +182,9 @@ def plot_sequential(w, chain, sc, pot, out):
         a.set_ylabel("candidates / 1e20 POT")
     for a in axs[len(SEQUENTIAL):]:
         a.axis("off")
-    axs[len(SEQUENTIAL)].legend(*axs[0].get_legend_handles_labels(), frameon=False, fontsize=13, loc="center")
+    from matplotlib.patches import Patch
+    axs[len(SEQUENTIAL)].legend([Patch(color=SIG_BKG[1][1]), plt.Line2D([], [], color=SIG_BKG[0][1], lw=2.5)],
+                                ["background", "signal (scaled up where the panel says × k)"], frameon=False, fontsize=13, loc="center")
     fig.suptitle("Selection variables in cut order: each panel has every earlier cut applied (%.2e POT). "
                  "Candidates; wc_valid and vertex are not shown." % pot, fontsize=12)
     fig.tight_layout(rect=(0, 0, 1, 0.965))
