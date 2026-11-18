@@ -176,32 +176,44 @@ PRESELECTION = {
 # the same purity). The cuts are ANDed; the order follows the MicroBooNE BDT
 # cascade, each BDT trained on events passing the previous ones.
 
-WC_NUMU_SCORE_MAX = 0.4  # best eff x purity (Nov14 scan)
-UB_NUMU_MIN = 1.0      # MicroBooNE: 0.4; best of the Nov14 scan
-UB_OTHER_MIN = 0.2     # as MicroBooNE; best of the Nov14 scan
-UB_NCPI0_MIN = 0.0     # highest purity on both file halves (contained signal, Nov14; MicroBooNE: -0.05)
-WC_NUE_SCORE_MAX = 7.0  # MicroBooNE's nue selection is nue_score > 7
+# Score thresholds per tuning. Tuned on the Nov18 sample (new vertexing),
+# both file halves: eff x purity of the worse half, NC pi0 purity-first.
+SCORE_CUTS = dict(wc_numu=-0.1, ub_numu=1.2, ub_other=-0.1, ub_ncpi0=0.05, wc_nue=6.5)
+# Previous tuning (Nov14, on the Nov11 sample with the old vertexing)
+SCORE_CUTS_NOV14 = dict(wc_numu=0.4, ub_numu=1.0, ub_other=0.2, ub_ncpi0=0.0, wc_nue=7.0)
+
+WC_NUMU_SCORE_MAX = SCORE_CUTS["wc_numu"]
+UB_NUMU_MIN = SCORE_CUTS["ub_numu"]     # MicroBooNE: 0.4
+UB_OTHER_MIN = SCORE_CUTS["ub_other"]   # MicroBooNE: 0.2
+UB_NCPI0_MIN = SCORE_CUTS["ub_ncpi0"]   # MicroBooNE: -0.05
+WC_NUE_SCORE_MAX = SCORE_CUTS["wc_nue"]  # MicroBooNE's nue selection is nue_score > 7
 BACK_DIST_MIN = 80.0   # cm; removes 24/25 dirt single photons for ~9% of signal (Nov8)
 
-UB_SELECTION = {
-    "wc_numu": lambda df: df.numu_score < WC_NUMU_SCORE_MAX,
-    "ub_numu": lambda df: df.ub_numu > UB_NUMU_MIN,
-    "ub_other": lambda df: df.ub_other > UB_OTHER_MIN,
-    "ub_ncpi0": lambda df: df.ub_ncpi0 > UB_NCPI0_MIN,
-    "wc_nue": lambda df: df.nue_score < WC_NUE_SCORE_MAX,
-    # one EM shower > 20 MeV at the vertex passing the SP tagger's first check
-    "one_shower": lambda df: df.shw_sp_n_20br1_showers == 1,
-    # no shower labelled mu/pi/p: a second photon often gets a mu/pi start
-    # segment, and one_shower does not count it
-    "em_showers": lambda df: df.n_shower <= df.n_em,
-    # active volume behind the shower start along its axis; short for dirt
-    "back_traced": lambda df: df.shw1_back_dist > BACK_DIST_MIN,
-}
+
+def ub_selection(th=SCORE_CUTS):
+    return {
+        "wc_numu": lambda df: df.numu_score < th["wc_numu"],
+        "ub_numu": lambda df: df.ub_numu > th["ub_numu"],
+        "ub_other": lambda df: df.ub_other > th["ub_other"],
+        "ub_ncpi0": lambda df: df.ub_ncpi0 > th["ub_ncpi0"],
+        "wc_nue": lambda df: df.nue_score < th["wc_nue"],
+        # one EM shower > 20 MeV at the vertex passing the SP tagger's first check
+        "one_shower": lambda df: df.shw_sp_n_20br1_showers == 1,
+        # no shower labelled mu/pi/p: a second photon often gets a mu/pi start
+        # segment, and one_shower does not count it
+        "em_showers": lambda df: df.n_shower <= df.n_em,
+        # active volume behind the shower start along its axis; short for dirt
+        "back_traced": lambda df: df.shw1_back_dist > BACK_DIST_MIN,
+    }
+
+
+UB_SELECTION = ub_selection()
 
 CHAINS = {
     "presel": PRESELECTION,
     "uboone": UB_SELECTION,
     "presel+uboone": {**PRESELECTION, **UB_SELECTION},
+    "presel+uboone_nov14": {**PRESELECTION, **ub_selection(SCORE_CUTS_NOV14)},
 }
 
 
