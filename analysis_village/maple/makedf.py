@@ -962,6 +962,8 @@ def fetch_candidates(S, P, do_calo_syst, use_chi2=True, do_alt_chi2=False,
     found_proton = _reindex(is_prot_cand.groupby(level=[0, 1]).any(), S.index, False).astype(bool)
 
     recoE = np.where(has_mu & found_proton, E_mu + proton_ke_sum, -999.0)
+    # number of proton candidates summed into recoE (each carries one BE)
+    n_prot_calo = _reindex(is_prot_cand.groupby(level=[0, 1]).sum(), S.index, 0).astype(int)
 
     # ------------------------------------------------------------------
     # psum: the summed proton-candidate system -- vector-sum momentum,
@@ -1031,6 +1033,7 @@ def fetch_candidates(S, P, do_calo_syst, use_chi2=True, do_alt_chi2=False,
     p_E = np.sqrt(pro.p_proton**2 + PROTON_MASS**2)
 
     S["nu_E_calo"] = recoE
+    S["nu_E_calo_nprot"] = n_prot_calo
     S["mu_len"] = mu.len
     S["mu_dist_start"] = mu.dist_start
     S["mu_prim_pfp"] = mu.prim_pfp
