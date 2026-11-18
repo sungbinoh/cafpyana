@@ -188,6 +188,16 @@ UB_OTHER_MIN = SCORE_CUTS["ub_other"]   # MicroBooNE: 0.2
 UB_NCPI0_MIN = SCORE_CUTS["ub_ncpi0"]   # MicroBooNE: -0.05
 WC_NUE_SCORE_MAX = SCORE_CUTS["wc_nue"]  # MicroBooNE's nue selection is nue_score > 7
 BACK_DIST_MIN = 80.0   # cm; removes 24/25 dirt single photons for ~9% of signal (Nov8)
+SECOND_EM_MAX = 20.0   # MeV; the SP tagger's shower threshold
+
+
+def no_second_em(df):
+    """No second EM shower above SECOND_EM_MAX anywhere in the candidate,
+    attached to the main vertex or not (one_shower only counts showers
+    Wire-Cell associated with the vertex); with E_em_all_2 (newer
+    dataframes) also the unclear-link leftovers."""
+    col = "E_em_all_2" if "E_em_all_2" in df else "E_em_2"
+    return ~(df[col] > SECOND_EM_MAX)
 
 
 def ub_selection(th=SCORE_CUTS):
@@ -202,6 +212,7 @@ def ub_selection(th=SCORE_CUTS):
         # no shower labelled mu/pi/p: a second photon often gets a mu/pi start
         # segment, and one_shower does not count it
         "em_showers": lambda df: df.n_shower <= df.n_em,
+        "no_second_em": no_second_em,
         # active volume behind the shower start along its axis; short for dirt
         "back_traced": lambda df: df.shw1_back_dist > BACK_DIST_MIN,
     }

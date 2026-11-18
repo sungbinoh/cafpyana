@@ -131,6 +131,8 @@ SEQUENTIAL = [
 ] + SCORES + [
     ("one_shower", "shw_sp_n_20br1_showers", "SP-tagger showers (shw_sp_n_20br1_showers)", np.arange(-0.5, 6.5), None, "== 1"),
     ("em_showers", lambda df: df.n_shower - df.n_em, "showers labelled $\\mu/\\pi/p$ (n_shower $-$ n_em)", np.arange(-0.5, 5.5), 0.5, "<"),
+    ("no_second_em", lambda df: (df.E_em_all_2 if "E_em_all_2" in df else df.E_em_2).fillna(0), "second EM shower anywhere in the candidate [MeV] (none: 0)",
+     np.arange(0, 201, 10), cuts.SECOND_EM_MAX, "<"),
     ("back_traced", "shw1_back_dist", "counted shower traced back to the AV wall [cm]", np.linspace(0, 500, 26), cuts.BACK_DIST_MIN, ">"),
 ]
 SIG_BKG = [("signal", "#2a78d6"), ("background", "#a3a29d")]

@@ -9,7 +9,8 @@ Columns:
     row (reason 0 main, 1 demoted main; codes in make_wc_events.py)
   * T_kine particles connected to the candidate (kine_energy_included ==
     1): counts per PID and leading energies; the unclear-link leftovers
-    apart (n_unclear, E_unclear)
+    apart (n_unclear, E_unclear, E_em_unclear_1); E_em_all_2 is the second
+    EM energy over both
   * pf_*: e/gamma counts from the particle-flow tree (MC only, see _pf)
   * T_segment / T_rec_charge counts and lengths
   * track particles by length and dQ/dx (see _tracks): the longest track,
@@ -69,6 +70,9 @@ def _particles(f, index):
         Ei = E[conn & (pdg == PID[name])]
         T["E_%s_1" % name] = _nth(Ei, 1)
     T["E_em_2"] = _nth(E[conn & (pdg == 11)], 2)
+    # every EM particle, also the unclear-link leftovers (not attached to the candidate's particle flow)
+    T["E_em_all_2"] = _nth(E[pdg == 11], 2)
+    T["E_em_unclear_1"] = _nth(E[~conn & (pdg == 11)], 1)
     return T
 
 
