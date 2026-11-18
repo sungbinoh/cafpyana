@@ -12,6 +12,8 @@ Columns:
     apart (n_unclear, E_unclear)
   * pf_*: e/gamma counts from the particle-flow tree (MC only, see _pf)
   * T_segment / T_rec_charge counts and lengths
+  * track particles by length and dQ/dx (see _tracks): the longest track,
+    the longest muon-labelled one, and the longest MIP-like ones
   * leading EM shower from its charge points (see _shower_geom): start,
     axis, shw1_back_dist (back along the axis to the AV boundary; short for
     a photon entering from outside), vtx_other_q, other_q_frac
@@ -31,6 +33,10 @@ PID = {"em": 11, "muon": 13, "pion": 211, "proton": 2212, "nopid": 0}
 TAGGER_SKIP = {"run", "subrun", "event", "nu_index", "sel_cluster_id"}
 SHW_AXIS_RADIUS = 30.0   # cm, points used for the shower axis
 VTX_RADIUS = 5.0         # cm, vertex-activity sphere
+DQDX_MIP = 3350.0        # T_rec_charge q/nq of a MIP: median of true muon tracks > 10 cm (Nov16)
+MIP_LIKE_MAX = 1.6       # MIPs; protons sit at ~3 (16% quantile ~2.1), muons at 1 (84% ~1.2)
+DQDX_START_CM = 4.0      # cm, start of a track for mu1_dqdx_start
+DQDX_END_CM = 3.0        # cm, end of a track for mu1_end_ratio (Bragg peak)
 
 
 def _by_nu(df):
@@ -203,6 +209,68 @@ def _shower_geom(f, D):
     return out
 
 
+def _track_profile(xyz, dqdx, vtx):
+    """(median, first-DQDX_START_CM median, last-DQDX_END_CM median / median)
+    of a track's dQ/dx, ordered from the end nearer the vertex."""
+    c = xyz.mean(0)
+    u = np.linalg.svd(xyz - c, full_matrices=False)[2][0]
+    t = (xyz - c) @ u
+    if abs(t.min() - (vtx - c) @ u) > abs(t.max() - (vtx - c) @ u):
+        t = -t
+    o = np.argsort(t)
+    d = np.r_[0, np.cumsum(np.linalg.norm(np.diff(xyz[o], axis=0), axis=1))]
+    q = dqdx[o]
+    med = np.median(q)
+    return med, np.median(q[d <= DQDX_START_CM]), np.median(q[d >= d[-1] - DQDX_END_CM]) / med
+
+
+def _tracks(f, D):
+    """Track particles (connected, not showers) by length and dQ/dx, from the
+    T_rec_charge fit points (q / nq, file charge units per cm; DQDX_MIP is
+    the median of true muon tracks):
+      trk1_len, trk1_dqdx, trk1_pdg       longest track of any label
+      mu1_len, mu1_dqdx, mu1_dqdx_start, mu1_end_ratio
+                                          longest muon-labelled track
+      mu_mip1_len                         longest muon-labelled track with a
+                                          MIP-like median (< MIP_LIKE_MAX MIPs)
+      mip1_len                            the same for any label"""
+    cols = ["trk1_len", "trk1_dqdx", "trk1_pdg", "mu1_len", "mu1_dqdx", "mu1_dqdx_start", "mu1_end_ratio",
+            "mu_mip1_len", "mip1_len"]
+    out = pd.DataFrame(np.nan, index=D.index, columns=cols)
+    k = wc.make_wc_kineparticledf(f)
+    k = k[(k.kine_energy_included == 1) & (k.kine_particle_is_shower == 0)]
+    if not len(k):
+        return out
+    seg = wc.make_wc_segmentdf(f, ["nu_index", "segment_id", "kine_index", "length_cm"]).reset_index("row", drop=True)
+    seg = seg[seg.nu_index >= 0]
+    length = seg.groupby([seg.index, "nu_index", "kine_index"]).length_cm.sum()
+    sid = seg.set_index(["nu_index", "segment_id"], append=True).kine_index
+    ch = wc.make_wc_chargedf(f, ["x", "y", "z", "q", "nq", "nu_index", "real_cluster_id"]).reset_index("row", drop=True)
+    ch = ch[(ch.nu_index >= 0) & (ch.nq > 0)]
+    ch["kine_index"] = sid.reindex(pd.MultiIndex.from_arrays([ch.index, ch.nu_index, ch.real_cluster_id])).values
+    ch = ch[ch.kine_index.notna()]
+    rows = []
+    for (entry, nu, ki), g in ch.groupby([ch.index, "nu_index", "kine_index"]):
+        key = (entry, nu, int(ki))
+        if key not in k.index or len(g) < 3 or (entry, nu) not in D.index:
+            continue
+        vtx = D.loc[(entry, nu), ["nu_x", "nu_y", "nu_z"]].to_numpy(float)
+        med, start, end = _track_profile(g[["x", "y", "z"]].to_numpy(float), (g.q / g.nq).to_numpy(float), vtx)
+        rows.append((entry, nu, abs(int(k.loc[key, "kine_particle_type"])), length.get(key, 0.0), med, start, end))
+    if not rows:
+        return out
+    t = pd.DataFrame(rows, columns=["entry", "nu_index", "pdg", "len", "dqdx", "dqdx_start", "end_ratio"])
+    t = t.sort_values("len", ascending=False)
+    mip = t.dqdx < MIP_LIKE_MAX * DQDX_MIP
+    first = lambda m: t[m].groupby(["entry", "nu_index"]).first()
+    a, mu = first(np.ones(len(t), bool)), first(t.pdg == PID["muon"])
+    out["trk1_len"], out["trk1_dqdx"], out["trk1_pdg"] = a.len, a.dqdx, a.pdg
+    out["mu1_len"], out["mu1_dqdx"], out["mu1_dqdx_start"], out["mu1_end_ratio"] = mu.len, mu.dqdx, mu.dqdx_start, mu.end_ratio
+    out["mu_mip1_len"] = first((t.pdg == PID["muon"]) & mip).len
+    out["mip1_len"] = first(mip).len
+    return out
+
+
 def make_wc_candidate_df(f):
     extra = [l for l in wc.wc_tagger_leaves(f) if l not in TAGGER_SKIP and l not in wc.wctaggerbranches]
     nu = wc.make_wc_nudf(f, tagger_leaves=wc.wctaggerbranches + extra)
@@ -228,4 +296,4 @@ def make_wc_candidate_df(f):
     D = D.join(b)
 
     D = D.join(_particles(f, D.index)).join(_pf(f, D.index)).join(_segments(f, D.index)).join(_charge(f, D.index))
-    return D.join(_shower_geom(f, D))
+    return D.join(_shower_geom(f, D)).join(_tracks(f, D))
