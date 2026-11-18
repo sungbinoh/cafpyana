@@ -13,7 +13,7 @@ NEUTRON_MASS = 0.939565
 MUON_MASS = 0.105658
 PION_MASS = 0.139570
 MASS_A = 22*NEUTRON_MASS + 18*PROTON_MASS - 0.34381
-BE = 0.0295 # note: maple had a difference value for this... 0.0309
+BE = 0.0323 # note: was 0.0295 through sbn-rewgted-28; maple had a different value for this... 0.0309
 MASS_Ap = MASS_A - NEUTRON_MASS + BE
 
 def neutrino_energy(mu_p, mu_dir, p_p, p_dir, p_E, n_proton=None, BE=BE):
@@ -42,7 +42,7 @@ def neutrino_energy_ccqe(mu_p, mu_costh, BE=BE):
     often written as E_B^2 - 2 M_n E_B + m_mu^2 + (M_n^2 - M_p^2), which is
     algebraically the same thing.
 
-    NB: E_B defaults to this module's BE (29.5 MeV) rather than MiniBooNE's
+    NB: E_B defaults to this module's BE (32.3 MeV) rather than MiniBooNE's
     34 MeV, so that E_nu^QE and neutrino_energy() share one binding energy and
     the binding-energy systematic moves both together.
 
