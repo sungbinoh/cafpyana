@@ -154,9 +154,10 @@ def plot_sequential(w, chain, sc, pot, out):
     """Each cut's variable for the candidates that passed every earlier cut,
     signal and background stacked; the title gives what the cut removes."""
     names = list(chain)
-    fig, axs = plt.subplots(3, 4, figsize=(30, 17))
-    axs = axs.ravel()
     seq = [x for x in SEQUENTIAL if x[0] in chain]
+    nrow = -(-(len(seq) + 1) // 4)   # one extra panel for the legend
+    fig, axs = plt.subplots(nrow, 4, figsize=(30, 5.7 * nrow))
+    axs = axs.ravel()
     for a, (cut, var, lab, bins, thr, sense) in zip(axs, seq):
         before = names[names.index(cut) - 1]
         q = w[cuts.passes(w, chain, upto=before)]
