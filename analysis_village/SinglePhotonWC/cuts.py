@@ -200,12 +200,34 @@ def no_second_em(df):
     return ~(df[col] > SECOND_EM_MAX)
 
 
-def ub_selection(th=SCORE_CUTS):
+# Narrow counted shower instead of the uB NC pi0 BDT: two photons merged into
+# one shower are wide. Energy-dependent limit on the 68% charge opening angle
+# plus an energy cap (merged pi0 pairs). Nov18_2: eff 17.6 -> 20.1%, purity
+# 22.9 -> 28.6% against the BDT > 0.05; smooth around this point in both halves.
+SHOWER_A68_AT_400MEV = 10.0   # deg
+SHOWER_A68_SLOPE = 12.0       # deg per GeV of shw_sp_energy
+SHOWER_E_MAX = 1200.0         # MeV
+
+
+def a68_limit(E):
+    return SHOWER_A68_AT_400MEV + SHOWER_A68_SLOPE * (E - 400.0) / 1000.0
+
+
+def narrow_shower(df):
+    """shw1_a68 below a68_limit(shw_sp_energy) (no shape: passes) and
+    shw_sp_energy < SHOWER_E_MAX."""
+    return ~(df.shw1_a68 >= a68_limit(df.shw_sp_energy)) & (df.shw_sp_energy < SHOWER_E_MAX)
+
+
+def ub_selection(th=SCORE_CUTS, ncpi0="shape"):
+    """ncpi0: "shape" (narrow_shower) or "bdt" (the uB NC pi0 BDT)."""
+    pi0 = ({"narrow_shower": narrow_shower} if ncpi0 == "shape"
+           else {"ub_ncpi0": lambda df: df.ub_ncpi0 > th["ub_ncpi0"]})
     return {
         "wc_numu": lambda df: df.numu_score < th["wc_numu"],
         "ub_numu": lambda df: df.ub_numu > th["ub_numu"],
         "ub_other": lambda df: df.ub_other > th["ub_other"],
-        "ub_ncpi0": lambda df: df.ub_ncpi0 > th["ub_ncpi0"],
+        **pi0,
         "wc_nue": lambda df: df.nue_score < th["wc_nue"],
         # one EM shower > 20 MeV at the vertex passing the SP tagger's first check
         "one_shower": lambda df: df.shw_sp_n_20br1_showers == 1,
@@ -224,7 +246,8 @@ CHAINS = {
     "presel": PRESELECTION,
     "uboone": UB_SELECTION,
     "presel+uboone": {**PRESELECTION, **UB_SELECTION},
-    "presel+uboone_nov14": {**PRESELECTION, **ub_selection(SCORE_CUTS_NOV14)},
+    "presel+uboone_ncpi0bdt": {**PRESELECTION, **ub_selection(ncpi0="bdt")},
+    "presel+uboone_nov14": {**PRESELECTION, **ub_selection(SCORE_CUTS_NOV14, ncpi0="bdt")},
 }
 
 

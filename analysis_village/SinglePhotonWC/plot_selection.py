@@ -52,6 +52,8 @@ SCORES = [   # cut name in cuts.UB_SELECTION, column, label, bins, threshold, ke
     ("ub_numu", "ub_numu", "uB $\\nu_\\mu$ BDT", np.arange(-3.6, 4.01, 0.2), cuts.UB_NUMU_MIN, ">"),
     ("ub_other", "ub_other", "uB 'other' BDT", np.arange(-4.4, 3.01, 0.2), cuts.UB_OTHER_MIN, ">"),
     ("ub_ncpi0", "ub_ncpi0", "uB NC $\\pi^0$ BDT", np.arange(-3.0, 3.51, 0.25), cuts.UB_NCPI0_MIN, ">"),
+    ("narrow_shower", lambda df: df.shw1_a68 - cuts.a68_limit(df.shw_sp_energy), "shower 68% angle above its energy-dependent limit [deg]",
+     np.arange(-15, 30.1, 1.5), 0, "<"),
     ("wc_nue", "nue_score", "Wire-Cell $\\nu_e$ score", np.arange(-15.5, 17.6, 1.0), cuts.WC_NUE_SCORE_MAX, "<"),
 ]
 
@@ -64,10 +66,10 @@ def keep_marker(ax, thr, sense, **kw):
 
 
 def stack(ax, q, var, bins, sc):
-    x = q[var]
+    x = var(q) if callable(var) else q[var]
     out = ((x < bins[0]) | (x >= bins[-1])).sum()
     if out:
-        print("warning: %d candidates outside the %s range, not drawn" % (out, var))
+        print("warning: %d candidates outside the range, not drawn" % out)
     vals = [x[q.cat.isin(cs)] for _, cs, _ in GROUPS]
     ax.hist(vals, bins=bins, stacked=True, color=[c for *_, c in GROUPS], weights=[np.full(len(v), sc) for v in vals],
             label=["%s (%.0f)" % (g, len(v) * sc) for (g, *_), v in zip(GROUPS, vals)], edgecolor="white", linewidth=0.6)
@@ -96,14 +98,14 @@ def plot_energy(w, chain, sc, out):
 def plot_scores(w, chain, sc, pot, out):
     fig, axs = plt.subplots(2, 3, figsize=(18, 10))
     axs = axs.ravel()
-    for a, (cut, var, lab, bins, thr, sense) in zip(axs, SCORES):
+    for a, (cut, var, lab, bins, thr, sense) in zip(axs, [x for x in SCORES if x[0] in chain]):
         q = w[cuts.passes(w, {k: v for k, v in chain.items() if k != cut})]
         stack(a, q, var, bins, sc)
         keep_marker(a, thr, sense, color="#222")
         sig, keep = cuts.is_signal_cat(q.cat), chain[cut](q)
         a.set_title("%s  (cut %s %g)\nall other cuts applied: this cut keeps %.0f%% of signal, %.0f%% of background"
                     % (lab, sense, thr, 100 * keep[sig].mean(), 100 * keep[~sig].mean()), fontsize=9.5, loc="left")
-        a.set_xlabel(var)
+        a.set_xlabel(var if isinstance(var, str) else lab)
         a.set_ylabel("candidates / 1e20 POT")
     h, l = axs[0].get_legend_handles_labels()
     axs[-1].axis("off")
@@ -154,7 +156,8 @@ def plot_sequential(w, chain, sc, pot, out):
     names = list(chain)
     fig, axs = plt.subplots(3, 4, figsize=(30, 17))
     axs = axs.ravel()
-    for a, (cut, var, lab, bins, thr, sense) in zip(axs, SEQUENTIAL):
+    seq = [x for x in SEQUENTIAL if x[0] in chain]
+    for a, (cut, var, lab, bins, thr, sense) in zip(axs, seq):
         before = names[names.index(cut) - 1]
         q = w[cuts.passes(w, chain, upto=before)]
         if var is _fv_cathode:
@@ -182,10 +185,10 @@ def plot_sequential(w, chain, sc, pot, out):
                        100 * (~keep[sig]).mean(), 100 * (~keep[~sig]).mean()), fontsize=10, loc="left")
         a.set_xlabel(lab)
         a.set_ylabel("candidates / 1e20 POT")
-    for a in axs[len(SEQUENTIAL):]:
+    for a in axs[len(seq):]:
         a.axis("off")
     from matplotlib.patches import Patch
-    axs[len(SEQUENTIAL)].legend([Patch(color=SIG_BKG[1][1]), plt.Line2D([], [], color=SIG_BKG[0][1], lw=2.5)],
+    axs[len(seq)].legend([Patch(color=SIG_BKG[1][1]), plt.Line2D([], [], color=SIG_BKG[0][1], lw=2.5)],
                                 ["background", "signal (scaled up where the panel says × k)"], frameon=False, fontsize=13, loc="center")
     fig.suptitle("Selection variables in cut order: each panel has every earlier cut applied (%.2e POT). "
                  "Candidates; wc_valid and vertex are not shown." % pot, fontsize=12)
