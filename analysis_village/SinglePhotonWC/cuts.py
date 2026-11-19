@@ -202,13 +202,11 @@ def no_second_em(df):
 
 # Narrow counted shower instead of the uB NC pi0 BDT: two photons merged into
 # one shower are wide. Energy-dependent limit on the 68% charge opening angle
-# and an energy window: below SHOWER_E_MIN almost all is background, above
-# SHOWER_E_MAX merged pi0 pairs. Nov18_2: eff 21.6%, purity 30.0% (BDT > 0.05:
-# 17.6%, 22.9%); flat around this point in both file halves.
-SHOWER_A68_AT_400MEV = 10.5   # deg
-SHOWER_A68_SLOPE = -5.0       # deg per GeV of shw_sp_energy
-SHOWER_E_MIN = 150.0          # MeV
-SHOWER_E_MAX = 1500.0         # MeV
+# plus an energy cap (merged pi0 pairs). Nov18_2: eff 17.6 -> 20.1%, purity
+# 22.9 -> 28.6% against the BDT > 0.05; smooth around this point in both halves.
+SHOWER_A68_AT_400MEV = 10.0   # deg
+SHOWER_A68_SLOPE = 12.0       # deg per GeV of shw_sp_energy
+SHOWER_E_MAX = 1200.0         # MeV
 
 
 def a68_limit(E):
@@ -217,9 +215,8 @@ def a68_limit(E):
 
 def narrow_shower(df):
     """shw1_a68 below a68_limit(shw_sp_energy) (no shape: passes) and
-    SHOWER_E_MIN < shw_sp_energy < SHOWER_E_MAX."""
-    E = df.shw_sp_energy
-    return ~(df.shw1_a68 >= a68_limit(E)) & (E > SHOWER_E_MIN) & (E < SHOWER_E_MAX)
+    shw_sp_energy < SHOWER_E_MAX."""
+    return ~(df.shw1_a68 >= a68_limit(df.shw_sp_energy)) & (df.shw_sp_energy < SHOWER_E_MAX)
 
 
 def ub_selection(th=SCORE_CUTS, ncpi0="shape"):
