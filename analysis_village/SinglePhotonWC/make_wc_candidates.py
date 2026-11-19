@@ -17,7 +17,9 @@ Columns:
     the longest muon-labelled one, and the longest MIP-like ones
   * leading EM shower from its charge points (see _shower_geom): start,
     axis, shw1_back_dist (back along the axis to the AV boundary; short for
-    a photon entering from outside), vtx_other_q, other_q_frac
+    a photon entering from outside), vtx_other_q, other_q_frac, and shape:
+    shw1_a68 (68% charge opening angle), shw1_width, shw1_lobe_sep (two
+    photons merged into one shower show up as two lobes)
 
 Reco only: truth is the mcnu table (make_truth.py), joined by cutflow.load.
 """
@@ -34,6 +36,9 @@ PID = {"em": 11, "muon": 13, "pion": 211, "proton": 2212, "nopid": 0}
 TAGGER_SKIP = {"run", "subrun", "event", "nu_index", "sel_cluster_id"}
 SHW_AXIS_RADIUS = 30.0   # cm, points used for the shower axis
 VTX_RADIUS = 5.0         # cm, vertex-activity sphere
+SHAPE_MIN_R = 3.0        # cm, shower points closer to the start do not enter the shape
+SHAPE_MIN_POINTS = 10
+LOBE_MIN_FRAC = 0.15     # charge share each lobe needs for shw1_lobe_sep
 DQDX_MIP = 3350.0        # T_rec_charge q/nq of a MIP: median of true muon tracks > 10 cm (Nov16)
 MIP_LIKE_MAX = 1.6       # MIPs; protons sit at ~3 (16% quantile ~2.1), muons at 1 (84% ~1.2)
 DQDX_START_CM = 4.0      # cm, start of a track for mu1_dqdx_start
@@ -173,12 +178,57 @@ def _shower_axis(p, q, vtx):
     return start, (-u if np.dot(c - start, u) < 0 else u)
 
 
+def _two_lobes(v, w, min_frac=LOBE_MIN_FRAC, seeds=5):
+    """Largest angle [deg] between two charge-weighted direction clusters
+    (2-means on the unit vectors v) that each hold >= min_frac of the
+    charge; 0 when there is no such second lobe."""
+    best = 0.0
+    for seed in range(seeds):
+        cen = v[np.random.RandomState(seed).choice(len(v), 2, replace=False)]
+        for _ in range(20):
+            lab = np.argmax(v @ cen.T, axis=1)
+            new = np.array([np.average(v[lab == k], axis=0, weights=w[lab == k] + 1e-9) if (lab == k).any() else cen[k]
+                            for k in (0, 1)])
+            new /= np.linalg.norm(new, axis=1)[:, None]
+            if np.allclose(new, cen):
+                break
+            cen = new
+        frac = np.array([w[lab == k].sum() for k in (0, 1)]) / w.sum()
+        if frac.min() >= min_frac:
+            best = max(best, np.degrees(np.arccos(np.clip(cen[0] @ cen[1], -1, 1))))
+    return best
+
+
+def _shower_shape(p, q, vtx):
+    """(a68, width, lobe_sep) of a shower's charge points, or None with fewer
+    than SHAPE_MIN_POINTS beyond SHAPE_MIN_R of the start: the angle around
+    the charge-weighted principal axis (from the start, the point nearest
+    the vertex) holding 68% of the charge [deg], the transverse /
+    longitudinal spread, and the angle between two charge lobes [deg]."""
+    q = np.clip(q, 0, None) + 1e-9
+    start = p[np.argmin(np.linalg.norm(p - vtx, axis=1))]
+    d = p - start
+    r = np.linalg.norm(d, axis=1)
+    m = r > SHAPE_MIN_R
+    if m.sum() < SHAPE_MIN_POINTS:
+        return None
+    c = np.average(p, axis=0, weights=q)
+    _, sv, vt = np.linalg.svd((p - c) * np.sqrt(q)[:, None], full_matrices=False)
+    ax = vt[0] if np.dot(c - start, vt[0]) > 0 else -vt[0]
+    ang = np.degrees(np.arccos(np.clip((d[m] @ ax) / r[m], -1, 1)))
+    o = np.argsort(ang)
+    a68 = ang[o][np.searchsorted(np.cumsum(q[m][o]) / q[m].sum(), 0.68)]
+    return a68, sv[1] / sv[0], _two_lobes(d[m] / r[m][:, None], q[m])
+
+
 def _shower_geom(f, D):
     """Leading EM shower geometry from the T_rec_charge points mapped to it
     through T_segment, plus the candidate charge outside it: vtx_other_q
-    (within VTX_RADIUS of the vertex) and other_q_frac (all)."""
+    (within VTX_RADIUS of the vertex) and other_q_frac (all), and its shape
+    (_shower_shape): shw1_a68, shw1_width, shw1_lobe_sep."""
     cols = ["shw1_start_x", "shw1_start_y", "shw1_start_z", "shw1_dir_x", "shw1_dir_y", "shw1_dir_z",
-            "shw1_back_dist", "shw1_start_vtx_dist", "shw1_npts", "vtx_other_q", "other_q_frac"]
+            "shw1_back_dist", "shw1_start_vtx_dist", "shw1_npts", "vtx_other_q", "other_q_frac",
+            "shw1_a68", "shw1_width", "shw1_lobe_sep"]
     out = pd.DataFrame(np.nan, index=D.index, columns=cols)
     k = wc.make_wc_kineparticledf(f)
     em = k[(k.kine_particle_type.abs() == 11) & (k.kine_particle_is_shower == 1)]
@@ -201,6 +251,9 @@ def _shower_geom(f, D):
         near = np.linalg.norm(xyz - vtx, axis=1) < VTX_RADIUS
         out.loc[key, "vtx_other_q"] = q[near & ~sh].sum()
         out.loc[key, "other_q_frac"] = q[~sh].sum() / tot if tot > 0 else np.nan
+        shape = _shower_shape(xyz[sh], q[sh], vtx) if sh.sum() >= SHAPE_MIN_POINTS else None
+        if shape is not None:
+            out.loc[key, ["shw1_a68", "shw1_width", "shw1_lobe_sep"]] = shape
         axis = _shower_axis(xyz[sh], q[sh], vtx) if sh.sum() >= 3 else None
         if axis is None:
             continue
