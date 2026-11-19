@@ -52,7 +52,7 @@ SCORES = [   # cut name in cuts.UB_SELECTION, column, label, bins, threshold, ke
     ("ub_numu", "ub_numu", "uB $\\nu_\\mu$ BDT", np.arange(-3.6, 4.01, 0.2), cuts.UB_NUMU_MIN, ">"),
     ("ub_other", "ub_other", "uB 'other' BDT", np.arange(-4.4, 3.01, 0.2), cuts.UB_OTHER_MIN, ">"),
     ("ub_ncpi0", "ub_ncpi0", "uB NC $\\pi^0$ BDT", np.arange(-3.0, 3.51, 0.25), cuts.UB_NCPI0_MIN, ">"),
-    ("narrow_shower", lambda df: df.shw1_a68 - cuts.a68_limit(df.shw_sp_energy), "shower 68% angle above its energy-dependent limit [deg]",
+    ("narrow_shower", lambda df: df.shw1_a68 - cuts.a68_limit(df.shw_sp_energy), "shw1_a68 − limit(E) [deg]",
      np.arange(-15, 30.1, 1.5), 0, "<"),
     ("wc_nue", "nue_score", "Wire-Cell $\\nu_e$ score", np.arange(-15.5, 17.6, 1.0), cuts.WC_NUE_SCORE_MAX, "<"),
 ]
