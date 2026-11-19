@@ -53,6 +53,7 @@ SCORES = [   # cut name in cuts.UB_SELECTION, column, label, bins, threshold, ke
     ("ub_other", "ub_other", "uB 'other' BDT", np.arange(-4.4, 3.01, 0.2), cuts.UB_OTHER_MIN, ">"),
     ("ub_ncpi0", "ub_ncpi0", "uB NC $\\pi^0$ BDT", np.arange(-3.0, 3.51, 0.25), cuts.UB_NCPI0_MIN, ">"),
     ("narrow_shower", "shw1_a68", "counted shower 68% opening angle [deg]", np.arange(0, 40.1, 1.5), cuts.SHOWER_A68_MAX, "<"),
+    ("shower_e_max", "shw_sp_energy", "counted shower reco energy [MeV]", np.arange(0, 2501, 100), cuts.SHOWER_E_MAX, "<"),
     ("wc_nue", "nue_score", "Wire-Cell $\\nu_e$ score", np.arange(-15.5, 17.6, 1.0), cuts.WC_NUE_SCORE_MAX, "<"),
 ]
 

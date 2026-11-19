@@ -206,10 +206,12 @@ def no_second_em(df):
 # version (energy-dependent limit + 1200 MeV cap, presel+uboone_shape2d)
 # gains ~2-4 points of purity at ~1 point of efficiency.
 SHOWER_A68_MAX = 10.0         # deg
+# Upper cap on the counted shower: above it the background is merged high-energy
+# pi0 pairs and CC nue electrons; little signal (Nov18_2: +0.9 pt purity).
+SHOWER_E_MAX = 1200.0         # MeV
 # 2D version
 SHOWER_A68_AT_400MEV = 10.0   # deg
 SHOWER_A68_SLOPE = 12.0       # deg per GeV of shw_sp_energy
-SHOWER_E_MAX = 1200.0         # MeV
 
 
 def narrow_shower(df):
@@ -229,7 +231,8 @@ def narrow_shower_2d(df):
 def ub_selection(th=SCORE_CUTS, ncpi0="shape"):
     """ncpi0: "shape" (narrow_shower), "shape2d" (narrow_shower_2d) or "bdt"
     (the uB NC pi0 BDT)."""
-    pi0 = {"shape": {"narrow_shower": narrow_shower}, "shape2d": {"narrow_shower": narrow_shower_2d},
+    cap = {"shower_e_max": lambda df: df.shw_sp_energy < SHOWER_E_MAX}
+    pi0 = {"shape": {"narrow_shower": narrow_shower, **cap}, "shape2d": {"narrow_shower": narrow_shower_2d},
            "bdt": {"ub_ncpi0": lambda df: df.ub_ncpi0 > th["ub_ncpi0"]}}[ncpi0]
     return {
         "wc_numu": lambda df: df.numu_score < th["wc_numu"],
