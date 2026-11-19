@@ -201,28 +201,36 @@ def no_second_em(df):
 
 
 # Narrow counted shower instead of the uB NC pi0 BDT: two photons merged into
-# one shower are wide. Energy-dependent limit on the 68% charge opening angle
-# plus an energy cap (merged pi0 pairs). Nov18_2: eff 17.6 -> 20.1%, purity
-# 22.9 -> 28.6% against the BDT > 0.05; smooth around this point in both halves.
+# one shower are wide. Flat limit on the 68% charge opening angle; Nov18_2:
+# eff 17.6 -> 21.3%, purity 22.9 -> 23.9% against the BDT > 0.05. The 2D
+# version (energy-dependent limit + 1200 MeV cap, presel+uboone_shape2d)
+# gains ~2-4 points of purity at ~1 point of efficiency.
+SHOWER_A68_MAX = 10.0         # deg
+# 2D version
 SHOWER_A68_AT_400MEV = 10.0   # deg
 SHOWER_A68_SLOPE = 12.0       # deg per GeV of shw_sp_energy
 SHOWER_E_MAX = 1200.0         # MeV
+
+
+def narrow_shower(df):
+    """shw1_a68 < SHOWER_A68_MAX (no shape: passes)."""
+    return ~(df.shw1_a68 >= SHOWER_A68_MAX)
 
 
 def a68_limit(E):
     return SHOWER_A68_AT_400MEV + SHOWER_A68_SLOPE * (E - 400.0) / 1000.0
 
 
-def narrow_shower(df):
-    """shw1_a68 below a68_limit(shw_sp_energy) (no shape: passes) and
-    shw_sp_energy < SHOWER_E_MAX."""
+def narrow_shower_2d(df):
+    """shw1_a68 below a68_limit(shw_sp_energy) and shw_sp_energy < SHOWER_E_MAX."""
     return ~(df.shw1_a68 >= a68_limit(df.shw_sp_energy)) & (df.shw_sp_energy < SHOWER_E_MAX)
 
 
 def ub_selection(th=SCORE_CUTS, ncpi0="shape"):
-    """ncpi0: "shape" (narrow_shower) or "bdt" (the uB NC pi0 BDT)."""
-    pi0 = ({"narrow_shower": narrow_shower} if ncpi0 == "shape"
-           else {"ub_ncpi0": lambda df: df.ub_ncpi0 > th["ub_ncpi0"]})
+    """ncpi0: "shape" (narrow_shower), "shape2d" (narrow_shower_2d) or "bdt"
+    (the uB NC pi0 BDT)."""
+    pi0 = {"shape": {"narrow_shower": narrow_shower}, "shape2d": {"narrow_shower": narrow_shower_2d},
+           "bdt": {"ub_ncpi0": lambda df: df.ub_ncpi0 > th["ub_ncpi0"]}}[ncpi0]
     return {
         "wc_numu": lambda df: df.numu_score < th["wc_numu"],
         "ub_numu": lambda df: df.ub_numu > th["ub_numu"],
@@ -246,6 +254,7 @@ CHAINS = {
     "presel": PRESELECTION,
     "uboone": UB_SELECTION,
     "presel+uboone": {**PRESELECTION, **UB_SELECTION},
+    "presel+uboone_shape2d": {**PRESELECTION, **ub_selection(ncpi0="shape2d")},
     "presel+uboone_ncpi0bdt": {**PRESELECTION, **ub_selection(ncpi0="bdt")},
     "presel+uboone_nov14": {**PRESELECTION, **ub_selection(SCORE_CUTS_NOV14, ncpi0="bdt")},
 }
