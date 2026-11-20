@@ -8,23 +8,28 @@ spills), with the prediction's statistical uncertainty as a hatched band and a
 data / prediction ratio panel. No under/overflow bins; the number of entries
 outside each range is printed. Linear axes.
 
-Normalisation:
-  MC        on-beam POT / MC POT (both from histpotdf; --onbeam-pot overrides
-            the on-beam value)
-  off-beam  --offbeam-scale, or --onbeam-spills / --offbeam-spills (the
-            dataframes carry no trigger counts, so one of the two is required)
+Normalisation, read from the dataframes (as analysis_village/gump/loaddf.py):
+  MC        on-beam POT / MC POT. MC POT: histpotdf. On-beam POT: the sum of
+            rec.hdr.pot in the hdr table (histpotdf if there is no hdr table)
+  off-beam  on-beam POT / off-beam equivalent POT, the latter the number of
+            off-beam BNB gates (sum of rec.hdr.noffbeambnb) x
+            N_GATES_ON_PER_5E12POT x 5e12
 MC events already contain cosmics in the neutrino spill ("Cosmic /
 unmatched"); off-beam data models the spills without a neutrino.
+
+--area-norm: shape comparison; the prediction (MC + off-beam) is scaled to the
+on-beam data total in each plot (blinded stages: to unit area).
 
 Blinding: stages listed in --blind (default: final) are drawn without on-beam
 data; pass --blind with no stage to unblind.
 
 Inputs: MC .df from configs/sp_mc.py (wc + mcnu + wcevt), data .df from
-configs/sp_data.py (wc + wcevt), and the MicroBooNE BDT XMLs (ub_* scores).
+configs/sp_data.py (wc + wcevt + hdr). The MicroBooNE BDT XMLs are read from
+UBOONE_BDT_DIR.
 
   python analysis_village/SinglePhotonWC/plot_data_mc.py \\
       --mc <MC dir or .df> --onbeam <on-beam dir or .df> --offbeam <off-beam dir or .df> \\
-      --onbeam-spills N --offbeam-spills M --uboone-bdt <xml dir> -o data_mc_plots/
+      -o data_mc_plots/ [--area-norm]
 """
 
 import argparse
@@ -45,6 +50,8 @@ from analysis_village.SinglePhotonWC.plot_selection import GROUPS  # noqa: E402
 plt.style.use(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dune.mplstyle"))
 
 OFFBEAM_COLOR = "#a3a29d"
+UBOONE_BDT_DIR = "/home/nathanielerowe/claude-devcontainer/photons/bdt"
+N_GATES_ON_PER_5E12POT = 1.05104   # SBND BNB, as in gump/loaddf.py
 
 _full = cuts.CHAINS["presel+uboone"]
 _names = list(_full)
@@ -80,22 +87,28 @@ VARIABLES = [   # name, column or function of the candidate frame, bins, axis la
 ]
 
 
-def load_data(inputs, uboone_bdt):
-    """Candidates of on- or off-beam data with the uB scores, and the POT."""
-    frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "wcevt"])
+def load_data(inputs):
+    """On- or off-beam data: (candidates with the uB scores, POT from the hdr
+    table, off-beam BNB gates)."""
+    from analysis_village.SinglePhotonWC import microboone_bdt
+    frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "wcevt", "hdr"])
     w = frames["wc"]
     w["wc_valid"] = 1   # a candidate implies Wire-Cell output
-    if uboone_bdt:
-        from analysis_village.SinglePhotonWC import microboone_bdt
-        w = w.join(microboone_bdt.score(w, uboone_bdt))
-    return w, totals.pot.sum()
+    w = w.join(microboone_bdt.score(w, UBOONE_BDT_DIR))
+    hdr = frames["hdr"]
+    if len(hdr):
+        pot, gates = hdr.pot.sum(), hdr.noffbeambnb.sum()
+    else:
+        print("Warning: no hdr table (made without configs/sp_data.py?); POT from histpotdf, no off-beam gates.")
+        pot, gates = totals.pot.sum(), 0
+    return w, pot, gates
 
 
 def values(df, var):
     return np.asarray(var(df) if callable(var) else df[var], dtype=float)
 
 
-def plot_one(name, var, bins, label, stage, title, mc, off, on, sc_mc, sc_off, out, blind):
+def plot_one(name, var, bins, label, stage, title, mc, off, on, sc_mc, sc_off, out, blind, area_norm=False):
     x_mc = values(mc, var); x_off = values(off, var)
     stacks, weights, labels, colors = [], [], [], []
     for lab, cats, col in GROUPS:
@@ -106,6 +119,12 @@ def plot_one(name, var, bins, label, stage, title, mc, off, on, sc_mc, sc_off, o
     labels.append("Off-beam data (%.1f)" % (len(x_off) * sc_off))
     pred = sum(np.histogram(x, bins, weights=w_)[0] for x, w_ in zip(stacks, weights))
     var_pred = (np.histogram(x_mc, bins)[0] * sc_mc ** 2 + np.histogram(x_off, bins)[0] * sc_off ** 2)
+    if not blind:
+        x_on = values(on, var); n_on = np.histogram(x_on, bins)[0]
+    if area_norm:   # scale the prediction to the data total (blinded: to unit area)
+        k = (n_on.sum() if not blind else 1.0) / max(pred.sum(), 1e-12)
+        weights = [w_ * k for w_ in weights]; pred = pred * k; var_pred = var_pred * k ** 2
+        labels = [l.rsplit(" (", 1)[0] for l in labels]
     err = np.sqrt(var_pred)
     n_out = int(((x_mc < bins[0]) | (x_mc >= bins[-1])).sum() + ((x_off < bins[0]) | (x_off >= bins[-1])).sum())
 
@@ -119,7 +138,6 @@ def plot_one(name, var, bins, label, stage, title, mc, off, on, sc_mc, sc_off, o
         note = "   BLINDED: on-beam data not shown"
         r.text(0.5, 0.5, "blinded", transform=r.transAxes, ha="center", va="center", fontsize=12, color="#b00020")
     else:
-        x_on = values(on, var); n_on = np.histogram(x_on, bins)[0]
         n_out += int(((x_on < bins[0]) | (x_on >= bins[-1])).sum())
         a.errorbar(c, n_on, yerr=np.sqrt(n_on), xerr=w_bin, fmt="o", color="k", ms=5, label="On-beam data (%d)" % n_on.sum())
         ok = pred > 0
@@ -129,11 +147,14 @@ def plot_one(name, var, bins, label, stage, title, mc, off, on, sc_mc, sc_off, o
     rel = np.where(pred > 0, err / np.maximum(pred, 1e-9), 0)
     r.fill_between(bins, np.r_[1 - rel, 1 - rel[-1]], np.r_[1 + rel, 1 + rel[-1]], step="post", color="#c9c8c3", alpha=0.6, linewidth=0)
     r.axhline(1, color="k", lw=1); r.set_ylim(0, 2); r.set_ylabel("data / pred.")
-    r.set_xlabel(label); a.set_ylabel("candidates / bin")
+    r.set_xlabel(label)
+    a.set_ylabel("area-normalised" if area_norm and blind else
+                 "candidates / bin" if area_norm else "candidates / bin")
     a.set_ylim(bottom=0)
     a.legend(fontsize=10, loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False)
-    a.set_title("%s%s" % (title, note), loc="left", fontsize=12, color="#b00020" if blind else "k")
-    fig.savefig(os.path.join(out, "%s_%s.png" % (stage, name)), dpi=120, bbox_inches="tight")
+    a.set_title("%s%s%s" % (title, (", prediction area-normalised to data" if not blind else ", area-normalised") if area_norm else "", note), loc="left", fontsize=12,
+                color="#b00020" if blind else "k")
+    fig.savefig(os.path.join(out, "%s_%s%s.png" % (stage, name, "_areanorm" if area_norm else "")), dpi=120, bbox_inches="tight")
     plt.close(fig)
     return n_out
 
@@ -143,36 +164,28 @@ def main():
     ap.add_argument("--mc", nargs="+", required=True, help="MC .df files, directories or globs")
     ap.add_argument("--onbeam", nargs="+", required=True, help="on-beam data .df files, directories or globs")
     ap.add_argument("--offbeam", nargs="+", required=True, help="off-beam data .df files, directories or globs")
-    ap.add_argument("--uboone-bdt", required=True, help="directory of the MicroBooNE BDT XMLs")
     ap.add_argument("-o", "--outdir", default="data_mc_plots")
-    ap.add_argument("--onbeam-pot", type=float, help="on-beam POT (default: from histpotdf)")
-    ap.add_argument("--offbeam-scale", type=float, help="off-beam weight (on-beam spills / off-beam spills)")
-    ap.add_argument("--onbeam-spills", type=float, help="on-beam spill (trigger) count")
-    ap.add_argument("--offbeam-spills", type=float, help="off-beam spill (trigger) count")
+    ap.add_argument("--area-norm", action="store_true", help="scale the prediction to the data total in each plot")
     ap.add_argument("--stages", nargs="+", default=["presel", "bdt", "final"], choices=list(STAGES))
     ap.add_argument("--blind", nargs="*", default=["final"], choices=list(STAGES), help="stages drawn without on-beam data")
     ap.add_argument("--variables", nargs="+", help="subset of VARIABLES names (default: all)")
     args = ap.parse_args()
 
-    if args.offbeam_scale is not None:
-        sc_off = args.offbeam_scale
-    elif args.onbeam_spills and args.offbeam_spills:
-        sc_off = args.onbeam_spills / args.offbeam_spills
-    else:
-        sys.exit("Give --offbeam-scale or --onbeam-spills and --offbeam-spills.")
     os.makedirs(args.outdir, exist_ok=True)
 
-    mc, _, pot_mc = load_mc(args.mc, args.uboone_bdt)
-    on, pot_on = load_data(args.onbeam, args.uboone_bdt)
-    off, _ = load_data(args.offbeam, args.uboone_bdt)
-    if args.onbeam_pot:
-        pot_on = args.onbeam_pot
+    mc, _, pot_mc = load_mc(args.mc, UBOONE_BDT_DIR)
+    on, pot_on, _ = load_data(args.onbeam)
+    off, _, gates_off = load_data(args.offbeam)
     if not pot_on > 0:
-        sys.exit("No on-beam POT in histpotdf; give --onbeam-pot.")
-    sc_mc = pot_on / pot_mc
+        sys.exit("No on-beam POT in the on-beam dataframes (hdr.pot / histpotdf).")
+    if not gates_off > 0:
+        sys.exit("No off-beam gates (hdr.noffbeambnb) in the off-beam dataframes; make them with configs/sp_data.py.")
+    pot_off = gates_off * N_GATES_ON_PER_5E12POT * 5e12
+    sc_mc, sc_off = pot_on / pot_mc, pot_on / pot_off
     variables = [v for v in VARIABLES if not args.variables or v[0] in args.variables]
 
-    lines = ["MC POT %.4g, on-beam POT %.4g -> MC weight %.4g; off-beam weight %.4g" % (pot_mc, pot_on, sc_mc, sc_off), ""]
+    lines = ["MC POT %.4g, on-beam POT %.4g, off-beam %d gates = %.4g POT-equivalent" % (pot_mc, pot_on, gates_off, pot_off),
+             "weights: MC %.4g, off-beam %.4g%s" % (sc_mc, sc_off, "; plots area-normalised" if args.area_norm else ""), ""]
     for stage in args.stages:
         chain, title = STAGES[stage]
         m, o, d = (df[cuts.passes(df, chain)] for df in (mc, off, on))
@@ -185,7 +198,7 @@ def main():
             if not callable(var) and var not in mc:
                 print("skip %s: column %s not in the MC dataframe" % (name, var))
                 continue
-            n_out = plot_one(name, var, bins, label, stage, title, m, o, d, sc_mc, sc_off, args.outdir, blind)
+            n_out = plot_one(name, var, bins, label, stage, title, m, o, d, sc_mc, sc_off, args.outdir, blind, args.area_norm)
             if n_out:
                 print("%s %s: %d entries outside the range, not drawn" % (stage, name, n_out))
     open(os.path.join(args.outdir, "normalisation.txt"), "w").write("\n".join(lines) + "\n")
