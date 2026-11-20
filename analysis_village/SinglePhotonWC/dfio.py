@@ -17,6 +17,7 @@ import glob
 import os
 import re
 import sys
+from concurrent.futures import ProcessPoolExecutor
 
 import pandas as pd
 
@@ -94,7 +95,21 @@ def _n_files(got):
     return int(max(ids)) + 1 if ids else 1
 
 
-def load(files, keys=("wc",)):
+def _read_one(args):
+    """(got, None) or (None, error text); for the worker processes."""
+    path, keys = args
+    try:
+        return _read_file(path, keys), None
+    except Exception as e:  # truncated/corrupt HDF5 from a crashed job, etc.
+        lines = [l.strip() for l in str(e).splitlines() if l.strip()]
+        return None, "%s: %s" % (type(e).__name__, lines[-1] if lines else "")
+
+
+def default_nproc(n_files):
+    return max(1, min(n_files, os.cpu_count() or 1, 8))
+
+
+def load(files, keys=("wc",), nproc=None):
     """Concatenate dataframes over all readable files.
 
     Returns ({key: DataFrame}, totals). Each frame gets an outer "file" index
@@ -103,17 +118,24 @@ def load(files, keys=("wc",)):
     the POT and generated events of each file (use .sum() for the sample).
     A file counts only if every key in it reads cleanly, so the frames and
     totals come from the same files.
+
+    Files are read by nproc worker processes (default: up to 8; HDF5 holds a
+    global lock, so threads would not help); 1 reads in this process.
     """
     read_keys = list(dict.fromkeys(list(keys) + [POT_KEY, GENEVT_KEY]))
     parts = {k: [] for k in read_keys}
     bad = []
     offset = 0
-    for ifile, path in enumerate(files):
-        try:
-            got = _read_file(path, read_keys)
-        except Exception as e:  # truncated/corrupt HDF5 from a crashed job, etc.
-            lines = [l.strip() for l in str(e).splitlines() if l.strip()]
-            bad.append((path, "%s: %s" % (type(e).__name__, lines[-1] if lines else "")))
+    nproc = default_nproc(len(files)) if nproc is None else nproc
+    jobs = [(path, read_keys) for path in files]
+    if nproc > 1 and len(files) > 1:
+        pool = ProcessPoolExecutor(nproc)
+        results = pool.map(_read_one, jobs, chunksize=max(1, len(files) // (4 * nproc)))
+    else:
+        pool, results = None, map(_read_one, jobs)
+    for ifile, (path, (got, err)) in enumerate(zip(files, results)):
+        if err is not None:
+            bad.append((path, err))
             continue
         for k in read_keys:
             parts[k] += [_tag_file(d, offset) for d in got[k]]
@@ -121,6 +143,8 @@ def load(files, keys=("wc",)):
         if (ifile + 1) % 50 == 0:
             print("  read %d / %d files" % (ifile + 1, len(files)))
 
+    if pool is not None:
+        pool.shutdown()
     if bad:
         print("Warning: skipped %d unreadable file(s):" % len(bad))
         for path, err in bad[:10]:
@@ -155,6 +179,7 @@ def main():
     ap.add_argument("-i", "--inputs", nargs="+", required=True,
                     help=".df files, directories, glob patterns or .list files")
     ap.add_argument("-o", "--output", required=True, help="merged .df to write")
+    ap.add_argument("-j", "--nproc", type=int, help="worker processes (default: up to 8)")
     ap.add_argument("-k", "--keys", nargs="+", default=None,
                     help="dataframes to merge (default: every one in the first input)")
     args = ap.parse_args()
@@ -162,7 +187,7 @@ def main():
     files = expand_inputs(args.inputs)
     keys = args.keys or [k for k in file_keys(files[0]) if k not in (POT_KEY, GENEVT_KEY)]
     print("Merging %s from %d file(s)" % (keys, len(files)))
-    frames, totals = load(files, keys)
+    frames, totals = load(files, keys, nproc=args.nproc)
     write(args.output, frames)
     for k, df in frames.items():
         print("  %-14s %d rows" % (k, len(df)))

@@ -91,14 +91,14 @@ VARIABLES = [   # name, column or function of the candidate frame, bins, axis la
 ]
 
 
-def load_data(inputs):
+def load_data(inputs, nproc=None):
     """On- or off-beam data: (candidates with the uB scores, POT from the hdr
     table, off-beam BNB gates)."""
     from analysis_village.SinglePhotonWC import microboone_bdt
-    frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "wcevt", "hdr"])
+    frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "wcevt", "hdr"], nproc=nproc)
     w = frames["wc"]
     w["wc_valid"] = 1   # a candidate implies Wire-Cell output
-    w = w.join(microboone_bdt.score(w, UBOONE_BDT_DIR))
+    w = w.join(microboone_bdt.score(w, UBOONE_BDT_DIR, nproc=nproc))
     hdr = frames["hdr"]
     if len(hdr):
         pot, gates = hdr.pot.sum(), hdr.noffbeambnb.sum()
@@ -192,6 +192,7 @@ def main():
     ap.add_argument("--area-norm", action="store_true", help="scale the prediction to the data total in each plot")
     ap.add_argument("--offbeam-frac", type=float, help="--area-norm without POT / gate info: off-beam share of the "
                     "prediction at preselection (default: fitted to the on-beam data)")
+    ap.add_argument("-j", "--nproc", type=int, help="worker processes for reading the files and the BDT scoring (default: up to 8)")
     ap.add_argument("--stages", nargs="+", default=["presel", "bdt", "final"], choices=list(STAGES))
     ap.add_argument("--blind", nargs="*", default=["final"], choices=list(STAGES), help="stages drawn without on-beam data")
     ap.add_argument("--variables", nargs="+", help="subset of VARIABLES names (default: all)")
@@ -199,9 +200,9 @@ def main():
 
     os.makedirs(args.outdir, exist_ok=True)
 
-    mc, _, pot_mc = load_mc(args.mc, UBOONE_BDT_DIR)
-    on, pot_on, _ = load_data(args.onbeam)
-    off, _, gates_off = load_data(args.offbeam)
+    mc, _, pot_mc = load_mc(args.mc, UBOONE_BDT_DIR, nproc=args.nproc)
+    on, pot_on, _ = load_data(args.onbeam, args.nproc)
+    off, _, gates_off = load_data(args.offbeam, args.nproc)
     have_norm = pot_on > 0 and gates_off > 0
     if have_norm:
         pot_off = gates_off * N_GATES_ON_PER_5E12POT * 5e12

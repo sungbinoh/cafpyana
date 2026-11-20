@@ -27,10 +27,10 @@ from analysis_village.SinglePhotonWC import cuts, dfio  # noqa: E402
 NU_KEY = ["file", "__ntuple", "entry", "tmatch_idx"]
 
 
-def load(inputs, uboone_bdt=None):
+def load(inputs, uboone_bdt=None, nproc=None):
     """(candidates with truth and cat, mcnu with cat, POT). With uboone_bdt,
     the candidates also get the MicroBooNE BDT scores (ub_*)."""
-    frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "mcnu", "wcevt"])
+    frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "mcnu", "wcevt"], nproc=nproc)
     w, m, ev = frames["wc"], frames["mcnu"], frames["wcevt"]
     m.index = m.index.set_names(NU_KEY)
     if len(ev):
@@ -44,7 +44,7 @@ def load(inputs, uboone_bdt=None):
     w["cat"] = cuts.truth_category(w)
     if uboone_bdt:
         from analysis_village.SinglePhotonWC import microboone_bdt
-        w = w.join(microboone_bdt.score(w, uboone_bdt))
+        w = w.join(microboone_bdt.score(w, uboone_bdt, nproc=nproc))
     return w, m, totals.pot.sum()
 
 

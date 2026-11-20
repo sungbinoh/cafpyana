@@ -20,6 +20,7 @@ and every input is finite (no defaults); otherwise it is NaN.
 
 import os
 import xml.etree.ElementTree as ET
+from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 import pandas as pd
@@ -95,10 +96,20 @@ def input_columns(bdt_dir=None):
     return {n: [COLUMN_OF.get(v, v) for v in m.variables] for n, m in models(bdt_dir).items()}
 
 
-def score(df, bdt_dir=None):
+def _evaluate_chunk(args):
+    """F for rows X of BDT `name`, in a worker process (models are cached per worker)."""
+    bdt_dir, name, X = args
+    return models(bdt_dir)[name].evaluate(X)
+
+
+def score(df, bdt_dir=None, nproc=None):
     """The four scores per candidate row, columns ub_<name>; NaN where not
-    evaluable."""
+    evaluable. Rows are evaluated in nproc worker processes (default: up to
+    8; 1 evaluates in this process)."""
+    bdt_dir = bdt_dir or DEFAULT_DIR
+    nproc = max(1, min(os.cpu_count() or 1, 8)) if nproc is None else nproc
     out = pd.DataFrame(index=df.index)
+    pool = ProcessPoolExecutor(nproc) if nproc > 1 and len(df) > 20000 else None
     filled = (df.shw_sp_filled == 1).values
     for n, m in models(bdt_dir).items():
         cols = input_columns(bdt_dir)[n]
@@ -109,6 +120,12 @@ def score(df, bdt_dir=None):
         ok = filled & np.isfinite(X).all(axis=1)
         s = np.full(len(df), np.nan)
         if ok.any():
-            s[ok] = 2 * m.evaluate(X[ok]) / np.log(10)
+            if pool is None:
+                F = m.evaluate(X[ok])
+            else:
+                F = np.concatenate(list(pool.map(_evaluate_chunk, [(bdt_dir, n, c) for c in np.array_split(X[ok], 4 * nproc)])))
+            s[ok] = 2 * F / np.log(10)
         out["ub_" + n] = s
+    if pool is not None:
+        pool.shutdown()
     return out
