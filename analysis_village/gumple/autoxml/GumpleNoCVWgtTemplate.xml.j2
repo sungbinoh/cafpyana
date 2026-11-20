@@ -1,0 +1,779 @@
+<?xml version="1.0" ?>
+
+<mode name="nu" />
+
+<detector name="SBND" pot="1e20"/>
+<detector name="ICARUS" pot="5e20"/>
+
+<channel name="numu1p" unit="Reconstructed Neutrino Energy [GeV]">
+    <bins2D unit="RecoE;del_p" edgesx="0.3 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0 1.5" edgesy="0.0 0.3 0.6"/>
+    <bins unit = "True L/E" min="0" max="2.5" nbins="200" plot="false"/>
+    <subchannel name="intime" plotname="In Time Cosmics" color="#500000"/>
+    <subchannel name="dirt" plotname="Dirt" color="#CC5500"/>
+    <subchannel name="Run2dirt" plotname="Run 2 Dirt" color="#CC5500"/>
+    <subchannel name="Run4dirt" plotname="Run 4 Dirt" color="#CC5500"/>
+    <subchannel name="cvbkgcosmic" plotname="Out of Time Cosmics" color="#c89648"/>
+    <subchannel name="cvbkgnotcosmic" plotname="Other (Non-Cosmic)" color="#c89654"/>
+    <subchannel name="cvbkg" plotname="Other" color="#c89648"/>
+    <subchannel name="cvothernc" plotname="OtherNC" color="#A4459F"/>
+    <subchannel name="cvnumunc" plotname="NuMuNC" color="#95af8b"/>
+    <subchannel name="cvcc" plotname="#nu_{#mu}CC" color="#5579ed"/>
+</channel>
+
+<channel name="numuMP" unit="Reconstructed Neutrino Energy [GeV]">
+    <bins unit="RecoE" edges="0.3 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0 1.05 1.10 1.25 1.5"/>
+    <bins unit = "True L/E" min="0" max="2.5" nbins="200" plot="false"/>
+    <subchannel name="intime" plotname="In Time Cosmics" color="#500000"/>
+    <subchannel name="dirt" plotname="Dirt" color="#CC5500"/>
+    <subchannel name="Run2dirt" plotname="Run 2 Dirt" color="#CC5500"/>
+    <subchannel name="Run4dirt" plotname="Run 4 Dirt" color="#CC5500"/>
+    <subchannel name="cvbkgcosmic" plotname="Out of Time Cosmics" color="#c89648"/>
+    <subchannel name="cvbkgnotcosmic" plotname="Other (Non-Cosmic)" color="#c89654"/>
+    <subchannel name="cvbkg" plotname="Other" color="#c89648"/>
+    <subchannel name="cvothernc" plotname="OtherNC" color="#A4459F"/>
+    <subchannel name="cvnumunc" plotname="NuMuNC" color="#95af8b"/>
+    <subchannel name="cvcc" plotname="#nu_{#mu}CC" color="#5579ed"/>
+</channel>
+
+<model tag="numudis">
+    <rule index="0" name="No Osc"/>
+    <rule index="1" name="Numu Disapp"/>
+    <parameter variable_index = "1" name="L/E"/>
+</model>
+
+
+{% import "systematics.xml.j2" as syst with context %}
+<variation_list>
+    <systematic type="mcstat" plotname="MC Stats" >mcstats</systematic>
+{{ syst.common_systematics }}
+
+{{ syst.sbnd_systematics }}
+
+{{ syst.icarus_r2_systematics }}
+
+{{ syst.icarus_r4_systematics }}
+</variation_list>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/SBNDMCCV_*sbruce_fakedata.root" scale = "1.0" pot="{{ sbnd_mc_pot }}">
+    <friend treename="multisigmaTree" />
+    <friend treename="fakedataTree" />
+    <friend treename="multisimTree" />
+    <friend treename="fakedataTree" />
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_cvcc"
+        model_rule            = "1"
+        additional_weight     = "(!true_isnc)*(true_pdg == 14 || true_pdg == -14)"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+        <variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_cvnumunc"
+        model_rule            = "1"
+        additional_weight     = "(true_isnc == 1)*(true_pdg == 14 || true_pdg == -14)"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_cvothernc"
+        model_rule            = "0"
+        additional_weight     = "(true_isnc == 1)*(true_pdg != 14 & true_pdg != -14)"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_cvbkgcosmic"
+        model_rule            = "0"
+        additional_weight     = "(!((true_isnc != 1)*(true_pdg == 14 || true_pdg == -14)) & !(true_isnc == 1) & (true_iscosmic == 1))"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_cvbkgnotcosmic"
+        model_rule            = "0"
+        additional_weight     = "(!((true_isnc != 1)*(true_pdg == 14 || true_pdg == -14)) & !(true_isnc == 1) & !(true_iscosmic == 1))"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/SBND_SpringBNBOffData_sbruce_fakedata.root" scale = "1.0" pot="{{ sbnd_offbeam_pot }}">
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_intime"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/SBND_SpringLowEMC_sbruce_fakedata.root" scale = "1.0" pot="{{ sbnd_dirt_pot }}">
+    <branch
+        associated_subchannel = "nu_SBND_numu1p_dirt"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUSRun2_SpringMCOverlay_rewgt_*sbruce_fakedata.root" scale = "0.4" pot="{{ icarus_r2_mc_pot }}">
+    <friend treename="multisigmaTree" />
+    <friend treename="fakedataTree" />
+    <friend treename="multisimTree" />
+    <friend treename="fakedataTree" />
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvcc"
+        model_rule            = "1"
+        additional_weight     = "(!true_isnc)*(true_pdg == 14 || true_pdg == -14)"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+        <variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvnumunc"
+        model_rule            = "1"
+        additional_weight     = "(true_isnc == 1)*(true_pdg == 14 || true_pdg == -14)"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvothernc"
+        model_rule            = "0"
+        additional_weight     = "(true_isnc == 1)*(true_pdg != 14 & true_pdg != -14)"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvbkg"
+        model_rule            = "0"
+        additional_weight     = "(!((true_isnc != 1)*(true_pdg == 14 || true_pdg == -14)) & !(true_isnc == 1))"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUS_SpringRun2BNBOff_unblind_sbruce_fakedata.root" scale = "0.4" pot="{{ icarus_r2_offbeam_pot }}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_intime"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUSRun2_Spring_Overlay_Dirt_sbruce_fakedata.root" scale = "0.4" pot="{{ icarus_r2_dirt_pot }}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_Run2dirt"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUSRun4_SpringMCOverlay_rewgt_*_sbruce_fakedata.root" scale = "0.6" pot="{{ icarus_r4_mc_pot }}">
+    <friend treename="multisigmaTree" />
+    <friend treename="fakedataTree" />
+    <friend treename="multisimTree" />
+    <friend treename="fakedataTree" />
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvcc"
+        model_rule            = "1"
+        additional_weight     = "(!true_isnc)*(true_pdg == 14 || true_pdg == -14)"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+        <variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvnumunc"
+        model_rule            = "1"
+        additional_weight     = "(true_isnc == 1)*(true_pdg == 14 || true_pdg == -14)"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvothernc"
+        model_rule            = "0"
+        additional_weight     = "(true_isnc == 1)*(true_pdg != 14 & true_pdg != -14)"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_cvbkg"
+        model_rule            = "0"
+        additional_weight     = "(!((true_isnc != 1)*(true_pdg == 14 || true_pdg == -14)) & !(true_isnc == 1))"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUS_SpringRun4BNBOff_unblind_sbruce_fakedata.root" scale = "0.6" pot="{{ icarus_r4_offbeam_pot }}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_intime"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/FD/ICARUSRun4_Spring_Overlay_Dirt_sbruce_fakedata.root" scale = "0.6" pot="{{ icarus_r4_dirt_pot }}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numu1p_Run4dirt"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable2D>nu_E_calo;del_p</variable2D>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/FD/SBNDMCCV_*sbruce_fakedata.root" scale = "1.0" pot="{{ sbnd_mc_pot}}">
+    <friend treename="multisigmaTree" />
+    <friend treename="multisimTree" />
+    <friend treename="fakedataTree" />
+    <branch
+        associated_subchannel = "nu_SBND_numuMP_cvcc"
+        model_rule            = "1"
+        additional_weight     = "(!true_isnc)*(true_pdg == 14 || true_pdg == -14)"
+        >
+        <variable>nu_E_calo</variable>
+        <variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numuMP_cvnumunc"
+        model_rule            = "1"
+        additional_weight     = "(true_isnc == 1)*(true_pdg == 14 || true_pdg == -14)"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+
+    <branch
+        associated_subchannel = "nu_SBND_numuMP_cvothernc"
+        model_rule            = "0"
+        additional_weight     = "(true_isnc == 1)*(true_pdg != 14 & true_pdg != -14)"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numuMP_cvbkgcosmic"
+        model_rule            = "0"
+        additional_weight     = "(!((true_isnc != 1)*(true_pdg == 14 || true_pdg == -14)) & !(true_isnc == 1) & (true_iscosmic == 1))"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>1.0</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numuMP_cvbkgnotcosmic"
+        model_rule            = "0"
+        additional_weight     = "(!((true_isnc != 1)*(true_pdg == 14 || true_pdg == -14)) & !(true_isnc == 1) & !(true_iscosmic == 1))"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/FD/SBND_SpringBNBOffData_sbruce_fakedata.root" scale = "1.0" pot="{{ sbnd_offbeam_pot }}">
+    <branch
+        associated_subchannel = "nu_SBND_numuMP_intime"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/FD/SBND_SpringLowEMC_sbruce_fakedata.root" scale = "1.0" pot="{{sbnd_dirt_pot}}">
+    <branch
+        associated_subchannel = "nu_SBND_numuMP_dirt"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/FD/ICARUSRun2_SpringMCOverlay_rewgt*_sbruce_fakedata.root" scale = "0.4" pot="{{icarus_r2_mc_pot}}">
+    <friend treename="multisigmaTree" />
+    <friend treename="multisimTree" />
+    <friend treename="fakedataTree" />
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_cvcc"
+        model_rule            = "1"
+        additional_weight     = "(!true_isnc)*(true_pdg == 14 || true_pdg == -14)"
+        >
+        <variable>nu_E_calo</variable>
+        <variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_cvnumunc"
+        model_rule            = "1"
+        additional_weight     = "(true_isnc == 1)*(true_pdg == 14 || true_pdg == -14)"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_cvothernc"
+        model_rule            = "0"
+        additional_weight     = "(true_isnc == 1)*(true_pdg != 14 & true_pdg != -14)"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_cvbkg"
+        model_rule            = "0"
+        additional_weight     = "(!((true_isnc != 1)*(true_pdg == 14 || true_pdg == -14)) & !(true_isnc == 1))"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>1.0</variable>
+    </branch>
+
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/FD/ICARUS_SpringRun2BNBOff_unblind_sbruce_fakedata.root" scale = "0.4" pot="{{icarus_r2_offbeam_pot}}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_intime"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/FD/ICARUSRun2_Spring_Overlay_Dirt_sbruce_fakedata.root" scale = "0.4" pot="{{icarus_r2_dirt_pot}}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_Run2dirt"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/FD/ICARUSRun4_SpringMCOverlay_rewgt_*_sbruce_fakedata.root" scale = "0.6" pot="{{icarus_r4_mc_pot}}">
+    <friend treename="multisigmaTree" />
+    <friend treename="multisimTree" />
+    <friend treename="fakedataTree" />
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_cvcc"
+        model_rule            = "1"
+        additional_weight     = "(!true_isnc)*(true_pdg == 14 || true_pdg == -14)"
+        >
+        <variable>nu_E_calo</variable>
+        <variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_cvnumunc"
+        model_rule            = "1"
+        additional_weight     = "(true_isnc == 1)*(true_pdg == 14 || true_pdg == -14)"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_cvothernc"
+        model_rule            = "0"
+        additional_weight     = "(true_isnc == 1)*(true_pdg != 14 & true_pdg != -14)"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>baseline/(nu_E*1000.0)</variable>
+    </branch>    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_cvbkg"
+        model_rule            = "0"
+        additional_weight     = "(!((true_isnc != 1)*(true_pdg == 14 || true_pdg == -14)) & !(true_isnc == 1))"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/FD/ICARUS_SpringRun4BNBOff_unblind_sbruce_fakedata.root" scale = "0.6" pot="{{icarus_r4_offbeam_pot}}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_intime"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/MAPLEMP/FD/ICARUSRun4_Spring_Overlay_Dirt_sbruce_fakedata.root" scale = "0.6" pot="{{icarus_r4_dirt_pot}}">
+    <branch
+        associated_subchannel = "nu_ICARUS_numuMP_Run4dirt"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable>nu_E_calo</variable>
+	<variable>1.0</variable>
+    </branch>
+</MCFile>
+
+<DetVarFiles>
+
+	<!-- ===== numu1p channel (GUMP trees) ===== -->
+
+	<!-- SBND: WM-Xtheta_xw_sbnd, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_WMXThetaXWNominal_sbruce.root" pot="1" />
+		<variation name="WM-Xtheta_xw_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_WMXThetaXW_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_SBND_numu1p_cvcc</subchannel>
+		<subchannel>nu_SBND_numu1p_cvnumunc</subchannel>
+		<subchannel>nu_SBND_numu1p_cvothernc</subchannel>
+		<subchannel>nu_SBND_numu1p_cvbkgcosmic</subchannel>
+		<subchannel>nu_SBND_numu1p_cvbkgnotcosmic</subchannel>
+	</DetVarSection>
+
+	<!-- SBND: WM-YZ_sbnd, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_WMYZNominal_sbruce.root" pot="1" />
+		<variation name="WM-YZ_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_WMYZ_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_SBND_numu1p_cvcc</subchannel>
+		<subchannel>nu_SBND_numu1p_cvnumunc</subchannel>
+		<subchannel>nu_SBND_numu1p_cvothernc</subchannel>
+		<subchannel>nu_SBND_numu1p_cvbkgcosmic</subchannel>
+		<subchannel>nu_SBND_numu1p_cvbkgnotcosmic</subchannel>
+	</DetVarSection>
+
+	<!-- SBND: Dent_sbnd, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_DENTNominal_sbruce.root" pot="1" />
+		<variation name="Dent_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_DENT_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_SBND_numu1p_cvcc</subchannel>
+		<subchannel>nu_SBND_numu1p_cvnumunc</subchannel>
+		<subchannel>nu_SBND_numu1p_cvothernc</subchannel>
+		<subchannel>nu_SBND_numu1p_cvbkgcosmic</subchannel>
+		<subchannel>nu_SBND_numu1p_cvbkgnotcosmic</subchannel>
+	</DetVarSection>
+
+	<!-- SBND: variations derived from the unmatched CV (BIND is one knob shared by all detectors) -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_BINDNominal_sbruce.root" pot="1" />
+		<variation name="BIND" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_BIND_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_GainHi_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_GainLow_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="Smear_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Trigger_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Trigger_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="Alpha_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_EMBAlphap_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Alpha_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_EMBAlpham_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="Beta_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_EMBBetap_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Beta_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_EMBBetam_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="R_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_EMBRp_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="R_sbnd" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_EMBRm_sbruce.root" pot="1" knobval="-1"/>
+
+		<subchannel>nu_SBND_numu1p_cvcc</subchannel>
+		<subchannel>nu_SBND_numu1p_cvnumunc</subchannel>
+		<subchannel>nu_SBND_numu1p_cvothernc</subchannel>
+		<subchannel>nu_SBND_numu1p_cvbkgcosmic</subchannel>
+		<subchannel>nu_SBND_numu1p_cvbkgnotcosmic</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun2: SCE_icarus2, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_SCENominal_sbruce.root" pot="1" />
+		<variation name="SCE_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_SCE_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numu1p_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun2: WM-Xtheta_xw_icarus2, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_WMXThetaXWNominal_sbruce.root" pot="1" />
+		<variation name="WM-Xtheta_xw_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_WMXThetaXW_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numu1p_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun2: WM-YZ_icarus2, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_WMYZNominal_sbruce.root" pot="1" />
+		<variation name="WM-YZ_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_WMYZ_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numu1p_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun2: variations derived from the unmatched CV -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_BINDNominal_sbruce.root" pot="1" />
+		<variation name="BIND" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_BIND_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Smear_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="BiasdEdx_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_BiaseddEdx_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_GainHi_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_GainLow_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="Trigger_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Trigger_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="z0_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_Z=0_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="ECathode_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_EastCathode_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="WCathode_icarus2" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun2_WestCathode_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numu1p_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun4: SCE_icarus4, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_SCENominal_sbruce.root" pot="1" />
+		<variation name="SCE_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_SCE_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numu1p_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun4: WM-Xtheta_xw_icarus4, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_WMXThetaXWNominal_sbruce.root" pot="1" />
+		<variation name="WM-Xtheta_xw_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_WMXThetaXW_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numu1p_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun4: WM-YZ_icarus4, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_WMYZNominal_sbruce.root" pot="1" />
+		<variation name="WM-YZ_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_WMYZ_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numu1p_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun4: variations derived from the unmatched CV -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_BINDNominal_sbruce.root" pot="1" />
+		<variation name="BIND" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_BIND_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Smear_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="BiasdEdx_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_BiaseddEdx_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_GainHi_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_GainLow_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="Trigger_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Trigger_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="z0_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_Z=0_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="ECathode_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_EastCathode_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="WCathode_icarus4" filename="{{ BASE_DIR }}/GUMP/sbruce_trees/ICARUSRun4_WestCathode_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numu1p_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numu1p_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ===== numuMP channel (MAPLEMP trees) ===== -->
+
+	<!-- SBND: WM-Xtheta_xw_sbnd, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_WMXThetaXWNominal_sbruce.root" pot="1" />
+		<variation name="WM-Xtheta_xw_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_WMXThetaXW_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_SBND_numuMP_cvcc</subchannel>
+		<subchannel>nu_SBND_numuMP_cvnumunc</subchannel>
+		<subchannel>nu_SBND_numuMP_cvothernc</subchannel>
+		<subchannel>nu_SBND_numuMP_cvbkgcosmic</subchannel>
+		<subchannel>nu_SBND_numuMP_cvbkgnotcosmic</subchannel>
+	</DetVarSection>
+
+	<!-- SBND: WM-YZ_sbnd, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_WMYZNominal_sbruce.root" pot="1" />
+		<variation name="WM-YZ_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_WMYZ_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_SBND_numuMP_cvcc</subchannel>
+		<subchannel>nu_SBND_numuMP_cvnumunc</subchannel>
+		<subchannel>nu_SBND_numuMP_cvothernc</subchannel>
+		<subchannel>nu_SBND_numuMP_cvbkgcosmic</subchannel>
+		<subchannel>nu_SBND_numuMP_cvbkgnotcosmic</subchannel>
+	</DetVarSection>
+
+	<!-- SBND: Dent_sbnd, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_DENTNominal_sbruce.root" pot="1" />
+		<variation name="Dent_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_DENT_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_SBND_numuMP_cvcc</subchannel>
+		<subchannel>nu_SBND_numuMP_cvnumunc</subchannel>
+		<subchannel>nu_SBND_numuMP_cvothernc</subchannel>
+		<subchannel>nu_SBND_numuMP_cvbkgcosmic</subchannel>
+		<subchannel>nu_SBND_numuMP_cvbkgnotcosmic</subchannel>
+	</DetVarSection>
+
+	<!-- SBND: variations derived from the unmatched CV (BIND is one knob shared by all detectors) -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_BINDNominal_sbruce.root" pot="1" />
+		<variation name="BIND" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_BIND_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_GainHi_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_GainLow_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="Smear_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Trigger_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Trigger_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="Alpha_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_EMBAlphap_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Alpha_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_EMBAlpham_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="Beta_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_EMBBetap_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Beta_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_EMBBetam_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="R_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_EMBRp_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="R_sbnd" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/SBND_EMBRm_sbruce.root" pot="1" knobval="-1"/>
+
+		<subchannel>nu_SBND_numuMP_cvcc</subchannel>
+		<subchannel>nu_SBND_numuMP_cvnumunc</subchannel>
+		<subchannel>nu_SBND_numuMP_cvothernc</subchannel>
+		<subchannel>nu_SBND_numuMP_cvbkgcosmic</subchannel>
+		<subchannel>nu_SBND_numuMP_cvbkgnotcosmic</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun2: SCE_icarus2, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_SCENominal_sbruce.root" pot="1" />
+		<variation name="SCE_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_SCE_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numuMP_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun2: WM-Xtheta_xw_icarus2, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_WMXThetaXWNominal_sbruce.root" pot="1" />
+		<variation name="WM-Xtheta_xw_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_WMXThetaXW_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numuMP_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun2: WM-YZ_icarus2, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_WMYZNominal_sbruce.root" pot="1" />
+		<variation name="WM-YZ_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_WMYZ_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numuMP_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun2: variations derived from the unmatched CV -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_BINDNominal_sbruce.root" pot="1" />
+		<variation name="BIND" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_BIND_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Smear_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="BiasdEdx_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_BiaseddEdx_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_GainHi_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_GainLow_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="Trigger_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Trigger_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="z0_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_Z=0_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="ECathode_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_EastCathode_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="WCathode_icarus2" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun2_WestCathode_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numuMP_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun4: SCE_icarus4, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_SCENominal_sbruce.root" pot="1" />
+		<variation name="SCE_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_SCE_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numuMP_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun4: WM-Xtheta_xw_icarus4, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_WMXThetaXWNominal_sbruce.root" pot="1" />
+		<variation name="WM-Xtheta_xw_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_WMXThetaXW_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numuMP_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun4: WM-YZ_icarus4, matched to its own nominal -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_WMYZNominal_sbruce.root" pot="1" />
+		<variation name="WM-YZ_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_WMYZ_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numuMP_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvbkg</subchannel>
+	</DetVarSection>
+
+	<!-- ICARUSRun4: variations derived from the unmatched CV -->
+	<DetVarSection treename="SelectedEvents">
+		<cv filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_BINDNominal_sbruce.root" pot="1" />
+		<variation name="BIND" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_BIND_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Smear_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="BiasdEdx_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_BiaseddEdx_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_GainHi_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Gain_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_GainLow_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="Trigger_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="Trigger_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
+		<variation name="z0_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_Z=0_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="ECathode_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_EastCathode_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
+		<variation name="WCathode_icarus4" filename="{{ BASE_DIR }}/MAPLEMP/sbruce_trees/ICARUSRun4_WestCathode_TRKSPLT_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_ICARUS_numuMP_cvcc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvnumunc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvothernc</subchannel>
+		<subchannel>nu_ICARUS_numuMP_cvbkg</subchannel>
+	</DetVarSection>
+
+</DetVarFiles>
+
+<correlation>multisigma_SBND_POT multisigma_ICARUSRun4_POT 0.33</correlation>

@@ -16,4 +16,8 @@ emcee
 corner
 lz4
 xxhash
+xrootd
 fsspec-xrootd
+multiprocess
+more-itertools
+lightgbm==4.7.0

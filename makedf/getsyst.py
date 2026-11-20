@@ -2,6 +2,63 @@ import uproot
 import numpy as np
 import pandas as pd
 import awkward as ak
+import struct
+
+def _read_wgt_map_vals(globalTree, wgt_names):
+    """Parameter values of each weight universe, from globalTree wgts.map.
+
+    Returns {pset name: [vals of each param]}. uproot cannot deserialize
+    wgts.map (a member-wise streamed vector<SRWeightMapEntry> per pset), so
+    walk the raw entry-0 bytes:
+      [bytecount][version|kStreamedMemberWise][class version]
+      per pset: int n; n x SRWeightParam (bytecounted);
+                vals block: [bytecount][version] n x (int len, float32[len])
+    """
+    def bytecount(pos):
+        c, = struct.unpack(">I", d[pos:pos+4])
+        if not c & 0x40000000:
+            raise ValueError("wgts.map: expected bytecount at byte %i" % pos)
+        return c & ~0x40000000
+
+    # Read basket 0 by hand rather than with TBranch.basket(): that passes the
+    # numpy-int fBasketSeek through to the XRootD (fsspec) source, which
+    # rejects non-python-int offsets
+    branch = globalTree["global/wgts/wgts.map"]
+    start = int(branch.member("fBasketSeek")[0])
+    stop = start + int(branch.basket_compressed_bytes(0))
+    chunk = branch.file.source.chunk(start, stop)
+    basket = uproot.models.TBasket.Model_TBasket.read(
+        chunk, uproot.source.cursor.Cursor(start), {"basket_num": 0},
+        branch.file, branch.file, branch)
+    d = basket.data.tobytes()
+    end = 4 + bytecount(0)
+    vers, = struct.unpack(">H", d[4:6])
+    if not vers & 0x4000:
+        raise ValueError("wgts.map: expected member-wise streaming")
+    pos = 8
+
+    ret = {}
+    for name in wgt_names:
+        n, = struct.unpack(">i", d[pos:pos+4])
+        pos += 4
+        for _ in range(n): # skip the SRWeightParam's
+            pos += 4 + bytecount(pos)
+        vals = []
+        if n > 0:
+            vals_end = pos + 4 + bytecount(pos)
+            pos += 6
+            for _ in range(n):
+                nval, = struct.unpack(">i", d[pos:pos+4])
+                pos += 4
+                vals.append(np.frombuffer(d[pos:pos+4*nval], dtype=">f4").astype(float))
+                pos += 4*nval
+            if pos != vals_end:
+                raise ValueError("wgts.map: failed to decode vals of %s" % name)
+        ret[name] = vals
+
+    if pos != end:
+        raise ValueError("wgts.map: decoded %i of %i bytes" % (pos, end))
+    return ret
 
 def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="slim"):
     if "globalTree" not in f:
@@ -29,12 +86,14 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
     isyst.index.name = "iwgt"
     nuniv = wgt_nuniv.sum()
 
-    wgts = ak.to_dataframe(f["recTree"]['rec.mc.nu.wgt.univ'].arrays(library="ak"), how=None)[0]
+    wgts = ak.to_dataframe(f["recTree"]['rec.mc.nu.wgt.univ'].arrays(library="ak"), how=None)[0].astype(np.float32)
     wgts["inu"] = wgts.index.get_level_values(1) // nuniv
     wgts["iwgt"] = wgts.index.get_level_values(1) % nuniv
     wgts = wgts.reset_index().set_index(["entry", "inu", "iwgt"]).drop(columns="subentry")
     wgts.columns = ["wgt"]
     wgts = wgts.join(isyst)
+
+    wgt_vals = None # parameter values of each universe, loaded on first use
 
     systs = []
     for s in systematics:
@@ -60,11 +119,27 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
 
         elif wgt_types[isyst] == 3 and wgt_nuniv[isyst] > 1: # +/- sigma unisim
             nwgt = wgts[wgts.isyst == isyst].wgt.groupby(level=[0,1]).size().values[0]
-            nsigma = nwgt // 2
+
+            # Look up the sigma of each universe from the file -- the order
+            # differs between configs (e.g. GENIEReWeight SBN_v1 multisigma
+            # is [-1,+1,-2,+2,-3,+3], SBN_v3 is [+1,-1,...], PionAbsWeighter
+            # is [-3,...,+3])
+            if wgt_vals is None:
+                wgt_vals = _read_wgt_map_vals(globalTree, wgt_names)
+            if len(wgt_vals[s]) != 1 or len(wgt_vals[s][0]) != nwgt:
+                raise Exception("Cannot decode sigma values of systematic uncertainty: %s" % s)
+            sigmas = wgt_vals[s][0]
+            if np.any(np.abs(sigmas - np.round(sigmas)) > 1e-3):
+                raise Exception("Non-integer sigma values of systematic uncertainty: %s (%s)" % (s, sigmas))
+            iwgt_of_sigma = {int(round(v)): i for i, v in enumerate(sigmas)}
+
+            nsigma = max(abs(v) for v in iwgt_of_sigma)
+            if any(k not in iwgt_of_sigma for k in range(-nsigma, nsigma+1) if k != 0):
+                raise Exception("Sigma values of systematic uncertainty are not +/- symmetric: %s (%s)" % (s, sigmas))
             for isigma in range(nsigma):
-                s_ps = wgts[wgts.isyst == isyst].wgt.groupby(level=[0,1]).nth(2*isigma)
+                s_ps = wgts[wgts.isyst == isyst].wgt.groupby(level=[0,1]).nth(iwgt_of_sigma[isigma+1])
                 s_ps.name = (s, "ps%i" % (isigma+1))
-                s_ms = wgts[wgts.isyst == isyst].wgt.groupby(level=[0,1]).nth(2*isigma+1)
+                s_ms = wgts[wgts.isyst == isyst].wgt.groupby(level=[0,1]).nth(iwgt_of_sigma[-(isigma+1)])
                 s_ms.name = (s, "ms%i" % (isigma+1))
 
                 if slim and isigma == 0: # use ps1
@@ -80,9 +155,9 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
                     this_systs.append(s_ps.droplevel(2))
                     this_systs.append(s_ms.droplevel(2))
 
-            # check if we also saved the 0-sigma weight. This is conventionally put last
-            if nwgt % 2 != 0:
-                s_cv = wgts[wgts.isyst == isyst].wgt.groupby(level=[0,1]).nth(nwgt-1)
+            # check if we also saved the 0-sigma weight
+            if 0 in iwgt_of_sigma:
+                s_cv = wgts[wgts.isyst == isyst].wgt.groupby(level=[0,1]).nth(iwgt_of_sigma[0])
                 s_cv.name = (s, "cv")
                 this_systs.append(s_cv.droplevel(2))
             # otherwise, assume it's one
@@ -108,11 +183,15 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
         for syst in this_systs:
             systs.append(syst)
 
+    # Downcast weights to float32: they are ~O(1) reweighting factors and the
+    # analysis loaders read them as float32 anyway. pivot_table / reindex above
+    # silently upcast the float32 raw weights (line 32) back to float64, so cast
+    # once here -- this also halves the peak RAM of the ~1 GB/split wgt table.
     if slim:
         s_idx = systs_slim.index.get_indexer(nuidx)
         systs_slim.loc[s_idx < 0, :] = 1.
         systs_slim.index = nuind.index
-        return systs_slim
+        return systs_slim.astype(np.float32)
 
     else:
         systs = pd.DataFrame(systs).T
@@ -120,5 +199,5 @@ def getsyst(f, systematics, nuind, multisim_nuniv=100, slim=False, slimname="sli
         systs_match = systs.iloc[s_idx]
         systs_match.loc[s_idx < 0, :] = 1.
         systs_match.index = nuind.index
-        return systs_match
+        return systs_match.astype(np.float32)
 

@@ -1,0 +1,197 @@
+<?xml version="1.0" ?>
+
+<mode name="nu" />
+
+<!--detector name="SBND" pot="1e20"/-->
+<!--detector name="SBND" pot="8.3722e19"/--> 
+<detector name="SBND" pot="{{ sbnd_data_pot }}"/> 
+
+<!--
+<detector name="SBND" pot="4.57e18"/>
+<detector name="ICARUS2" pot="1.985e19"/>
+<detector name="ICARUS4" pot="1.916e19"/>
+-->
+<channel name="numu" unit="Reconstructed Neutrino Energy [GeV]">
+    <!--bins unit="RecoE" edges="0.3 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0 1.5"/-->
+    BINS
+    <bins unit = "True L/E" min="0" max="3" nbins="250" plot="false"/>
+    <bins unit = "True E [GeV]" min="0.3" max="3.0" nbins="20"  plot="false"/>
+
+    <subchannel name="Run1intime"    plotname="Intime"        color="#E570FF"/>
+    <subchannel name="Run1dirt"    plotname="Dirt"        color="#FF6961"/>
+    <subchannel name="Run1cos"    plotname="OOT"        color="#E37400"/> 
+    <subchannel name="Run1numunc"     plotname="#nu_{#mu}NC"             color="#0645F4"/> 
+    <subchannel name="Run1nue"  plotname="#nu_{e}"     color="#34A853"/>
+    <subchannel name="Run1numucc" plotname="#nu_{#mu}CC"   color="#99CCFF"/>
+
+</channel>
+
+<model tag="SBL_2flav_numudis">
+    <rule index="0" name="No Osc"/>
+    <rule index="1" name="Numu Disapp"/>
+    <parameter variable_index = "1" name="L/E"/>
+</model>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/SBNDMCCV_*_sbruce.root" scale = "1" pot="{{ sbnd_mc_pot }}">  
+    <friend treename="multisigmaTree" />
+    <friend treename="multisimTree" />
+    <branch
+        associated_subchannel = "nu_SBND_numu_Run1numucc"
+        model_rule            = "1"
+        additional_weight     = "((!true_isnc) && (true_pdg == 14 || true_pdg == -14))*cvwgt"
+        >
+        
+        <variable>BRANCH</variable>
+        <variable>baseline/(nu_E*1000.0)</variable>
+	    <variable>nu_E</variable>
+
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numu_Run1numunc"
+        model_rule            = "1"
+        additional_weight     = "((true_isnc == 1) && (true_pdg == 14 || true_pdg == -14))*cvwgt"
+
+        >
+        <variable>BRANCH</variable>
+        <variable>baseline/(nu_E*1000.0)</variable>
+	    <variable>nu_E</variable>
+
+    </branch>
+
+    <branch
+        associated_subchannel = "nu_SBND_numu_Run1nue"
+        model_rule            = "0"
+        additional_weight     = "((true_pdg == 12 || true_pdg == -12))*cvwgt"
+
+        >
+        <variable>BRANCH</variable>
+        <variable>baseline/(nu_E*1000.0)</variable>
+	    <variable>nu_E</variable>
+
+    </branch>
+    <branch
+        associated_subchannel = "nu_SBND_numu_Run1cos"
+        model_rule            = "0"
+        additional_weight     = "(true_iscosmic == 1)*cvwgt"
+        >
+        <variable>BRANCH</variable>
+	    <variable>0.0</variable>
+	    <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/SBND_SpringBNBOffData_sbruce.root" scale = "1" pot="{{ sbnd_offbeam_pot }}">  
+    <branch
+        associated_subchannel = "nu_SBND_numu_Run1intime"
+        model_rule            = "0"
+        incl_systematics      = "false"
+        >
+        <variable>BRANCH</variable>
+	    <variable>0.0</variable>
+	    <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+<MCFile treename="SelectedEvents" filename="{{ BASE_DIR }}/GUMP/SBND_SpringLowEMC_sbruce.root" scale = "1" pot="{{ sbnd_dirt_pot }}">  
+    <branch
+        associated_subchannel = "nu_SBND_numu_Run1dirt"
+        model_rule            = "0"
+        incl_systematics      = "false"
+
+        >
+        <variable>BRANCH</variable>
+	    <variable>0.0</variable>
+	    <variable>0.0</variable>
+    </branch>
+</MCFile>
+
+
+<DetVarFiles>
+
+	<DetVarSection treename="SelectedEvents">
+	<!--DetVarSection treename="events/selectedAll" cv_variation_matching_vars="Run,Subrun,Evt" extra_weight="selected"-->
+
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_WMXThetaXWNominal_sbruce.root" pot="1" />       <!-- 1.4614e20 -->
+        <variation name="WM-Xtheta_xw_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_WMXThetaXW_sbruce.root" pot="1" knobval="+1"/>         <!-- 5.9415e20 -->
+
+		<subchannel>nu_SBND_numu_Run1intime</subchannel>
+		<subchannel>nu_SBND_numu_Run1dirt</subchannel>
+		<subchannel>nu_SBND_numu_Run1cos</subchannel>
+		<subchannel>nu_SBND_numu_Run1numunc</subchannel>
+		<subchannel>nu_SBND_numu_Run1nue</subchannel> 
+        <subchannel>nu_SBND_numu_Run1numucc</subchannel>
+
+	</DetVarSection>
+
+	<DetVarSection treename="SelectedEvents">
+	<!--DetVarSection treename="events/selectedAll" cv_variation_matching_vars="Run,Subrun,Evt" extra_weight="selected"-->
+
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_WMYZNominal_sbruce.root" pot="1" />       <!-- 1.4614e20 -->
+        <variation name="WM-YZ_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_WMYZ_sbruce.root" pot="1" knobval="+1"/>                        <!-- 6.03e20 -->
+
+		<subchannel>nu_SBND_numu_Run1intime</subchannel>
+		<subchannel>nu_SBND_numu_Run1dirt</subchannel>
+		<subchannel>nu_SBND_numu_Run1cos</subchannel>
+		<subchannel>nu_SBND_numu_Run1numunc</subchannel>
+		<subchannel>nu_SBND_numu_Run1nue</subchannel> 
+        <subchannel>nu_SBND_numu_Run1numucc</subchannel>
+
+	</DetVarSection>
+
+	<DetVarSection treename="SelectedEvents">
+	<!--DetVarSection treename="events/selectedAll" cv_variation_matching_vars="Run,Subrun,Evt" extra_weight="selected"-->
+
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_DENTNominal_sbruce.root" pot="1" />       <!-- 1.4614e20 -->
+        <variation name="Dent_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_DENT_sbruce.root" pot="1" knobval="+1"/>                        <!-- 1.449e20 -->
+
+		<subchannel>nu_SBND_numu_Run1intime</subchannel>
+		<subchannel>nu_SBND_numu_Run1dirt</subchannel>
+		<subchannel>nu_SBND_numu_Run1cos</subchannel>
+		<subchannel>nu_SBND_numu_Run1numunc</subchannel>
+		<subchannel>nu_SBND_numu_Run1nue</subchannel> 
+        <subchannel>nu_SBND_numu_Run1numucc</subchannel>
+
+	</DetVarSection>
+
+
+	<DetVarSection treename="SelectedEvents">
+	<!--DetVarSection treename="events/selectedAll" cv_variation_matching_vars="Run,Subrun,Evt" extra_weight="selected"-->
+
+		<cv filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_BINDNominal_sbruce.root" pot="1" />
+        <variation name="R_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_EMBRp_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="R_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_EMBRm_sbruce.root" pot="1" knobval="-1"/>
+        <variation name="Alpha_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_EMBAlphap_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="Alpha_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_EMBAlpham_sbruce.root" pot="1" knobval="-1"/>
+        <variation name="Beta_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_EMBBetap_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="Beta_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_EMBBetam_sbruce.root" pot="1" knobval="-1"/>
+        <variation name="Gain_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_GainHi_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="Gain_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_GainLow_sbruce.root" pot="1" knobval="-1"/>
+        <variation name="Smear_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_SmeareddEdx_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="Trigger_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_TrigEffPls_sbruce.root" pot="1" knobval="+1"/>
+        <variation name="Trigger_sbnd"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_TrigEffMin_sbruce.root" pot="1" knobval="-1"/>
+        <variation name="BIND"    filename="{{ BASE_DIR }}/GUMP/sbruce_trees/SBND_BIND_sbruce.root" pot="1" knobval="+1"/>
+
+		<subchannel>nu_SBND_numu_Run1intime</subchannel>
+		<subchannel>nu_SBND_numu_Run1dirt</subchannel>
+		<subchannel>nu_SBND_numu_Run1cos</subchannel>
+		<subchannel>nu_SBND_numu_Run1numunc</subchannel>
+		<subchannel>nu_SBND_numu_Run1nue</subchannel> 
+        <subchannel>nu_SBND_numu_Run1numucc</subchannel>
+
+	</DetVarSection>
+
+</DetVarFiles>
+
+{% set syst_xsec_subchannels       = "_Run1(numucc|nue|numunc)$" %}
+{% set syst_sbnd_det_subchannels   = "_Run1(numucc|nue|numunc|cos)$" %}
+{% set syst_sbnd_cosmic_subchannel = "nu_SBND_numu_Run1cos" %}
+{% set syst_sbnd_dirt_subchannel   = "nu_SBND_numu_Run1dirt" %}
+{% set syst_xsec_binning           = "var2" %}
+{% import "systematics.xml.j2" as syst with context %}
+<variation_list>
+    <!--allowlist type="mcstat" tag="MCstat" plotname="MC Stats" >mcstats</allowlist-->
+{{ syst.common_systematics }}
+
+{{ syst.sbnd_systematics }}
+</variation_list>
+
