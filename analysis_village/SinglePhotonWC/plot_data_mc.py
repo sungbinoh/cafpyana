@@ -18,7 +18,11 @@ MC events already contain cosmics in the neutrino spill ("Cosmic /
 unmatched"); off-beam data models the spills without a neutrino.
 
 --area-norm: shape comparison; the prediction (MC + off-beam) is scaled to the
-on-beam data total in each plot (blinded stages: to unit area).
+on-beam data total in each plot (blinded stages: to unit area). Works without
+the POT / gate information: if hdr.pot or hdr.noffbeambnb is missing, the
+off-beam share of the prediction is fitted to the on-beam data at preselection
+(binned Poisson likelihood over FIT_VARIABLES, see fit_offbeam_fraction), or set with
+--offbeam-frac. Those fit variables are then not an independent check.
 
 Blinding: stages listed in --blind (default: final) are drawn without on-beam
 data; pass --blind with no stage to unblind.
@@ -50,7 +54,7 @@ from analysis_village.SinglePhotonWC.plot_selection import GROUPS  # noqa: E402
 plt.style.use(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dune.mplstyle"))
 
 OFFBEAM_COLOR = "#a3a29d"
-UBOONE_BDT_DIR = "/home/nathanielerowe/claude-devcontainer/photons/bdt"
+UBOONE_BDT_DIR = "/home/nathanielerowe/claude-devcontainer/photons/bdt/for_claude"
 N_GATES_ON_PER_5E12POT = 1.05104   # SBND BNB, as in gump/loaddf.py
 
 _full = cuts.CHAINS["presel+uboone"]
@@ -102,6 +106,26 @@ def load_data(inputs):
         print("Warning: no hdr table (made without configs/sp_data.py?); POT from histpotdf, no off-beam gates.")
         pot, gates = totals.pot.sum(), 0
     return w, pot, gates
+
+
+# variables whose preselection shapes fix the off-beam share when the gate count is unknown:
+# cosmics enter from the top and leave little light in the beam window
+FIT_VARIABLES = ["nu_y", "flash_pe", "numu_score"]
+
+
+def fit_offbeam_fraction(mc, off, on):
+    """Off-beam share f of the prediction minimising the summed Poisson
+    deviance of the unit-area shapes (1 - f) MC + f off-beam vs on-beam over FIT_VARIABLES."""
+    spec = {v[0]: v for v in VARIABLES}
+    fs = np.linspace(0, 1, 201); chi2 = np.zeros(len(fs))
+    for name in FIT_VARIABLES:
+        _, var, bins, _ = spec[name]
+        hm, ho, hd = (np.histogram(values(x, var), bins)[0].astype(float) for x in (mc, off, on))
+        hm /= max(len(mc), 1); ho /= max(len(off), 1); n = len(on)   # per candidate, out-of-range ones included
+        for i, f in enumerate(fs):
+            p = np.maximum(n * ((1 - f) * hm + f * ho), 1e-9)
+            chi2[i] += 2 * np.sum(p - hd + hd * np.log(np.where(hd > 0, hd / p, 1)))   # Poisson deviance
+    return fs[np.argmin(chi2)]
 
 
 def values(df, var):
@@ -166,6 +190,8 @@ def main():
     ap.add_argument("--offbeam", nargs="+", required=True, help="off-beam data .df files, directories or globs")
     ap.add_argument("-o", "--outdir", default="data_mc_plots")
     ap.add_argument("--area-norm", action="store_true", help="scale the prediction to the data total in each plot")
+    ap.add_argument("--offbeam-frac", type=float, help="--area-norm without POT / gate info: off-beam share of the "
+                    "prediction at preselection (default: fitted to the on-beam data)")
     ap.add_argument("--stages", nargs="+", default=["presel", "bdt", "final"], choices=list(STAGES))
     ap.add_argument("--blind", nargs="*", default=["final"], choices=list(STAGES), help="stages drawn without on-beam data")
     ap.add_argument("--variables", nargs="+", help="subset of VARIABLES names (default: all)")
@@ -176,15 +202,26 @@ def main():
     mc, _, pot_mc = load_mc(args.mc, UBOONE_BDT_DIR)
     on, pot_on, _ = load_data(args.onbeam)
     off, _, gates_off = load_data(args.offbeam)
-    if not pot_on > 0:
-        sys.exit("No on-beam POT in the on-beam dataframes (hdr.pot / histpotdf).")
-    if not gates_off > 0:
-        sys.exit("No off-beam gates (hdr.noffbeambnb) in the off-beam dataframes; make them with configs/sp_data.py.")
-    pot_off = gates_off * N_GATES_ON_PER_5E12POT * 5e12
-    sc_mc, sc_off = pot_on / pot_mc, pot_on / pot_off
+    have_norm = pot_on > 0 and gates_off > 0
+    if have_norm:
+        pot_off = gates_off * N_GATES_ON_PER_5E12POT * 5e12
+        sc_mc, sc_off = pot_on / pot_mc, pot_on / pot_off
+        norm_line = "MC POT %.4g, on-beam POT %.4g, off-beam %d gates = %.4g POT-equivalent" % (pot_mc, pot_on, gates_off, pot_off)
+    elif args.area_norm:
+        pm, po, pd_ = (df[cuts.passes(df, cuts.PRESELECTION)] for df in (mc, off, on))
+        f = args.offbeam_frac if args.offbeam_frac is not None else fit_offbeam_fraction(pm, po, pd_)
+        sc_mc, sc_off = (1 - f) * len(pd_) / max(len(pm), 1), f * len(pd_) / max(len(po), 1)
+        norm_line = ("no %s: off-beam share at preselection %s f = %.3f (MC weight %.4g, off-beam weight %.4g, "
+                     "matched to the on-beam preselection total)" % (
+                         "on-beam POT" if not pot_on > 0 else "off-beam gate count",
+                         "set" if args.offbeam_frac is not None else "fitted over %s:" % "/".join(FIT_VARIABLES), f, sc_mc, sc_off))
+        print("Warning: " + norm_line)
+    else:
+        sys.exit("No on-beam POT (hdr.pot / histpotdf) or no off-beam gates (hdr.noffbeambnb); make the data dataframes "
+                 "with configs/sp_data.py, or use --area-norm for a shape-only comparison.")
     variables = [v for v in VARIABLES if not args.variables or v[0] in args.variables]
 
-    lines = ["MC POT %.4g, on-beam POT %.4g, off-beam %d gates = %.4g POT-equivalent" % (pot_mc, pot_on, gates_off, pot_off),
+    lines = [norm_line,
              "weights: MC %.4g, off-beam %.4g%s" % (sc_mc, sc_off, "; plots area-normalised" if args.area_norm else ""), ""]
     for stage in args.stages:
         chain, title = STAGES[stage]
