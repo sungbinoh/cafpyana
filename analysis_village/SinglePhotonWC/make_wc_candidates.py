@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 
 from makedf import wirecell as wc
-from analysis_village.SinglePhotonWC import cuts
+from analysis_village.SinglePhotonWC import cuts, wc_calo
 
 LEVELS = wc.WC_NU_LEVELS
 PID = {"em": 11, "muon": 13, "pion": 211, "proton": 2212, "nopid": 0}
@@ -266,6 +266,15 @@ def _shower_geom(f, D):
     return out
 
 
+def _track_calo(xyz, dqdx, vtx):
+    """(median dE/dx [MeV/cm], chi2 against mu, pi, p, points in the chi2)
+    from dE/dx vs residual range (wc_calo)."""
+    o, rr, phi = wc_calo.residual_range(xyz, vtx)
+    dedx = wc_calo.dqdx_to_dedx(dqdx[o], phi)
+    n = int(((rr > 0) & (rr <= wc_calo.RR_MAX_CM)).sum())
+    return (np.median(dedx),) + tuple(wc_calo.chi2(dedx, rr, h) for h in ("mu", "pi", "p")) + (n,)
+
+
 def _track_profile(xyz, dqdx, vtx):
     """(median, first-DQDX_START_CM median, last-DQDX_END_CM median / median)
     of a track's dQ/dx, ordered from the end nearer the vertex."""
@@ -290,9 +299,15 @@ def _tracks(f, D):
                                           longest muon-labelled track
       mu_mip1_len                         longest muon-labelled track with a
                                           MIP-like median (< MIP_LIKE_MAX MIPs)
-      mip1_len                            the same for any label"""
+      mip1_len                            the same for any label
+      trk1_ / mu1_ dedx, chi2_mu, chi2_pi, chi2_p, n_calo
+                                          calorimetry of those two tracks
+                                          (wc_calo: median dE/dx [MeV/cm],
+                                          dE/dx vs residual range chi2 per
+                                          hypothesis, points used)"""
+    calo = ["dedx", "chi2_mu", "chi2_pi", "chi2_p", "n_calo"]
     cols = ["trk1_len", "trk1_dqdx", "trk1_pdg", "mu1_len", "mu1_dqdx", "mu1_dqdx_start", "mu1_end_ratio",
-            "mu_mip1_len", "mip1_len"]
+            "mu_mip1_len", "mip1_len"] + ["trk1_" + c for c in calo] + ["mu1_" + c for c in calo]
     out = pd.DataFrame(np.nan, index=D.index, columns=cols)
     k = wc.make_wc_kineparticledf(f)
     k = k[(k.kine_energy_included == 1) & (k.kine_particle_is_shower == 0)]
@@ -312,17 +327,21 @@ def _tracks(f, D):
         if key not in k.index or len(g) < 3 or (entry, nu) not in D.index:
             continue
         vtx = D.loc[(entry, nu), ["nu_x", "nu_y", "nu_z"]].to_numpy(float)
-        med, start, end = _track_profile(g[["x", "y", "z"]].to_numpy(float), (g.q / g.nq).to_numpy(float), vtx)
-        rows.append((entry, nu, abs(int(k.loc[key, "kine_particle_type"])), length.get(key, 0.0), med, start, end))
+        xyz, dqdx = g[["x", "y", "z"]].to_numpy(float), (g.q / g.nq).to_numpy(float)
+        med, start, end = _track_profile(xyz, dqdx, vtx)
+        rows.append((entry, nu, abs(int(k.loc[key, "kine_particle_type"])), length.get(key, 0.0), med, start, end)
+                    + _track_calo(xyz, dqdx, vtx))
     if not rows:
         return out
-    t = pd.DataFrame(rows, columns=["entry", "nu_index", "pdg", "len", "dqdx", "dqdx_start", "end_ratio"])
+    t = pd.DataFrame(rows, columns=["entry", "nu_index", "pdg", "len", "dqdx", "dqdx_start", "end_ratio"] + calo)
     t = t.sort_values("len", ascending=False)
     mip = t.dqdx < MIP_LIKE_MAX * DQDX_MIP
     first = lambda m: t[m].groupby(["entry", "nu_index"]).first()
     a, mu = first(np.ones(len(t), bool)), first(t.pdg == PID["muon"])
     out["trk1_len"], out["trk1_dqdx"], out["trk1_pdg"] = a.len, a.dqdx, a.pdg
     out["mu1_len"], out["mu1_dqdx"], out["mu1_dqdx_start"], out["mu1_end_ratio"] = mu.len, mu.dqdx, mu.dqdx_start, mu.end_ratio
+    for c in calo:
+        out["trk1_" + c], out["mu1_" + c] = a[c], mu[c]
     out["mu_mip1_len"] = first((t.pdg == PID["muon"]) & mip).len
     out["mip1_len"] = first(mip).len
     return out
