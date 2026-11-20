@@ -65,7 +65,18 @@ STAGES = {   # name: (cut chain, title)
     "final": (_full, "full selection"),
 }
 
-VARIABLES = [   # name, column or function of the candidate frame, bins, axis label
+def _sp(col):
+    """Single-photon-tagger column, NaN (not drawn) where the tagger did not run."""
+    return lambda d: d[col].where(d.shw_sp_filled == 1)
+
+
+def _mip(col):
+    """make_wc_candidates track dQ/dx (T_rec_charge q / nq) in MIP units."""
+    from analysis_village.SinglePhotonWC.make_wc_candidates import DQDX_MIP
+    return lambda d: d[col] / DQDX_MIP
+
+
+VARIABLES = [   # name, column or function of the candidate frame, bins, axis label; NaN entries are not drawn
     ("nu_x", "nu_x", np.linspace(-200, 200, 41), "reco vertex x [cm]"),
     ("nu_y", "nu_y", np.linspace(-200, 200, 41), "reco vertex y [cm]"),
     ("nu_z", "nu_z", np.linspace(0, 500, 51), "reco vertex z [cm]"),
@@ -74,7 +85,18 @@ VARIABLES = [   # name, column or function of the candidate frame, bins, axis la
     ("shw_lobe_sep", "shw1_lobe_sep", np.arange(0, 60.1, 3), "counted shower two-lobe angle [deg]"),
     ("shw_costheta", "shw1_dir_z", np.linspace(-1, 1, 21), "counted shower cos(θ) to the beam"),
     ("shw_back_dist", "shw1_back_dist", np.arange(0, 501, 25), "counted shower traced back to the AV wall [cm]"),
-    ("shw_stem_dqdx", "shw_sp_medium_dQ_dx", np.arange(0, 5.01, 0.25), "shower stem dQ/dx [MIP]"),
+    # dQ/dx of the counted shower's stem (SP tagger, first 20 fit points from the vertex end, MIP units)
+    ("shw_stem_dqdx", _sp("shw_sp_medium_dQ_dx"), np.arange(0, 5.01, 0.2), "shower stem median dQ/dx [MIP]"),
+    ("shw_stem_dqdx_0", _sp("shw_sp_vec_dQ_dx_0"), np.arange(0, 6.01, 0.25), "shower stem dQ/dx, 1st point [MIP]"),
+    ("shw_stem_dqdx_1", _sp("shw_sp_vec_dQ_dx_1"), np.arange(0, 6.01, 0.25), "shower stem dQ/dx, 2nd point [MIP]"),
+    ("shw_stem_dqdx_2", _sp("shw_sp_vec_dQ_dx_2"), np.arange(0, 6.01, 0.25), "shower stem dQ/dx, 3rd point [MIP]"),
+    ("shw_stem_dqdx_max", _sp("shw_sp_max_dQ_dx_sample"), np.arange(0, 6.01, 0.25), "shower stem max dQ/dx [MIP]"),
+    ("shw_stem_dedx", _sp("shw_sp_vec_median_dedx"), np.arange(0, 10.01, 0.4), "shower stem median dE/dx [MeV/cm]"),
+    # dQ/dx of tracks (make_wc_candidates._tracks)
+    ("trk1_dqdx", _mip("trk1_dqdx"), np.arange(0, 6.01, 0.2), "longest track median dQ/dx [MIP]"),
+    ("mu1_dqdx", _mip("mu1_dqdx"), np.arange(0, 6.01, 0.2), "longest μ-labelled track median dQ/dx [MIP]"),
+    ("mu1_dqdx_start", _mip("mu1_dqdx_start"), np.arange(0, 6.01, 0.2), "longest μ-labelled track dQ/dx, first 4 cm [MIP]"),
+    ("mu1_end_ratio", "mu1_end_ratio", np.arange(0, 5.01, 0.2), "longest μ-labelled track: last 3 cm / median dQ/dx"),
     ("n_sp_showers", "shw_sp_n_20br1_showers", np.arange(-0.5, 6.5), "SP-tagger showers > 20 MeV at the vertex"),
     ("n_em", "n_em", np.arange(-0.5, 8.5), "EM particles in the candidate"),
     ("E_em_2", lambda d: d.E_em_all_2.fillna(0) if "E_em_all_2" in d else d.E_em_2.fillna(0),
@@ -134,6 +156,7 @@ def values(df, var):
 
 def plot_one(name, var, bins, label, stage, title, mc, off, on, sc_mc, sc_off, out, blind, area_norm=False):
     x_mc = values(mc, var); x_off = values(off, var)
+    fin = np.isfinite(x_mc); mc, x_mc = mc[fin], x_mc[fin]; x_off = x_off[np.isfinite(x_off)]
     stacks, weights, labels, colors = [], [], [], []
     for lab, cats, col in GROUPS:
         m = mc.cat.isin(cats).to_numpy()
@@ -144,7 +167,7 @@ def plot_one(name, var, bins, label, stage, title, mc, off, on, sc_mc, sc_off, o
     pred = sum(np.histogram(x, bins, weights=w_)[0] for x, w_ in zip(stacks, weights))
     var_pred = (np.histogram(x_mc, bins)[0] * sc_mc ** 2 + np.histogram(x_off, bins)[0] * sc_off ** 2)
     if not blind:
-        x_on = values(on, var); n_on = np.histogram(x_on, bins)[0]
+        x_on = values(on, var); x_on = x_on[np.isfinite(x_on)]; n_on = np.histogram(x_on, bins)[0]
     if area_norm:   # scale the prediction to the data total (blinded: to unit area)
         k = (n_on.sum() if not blind else 1.0) / max(pred.sum(), 1e-12)
         weights = [w_ * k for w_ in weights]; pred = pred * k; var_pred = var_pred * k ** 2
