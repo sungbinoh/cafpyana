@@ -24,8 +24,8 @@ off-beam share of the prediction is fitted to the on-beam data at preselection
 (binned Poisson likelihood over FIT_VARIABLES, see fit_offbeam_fraction), or set with
 --offbeam-frac. Those fit variables are then not an independent check.
 
-Blinding: stages listed in --blind (default: final) are drawn without on-beam
-data; pass --blind with no stage to unblind.
+Blinding: off by default; stages listed in --blind (e.g. --blind final) are
+drawn without on-beam data.
 
 Inputs: MC .df from configs/sp_mc.py (wc + mcnu + wcevt), data .df from
 configs/sp_data.py (wc + wcevt + hdr). The MicroBooNE BDT XMLs are read from
@@ -194,7 +194,8 @@ def main():
                     "prediction at preselection (default: fitted to the on-beam data)")
     ap.add_argument("-j", "--nproc", type=int, help="worker processes for reading the files and the BDT scoring (default: up to 8)")
     ap.add_argument("--stages", nargs="+", default=["presel", "bdt", "final"], choices=list(STAGES))
-    ap.add_argument("--blind", nargs="*", default=["final"], choices=list(STAGES), help="stages drawn without on-beam data")
+    ap.add_argument("--blind", nargs="*", default=[], choices=list(STAGES),
+                    help="stages drawn without on-beam data (default: none)")
     ap.add_argument("--variables", nargs="+", help="subset of VARIABLES names (default: all)")
     args = ap.parse_args()
 
