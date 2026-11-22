@@ -113,14 +113,15 @@ VARIABLES = [   # name, column or function of the candidate frame, bins, axis la
 ]
 
 
-def load_data(inputs, nproc=None):
+def load_data(inputs, nproc=None, uboone_bdt=True):
     """On- or off-beam data: (candidates with the uB scores, POT from the hdr
     table, off-beam BNB gates)."""
-    from analysis_village.SinglePhotonWC import microboone_bdt
     frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "wcevt", "hdr"], nproc=nproc)
     w = frames["wc"]
     w["wc_valid"] = 1   # a candidate implies Wire-Cell output
-    w = w.join(microboone_bdt.score(w, UBOONE_BDT_DIR, nproc=nproc))
+    if uboone_bdt:
+        from analysis_village.SinglePhotonWC import microboone_bdt
+        w = w.join(microboone_bdt.score(w, UBOONE_BDT_DIR, nproc=nproc))
     hdr = frames["hdr"]
     if len(hdr):
         pot, gates = hdr.pot.sum(), hdr.noffbeambnb.sum()
@@ -148,6 +149,28 @@ def fit_offbeam_fraction(mc, off, on):
             p = np.maximum(n * ((1 - f) * hm + f * ho), 1e-9)
             chi2[i] += 2 * np.sum(p - hd + hd * np.log(np.where(hd > 0, hd / p, 1)))   # Poisson deviance
     return fs[np.argmin(chi2)]
+
+
+def normalisation(mc, on, off, pot_mc, pot_on, gates_off, area_norm=False, offbeam_frac=None):
+    """(MC weight, off-beam weight, description): POT and gate scaling, or,
+    without that information and with area_norm, the off-beam share at
+    preselection (offbeam_frac, else fitted) matched to the on-beam total."""
+    if pot_on > 0 and gates_off > 0:
+        pot_off = gates_off * N_GATES_ON_PER_5E12POT * 5e12
+        return pot_on / pot_mc, pot_on / pot_off, (
+            "MC POT %.4g, on-beam POT %.4g, off-beam %d gates = %.4g POT-equivalent" % (pot_mc, pot_on, gates_off, pot_off))
+    if not area_norm:
+        sys.exit("No on-beam POT (hdr.pot / histpotdf) or no off-beam gates (hdr.noffbeambnb); make the data dataframes "
+                 "with configs/sp_data.py, or use --area-norm for a shape-only comparison.")
+    pm, po, pd_ = (df[cuts.passes(df, cuts.PRESELECTION)] for df in (mc, off, on))
+    f = offbeam_frac if offbeam_frac is not None else fit_offbeam_fraction(pm, po, pd_)
+    sc_mc, sc_off = (1 - f) * len(pd_) / max(len(pm), 1), f * len(pd_) / max(len(po), 1)
+    line = ("no %s: off-beam share at preselection %s f = %.3f (MC weight %.4g, off-beam weight %.4g, "
+            "matched to the on-beam preselection total)" % (
+                "on-beam POT" if not pot_on > 0 else "off-beam gate count",
+                "set" if offbeam_frac is not None else "fitted over %s:" % "/".join(FIT_VARIABLES), f, sc_mc, sc_off))
+    print("Warning: " + line)
+    return sc_mc, sc_off, line
 
 
 def values(df, var):
@@ -227,23 +250,7 @@ def main():
     mc, _, pot_mc = load_mc(args.mc, UBOONE_BDT_DIR, nproc=args.nproc)
     on, pot_on, _ = load_data(args.onbeam, args.nproc)
     off, _, gates_off = load_data(args.offbeam, args.nproc)
-    have_norm = pot_on > 0 and gates_off > 0
-    if have_norm:
-        pot_off = gates_off * N_GATES_ON_PER_5E12POT * 5e12
-        sc_mc, sc_off = pot_on / pot_mc, pot_on / pot_off
-        norm_line = "MC POT %.4g, on-beam POT %.4g, off-beam %d gates = %.4g POT-equivalent" % (pot_mc, pot_on, gates_off, pot_off)
-    elif args.area_norm:
-        pm, po, pd_ = (df[cuts.passes(df, cuts.PRESELECTION)] for df in (mc, off, on))
-        f = args.offbeam_frac if args.offbeam_frac is not None else fit_offbeam_fraction(pm, po, pd_)
-        sc_mc, sc_off = (1 - f) * len(pd_) / max(len(pm), 1), f * len(pd_) / max(len(po), 1)
-        norm_line = ("no %s: off-beam share at preselection %s f = %.3f (MC weight %.4g, off-beam weight %.4g, "
-                     "matched to the on-beam preselection total)" % (
-                         "on-beam POT" if not pot_on > 0 else "off-beam gate count",
-                         "set" if args.offbeam_frac is not None else "fitted over %s:" % "/".join(FIT_VARIABLES), f, sc_mc, sc_off))
-        print("Warning: " + norm_line)
-    else:
-        sys.exit("No on-beam POT (hdr.pot / histpotdf) or no off-beam gates (hdr.noffbeambnb); make the data dataframes "
-                 "with configs/sp_data.py, or use --area-norm for a shape-only comparison.")
+    sc_mc, sc_off, norm_line = normalisation(mc, on, off, pot_mc, pot_on, gates_off, args.area_norm, args.offbeam_frac)
     variables = [v for v in VARIABLES if not args.variables or v[0] in args.variables]
 
     lines = [norm_line,

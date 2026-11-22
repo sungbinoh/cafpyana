@@ -21,6 +21,9 @@ Columns:
     shw1_a68 (68% charge opening angle), shw1_width, shw1_lobe_sep (two
     photons merged into one shower show up as two lobes)
 
+make_wc_trkseg_df: a separate table of dQ/dx along the tracks (calibration
+checks, plot_dqdx_data_mc.py).
+
 Reco only: truth is the mcnu table (make_truth.py), joined by cutflow.load.
 """
 
@@ -290,6 +293,31 @@ def _track_profile(xyz, dqdx, vtx):
     return med, np.median(q[d <= DQDX_START_CM]), np.median(q[d >= d[-1] - DQDX_END_CM]) / med
 
 
+def _track_points(f, D):
+    """(entry, nu_index, kine_index, |pdg|, length [cm], xyz, dQ/dx, vertex) for
+    each track particle (connected, not a shower) of the candidates in D with
+    >= 3 T_rec_charge fit points (dQ/dx = q / nq, file charge units per cm)."""
+    k = wc.make_wc_kineparticledf(f)
+    k = k[(k.kine_energy_included == 1) & (k.kine_particle_is_shower == 0)]
+    if not len(k):
+        return
+    seg = wc.make_wc_segmentdf(f, ["nu_index", "segment_id", "kine_index", "length_cm"]).reset_index("row", drop=True)
+    seg = seg[seg.nu_index >= 0]
+    length = seg.groupby([seg.index, "nu_index", "kine_index"]).length_cm.sum()
+    sid = seg.set_index(["nu_index", "segment_id"], append=True).kine_index
+    ch = wc.make_wc_chargedf(f, ["x", "y", "z", "q", "nq", "nu_index", "real_cluster_id"]).reset_index("row", drop=True)
+    ch = ch[(ch.nu_index >= 0) & (ch.nq > 0)]
+    ch["kine_index"] = sid.reindex(pd.MultiIndex.from_arrays([ch.index, ch.nu_index, ch.real_cluster_id])).values
+    ch = ch[ch.kine_index.notna()]
+    for (entry, nu, ki), g in ch.groupby([ch.index, "nu_index", "kine_index"]):
+        key = (entry, nu, int(ki))
+        if key not in k.index or len(g) < 3 or (entry, nu) not in D.index:
+            continue
+        vtx = D.loc[(entry, nu), ["nu_x", "nu_y", "nu_z"]].to_numpy(float)
+        yield (entry, nu, int(ki), abs(int(k.loc[key, "kine_particle_type"])), length.get(key, 0.0),
+               g[["x", "y", "z"]].to_numpy(float), (g.q / g.nq).to_numpy(float), vtx)
+
+
 def _tracks(f, D):
     """Track particles (connected, not showers) by length and dQ/dx, from the
     T_rec_charge fit points (q / nq, file charge units per cm; DQDX_MIP is
@@ -309,28 +337,10 @@ def _tracks(f, D):
     cols = ["trk1_len", "trk1_dqdx", "trk1_pdg", "mu1_len", "mu1_dqdx", "mu1_dqdx_start", "mu1_end_ratio",
             "mu_mip1_len", "mip1_len"] + ["trk1_" + c for c in calo] + ["mu1_" + c for c in calo]
     out = pd.DataFrame(np.nan, index=D.index, columns=cols)
-    k = wc.make_wc_kineparticledf(f)
-    k = k[(k.kine_energy_included == 1) & (k.kine_particle_is_shower == 0)]
-    if not len(k):
-        return out
-    seg = wc.make_wc_segmentdf(f, ["nu_index", "segment_id", "kine_index", "length_cm"]).reset_index("row", drop=True)
-    seg = seg[seg.nu_index >= 0]
-    length = seg.groupby([seg.index, "nu_index", "kine_index"]).length_cm.sum()
-    sid = seg.set_index(["nu_index", "segment_id"], append=True).kine_index
-    ch = wc.make_wc_chargedf(f, ["x", "y", "z", "q", "nq", "nu_index", "real_cluster_id"]).reset_index("row", drop=True)
-    ch = ch[(ch.nu_index >= 0) & (ch.nq > 0)]
-    ch["kine_index"] = sid.reindex(pd.MultiIndex.from_arrays([ch.index, ch.nu_index, ch.real_cluster_id])).values
-    ch = ch[ch.kine_index.notna()]
     rows = []
-    for (entry, nu, ki), g in ch.groupby([ch.index, "nu_index", "kine_index"]):
-        key = (entry, nu, int(ki))
-        if key not in k.index or len(g) < 3 or (entry, nu) not in D.index:
-            continue
-        vtx = D.loc[(entry, nu), ["nu_x", "nu_y", "nu_z"]].to_numpy(float)
-        xyz, dqdx = g[["x", "y", "z"]].to_numpy(float), (g.q / g.nq).to_numpy(float)
+    for entry, nu, _, pdg, length, xyz, dqdx, vtx in _track_points(f, D):
         med, start, end = _track_profile(xyz, dqdx, vtx)
-        rows.append((entry, nu, abs(int(k.loc[key, "kine_particle_type"])), length.get(key, 0.0), med, start, end)
-                    + _track_calo(xyz, dqdx, vtx))
+        rows.append((entry, nu, pdg, length, med, start, end) + _track_calo(xyz, dqdx, vtx))
     if not rows:
         return out
     t = pd.DataFrame(rows, columns=["entry", "nu_index", "pdg", "len", "dqdx", "dqdx_start", "end_ratio"] + calo)
@@ -345,6 +355,39 @@ def _tracks(f, D):
     out["mu_mip1_len"] = first((t.pdg == PID["muon"]) & mip).len
     out["mip1_len"] = first(mip).len
     return out
+
+
+TRKSEG_CM = 4.0          # cm of track path per make_wc_trkseg_df row
+TRKSEG_MIN_LEN = 5.0     # cm, shorter tracks are not split
+
+
+def make_wc_trkseg_df(f):
+    """dQ/dx along the tracks, for calibration checks: one row per TRKSEG_CM
+    of path of each track particle (_track_points) >= TRKSEG_MIN_LEN, index
+    (entry, nu_index, kine_index, seg), seg 0 at the vertex end. Columns:
+    pdg, trk_len, npts, x/y/z (mean of the points), dqdx (median q / nq;
+    / DQDX_MIP for MIPs), rr (mean residual range, wc_calo.residual_range),
+    dir_x/y/z (unit vector first -> last point, away from the vertex)."""
+    cols = ["pdg", "trk_len", "npts", "x", "y", "z", "dqdx", "rr", "dir_x", "dir_y", "dir_z"]
+    D = wc.make_wc_nudf(f, tagger_leaves=["nu_x", "nu_y", "nu_z"], include_tmatch=False)
+    rows = []
+    for entry, nu, ki, pdg, length, xyz, dqdx, vtx in _track_points(f, D):
+        if length < TRKSEG_MIN_LEN:
+            continue
+        o, rr, _ = wc_calo.residual_range(xyz, vtx)
+        p, q = xyz[o], dqdx[o]
+        iseg = ((rr[0] - rr) // TRKSEG_CM).astype(int)
+        for s in np.unique(iseg):
+            m = iseg == s
+            d = p[m][-1] - p[m][0]
+            n = np.linalg.norm(d)
+            if m.sum() < 2 or n == 0:
+                continue
+            rows.append((entry, nu, ki, s, pdg, length, m.sum(), *p[m].mean(0), np.median(q[m]), rr[m].mean(), *(d / n)))
+    if not rows:
+        return pd.DataFrame(columns=cols)
+    t = pd.DataFrame(rows, columns=["entry", "nu_index", "kine_index", "seg"] + cols)
+    return t.set_index(["entry", "nu_index", "kine_index", "seg"]).astype(np.float32)
 
 
 def make_wc_candidate_df(f):
