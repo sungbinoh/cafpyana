@@ -20,7 +20,7 @@ Stacked plots are by truth category with the uncertainty on the total as a
 hatched band (MC statistics, plus systematics where available) and no
 under/overflow bins. Efficiency and purity errors are binomial.
 
-Input: configs/sp_mc*.py outputs (wc + mcnu + wcevt [+ wgt / slimwgt]) and
+Input: configs/sp_mc.py outputs (wc + mcnu + wcevt + wgt; or slimwgt) and
 the MicroBooNE BDT XMLs (the ub_* scores). --cache DIR keeps the loaded and
 scored candidates (w_ub.pkl, m.pkl, pot.txt) for later runs; the weights
 are always read from the inputs.

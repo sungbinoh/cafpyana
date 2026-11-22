@@ -27,7 +27,7 @@ off-beam share of the prediction is fitted to the on-beam data at preselection
 Blinding: off by default; stages listed in --blind (e.g. --blind final) are
 drawn without on-beam data.
 
-Inputs: MC .df from configs/sp_mc.py (wc + mcnu + wcevt), data .df from
+Inputs: MC .df from configs/sp_mc.py (wc + mcnu + wcevt + wgt), data .df from
 configs/sp_data.py (wc + wcevt + hdr). The MicroBooNE BDT XMLs are read from
 UBOONE_BDT_DIR.
 
