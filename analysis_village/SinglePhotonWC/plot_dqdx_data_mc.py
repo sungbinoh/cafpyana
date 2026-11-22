@@ -24,6 +24,11 @@ Samples (SAMPLES):
     shower_stem  SP-tagger shower stem median dQ/dx at the shower start and
                  direction (shw1_start_*, shw1_dir_*)
     trk1_vtx     longest track median dQ/dx at the reco vertex (no direction)
+    mu1_angle    longest muon-labelled track median dQ/dx, with the direction
+                 of the cosmic tagger's main track (cosmict_2_theta / _phi:
+                 polar angle to z, azimuth from x; the same track as the
+                 trkseg direction to |cos| > 0.99 for 3/4 of the candidates),
+                 position at the reco vertex
 
 Plots, per sample: dqdx_<sample>_dist.png (dQ/dx distribution, prediction
 scaled to the data) and dqdx_<sample>_<coordinate>.png (median profile, with
@@ -91,6 +96,14 @@ def _trk1_vtx(w):
     return pd.DataFrame({"dqdx": s.trk1_dqdx / DQDX_MIP, "x": s.nu_x, "y": s.nu_y, "z": s.nu_z}, index=s.index)
 
 
+def _mu1_angle(w):
+    s = w[w.mu1_dqdx.notna() & (w.cosmict_2_filled == 1)]
+    th, ph = np.radians(s.cosmict_2_theta), np.radians(s.cosmict_2_phi)
+    dx, dy, dz = np.sin(th) * np.cos(ph), np.sin(th) * np.sin(ph), np.cos(th)
+    return pd.DataFrame({"dqdx": s.mu1_dqdx / DQDX_MIP, "x": s.nu_x, "y": s.nu_y, "z": s.nu_z,
+                         "angle_drift": _angle_drift(dx), "angle_yz": _angle_yz(dy, dz)}, index=s.index)
+
+
 SAMPLES = {   # name: (needs the trkseg table, function of (candidates, segments) -> points, title, dQ/dx bins)
     "mu_mip": (True, lambda w, s: _segments(s, lambda d: (d.pdg == PID["muon"]) & (d.rr > RR_MIP_MIN)),
                "muon-labelled tracks, residual range > %g cm (4 cm pieces)" % RR_MIP_MIN, np.arange(0, 3.01, 0.05)),
@@ -101,6 +114,8 @@ SAMPLES = {   # name: (needs the trkseg table, function of (candidates, segments
                     np.arange(0, 5.01, 0.1)),
     "trk1_vtx": (False, lambda w, s: _trk1_vtx(w), "longest track (> 10 cm) median dQ/dx, at the reco vertex",
                  np.arange(0, 6.01, 0.1)),
+    "mu1_angle": (False, lambda w, s: _mu1_angle(w), "longest μ-labelled track median dQ/dx, cosmic-tagger track direction",
+                  np.arange(0, 3.01, 0.05)),
 }
 
 COORDS = [   # column, bins, label
