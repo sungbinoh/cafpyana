@@ -30,6 +30,14 @@ Samples (SAMPLES):
                  trkseg direction to |cos| > 0.99 for 3/4 of the candidates),
                  position at the reco vertex
 
+Angles: --angle-bin wide bins (default 2 deg) in the profiles; also
+dqdx_<sample>_zoom_angle_drift.png (--zoom: range and bin, default 0-90
+deg in 1 deg bins) and
+dqdx_<sample>_angle_map.png, the data / prediction ratio of the median and
+its pull in cells of angle to the drift x angle in the wire plane (--map-bin
+widths; cells with < MAP_MIN_ENTRIES data or MC entries are blank), with the
+wire directions marked.
+
 Plots, per sample: dqdx_<sample>_dist.png (dQ/dx distribution, prediction
 scaled to the data), dqdx_<sample>_<coordinate>.png (median profile, with
 the MC-only and off-beam-only medians as thin lines) and
@@ -123,10 +131,20 @@ COORDS = [   # column, bins, label
     ("x", np.linspace(-200, 200, 21), "x [cm] (drift; cathode at 0, anodes at ±200)"),
     ("y", np.linspace(-200, 200, 21), "y [cm]"),
     ("z", np.linspace(0, 500, 26), "z [cm]"),
-    ("angle_drift", np.linspace(0, 90, 19), "angle to the drift (x) direction [deg]"),
-    ("angle_yz", np.linspace(-90, 90, 19), "angle in the y-z (wire) plane to the beam axis [deg]"),
+    ("angle_drift", None, "angle to the drift (x) direction [deg]"),   # angle bins: --angle-bin
+    ("angle_yz", None, "angle in the y-z (wire) plane to the beam axis [deg]"),
     ("rr", np.linspace(0, 150, 31), "residual range [cm]"),
 ]
+ANGLE_RANGE = {"angle_drift": (0, 90), "angle_yz": (-90, 90)}
+# tracks along the wires in the y-z plane (angle_yz): collection wires vertical,
+# induction wires at +-60 deg to the vertical (+-30 deg to z)
+WIRE_LINES = [(90, "∥ collection"), (-90, None), (30, "∥ induction"), (-30, "∥ induction")]
+MAP_MIN_ENTRIES = 20   # data and MC entries a 2D cell needs to be drawn
+
+
+def angle_bins(coord, width):
+    lo, hi = ANGLE_RANGE[coord]
+    return np.linspace(lo, hi, int(round((hi - lo) / width)) + 1)
 
 
 def wquantile(v, w, q):
@@ -255,6 +273,49 @@ def tpc_medians(on, mc, off):
     return ", ".join(out)
 
 
+def profile2d(p, bx, by):
+    """(median, error, entries) per (angle_drift, angle_yz) cell."""
+    ix = np.digitize(p.angle_drift.to_numpy(float), bx) - 1
+    iy = np.digitize(p.angle_yz.to_numpy(float), by) - 1
+    v, w = p.dqdx.to_numpy(float), p.w.to_numpy(float)
+    M, E, N = (np.full((len(bx) - 1, len(by) - 1), np.nan) for _ in range(3))
+    ok = (ix >= 0) & (ix < len(bx) - 1) & (iy >= 0) & (iy < len(by) - 1) & np.isfinite(v)
+    for (i, j), idx in pd.Series(np.flatnonzero(ok)).groupby([ix[ok], iy[ok]]):
+        M[i, j], E[i, j] = median_err(v[idx.to_numpy()], w[idx.to_numpy()])
+        N[i, j] = len(idx)
+    return M, E, N
+
+
+def plot_angle_map(name, title, on, mc, off, out, map_bin, ratio_range):
+    bx, by = angle_bins("angle_drift", map_bin[0]), angle_bins("angle_yz", map_bin[1])
+    Md, Ed, Nd = profile2d(on, bx, by)
+    Mp, Ep, Np = profile2d(pd.concat([mc, off]), bx, by)
+    Nmc = profile2d(mc, bx, by)[2]
+    bad = ~(np.nan_to_num(Nd) >= MAP_MIN_ENTRIES) | ~(np.nan_to_num(Nmc) >= MAP_MIN_ENTRIES)
+    R = np.where(bad, np.nan, Md / Mp)
+    pull = np.where(bad, np.nan, (Md - Mp) / np.hypot(Ed, Ep))
+    fig, axs = plt.subplots(1, 2, figsize=(17, 6.5))
+    for a, Z, lab, lim in [(axs[0], R, "data / prediction, median dQ/dx", (1 - ratio_range, 1 + ratio_range)),
+                           (axs[1], pull, "(data $-$ pred.) / error", (-5, 5))]:
+        im = a.pcolormesh(bx, by, Z.T, cmap="RdBu_r", vmin=lim[0], vmax=lim[1], shading="flat")
+        fig.colorbar(im, ax=a, label=lab)
+        for yv, txt in WIRE_LINES:
+            a.axhline(yv, color="#3d3c39", ls="--", lw=1)
+            if txt:
+                a.text(bx[0] + 1, yv - 2 if yv > 0 else yv + 2, txt, fontsize=8.5, va="top" if yv > 0 else "bottom",
+                       color="#3d3c39")
+        a.set_xlabel("angle to the drift (x) direction [deg]")
+        a.set_ylabel("angle in the y-z plane to z [deg]")
+        a.set_xlim(bx[0], bx[-1])
+        a.set_ylim(by[0], by[-1])
+        a.grid(False)
+    fig.suptitle("%s\nblank: < %d data or MC entries; which induction plane is +30 vs -30 deg not resolved"
+                 % (title, MAP_MIN_ENTRIES), fontsize=11, x=0.01, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
+    fig.savefig(os.path.join(out, "dqdx_%s_angle_map.png" % name), dpi=130, bbox_inches="tight")
+    plt.close(fig)
+
+
 def load_segments(inputs, keep, nproc=None):
     """The trkseg table for the candidates in keep (an index over CAND_LEVELS);
     None if the inputs have none."""
@@ -281,6 +342,12 @@ def main():
                     "(as plot_data_mc.py); only the MC / off-beam mix matters for the medians")
     ap.add_argument("--offbeam-frac", type=float, help="off-beam share of the prediction at preselection, with --area-norm")
     ap.add_argument("--samples", nargs="+", default=list(SAMPLES), choices=list(SAMPLES))
+    ap.add_argument("--angle-bin", type=float, default=2.0, help="angle bin width in the profiles [deg] (default 2)")
+    ap.add_argument("--map-bin", type=float, nargs=2, default=[5.0, 10.0], metavar=("DRIFT", "YZ"),
+                    help="2D map cell widths [deg] (default 5 10)")
+    ap.add_argument("--zoom", type=float, nargs=3, default=[0.0, 90.0, 1.0], metavar=("LO", "HI", "BIN"),
+                    help="angle-to-drift range and bin of the _zoom profile [deg] (default 0 90 1)")
+    ap.add_argument("--ratio-range", type=float, default=0.1, help="2D map colour range 1 +- this (default 0.1)")
     ap.add_argument("-j", "--nproc", type=int, help="worker processes (default: up to 8)")
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
@@ -313,11 +380,18 @@ def main():
         md, mp = plot_dist(name, full, bins, pts["on"], pts["mc"], pts["off"], args.outdir)
         lines.append("%-12s median dQ/dx data %.3f, prediction %.3f, ratio %.3f (by TPC: %s)"
                      % (name, md, mp, md / mp, tpc_medians(pts["on"], pts["mc"], pts["off"])))
+        on, mc, off = pts["on"], pts["mc"], pts["off"]
         for coord, cbins, label in COORDS:
-            if coord in pts["on"]:
-                plot_profile(name, full, coord, cbins, label, pts["on"], pts["mc"], pts["off"], args.outdir)
+            if coord in on:
+                cbins = angle_bins(coord, args.angle_bin) if cbins is None else cbins
+                plot_profile(name, full, coord, cbins, label, on, mc, off, args.outdir)
                 if coord != "x":
-                    plot_profile_tpc(name, full, coord, cbins, label, pts["on"], pts["mc"], pts["off"], args.outdir)
+                    plot_profile_tpc(name, full, coord, cbins, label, on, mc, off, args.outdir)
+        if "angle_drift" in on:
+            lo, hi, step = args.zoom
+            plot_profile(name + "_zoom", full, "angle_drift", np.arange(lo, hi + step / 2, step), COORDS[3][2], on, mc, off,
+                         args.outdir)
+            plot_angle_map(name, full, on, mc, off, args.outdir, args.map_bin, args.ratio_range)
     open(os.path.join(args.outdir, "summary.txt"), "w").write("\n".join(lines) + "\n")
     print("\n".join(lines))
     print("wrote the plots to %s" % args.outdir)
