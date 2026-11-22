@@ -8,6 +8,7 @@ prediction ratio panel. What a pattern points to:
   structure in y or z       YZ response (dead / noisy wires, field distortions)
   trend with the angle      recombination angle dependence, wire response
   offset growing with dQ/dx recombination (protons vs MIPs)
+  one TPC only              that TPC's conditions (channels, response)
 
 Candidates: --stage, default "muon" (cuts.CHAINS["presel+muon"]:
 preselection and a muon-labelled track > 30 cm, to isolate muons);
@@ -22,8 +23,6 @@ Samples (SAMPLES):
     proton       proton-labelled tracks
     all_tracks   every track
   from the candidate table (any dataframes):
-    shower_stem  SP-tagger shower stem median dQ/dx at the shower start and
-                 direction (shw1_start_*, shw1_dir_*)
     trk1_vtx     longest track median dQ/dx at the reco vertex (no direction)
     mu1_angle    longest muon-labelled track median dQ/dx, with the direction
                  of the cosmic tagger's main track (cosmict_2_theta / _phi:
@@ -32,12 +31,15 @@ Samples (SAMPLES):
                  position at the reco vertex
 
 Plots, per sample: dqdx_<sample>_dist.png (dQ/dx distribution, prediction
-scaled to the data) and dqdx_<sample>_<coordinate>.png (median profile, with
-the MC-only and off-beam-only medians as thin lines). Errors on a median:
-1.253 x (16-84% half width) / sqrt(effective entries); track pieces of one
-track are correlated, so these are underestimates. dQ/dx in MIPs:
-q / nq / DQDX_MIP for Wire-Cell track points, the SP tagger's own units for
-the shower stem. Nothing is calibrated (see wc_calo.py).
+scaled to the data), dqdx_<sample>_<coordinate>.png (median profile, with
+the MC-only and off-beam-only medians as thin lines) and
+dqdx_<sample>_<coordinate>_bytpc.png (the profile and ratio for each TPC:
+east x < 0, west x > 0; by the piece's x for trkseg samples, by the reco
+vertex x for the candidate-level ones, so a track crossing the cathode
+counts in its vertex TPC). Errors on a median: 1.253 x (16-84% half width) /
+sqrt(effective entries); track pieces of one track are correlated, so these
+are underestimates. dQ/dx in MIPs: q / nq / DQDX_MIP of the Wire-Cell track
+points. Nothing is calibrated (see wc_calo.py).
 
   python analysis_village/SinglePhotonWC/plot_dqdx_data_mc.py \\
       --mc <MC dir or .df> --onbeam <on-beam> --offbeam <off-beam> -o dqdx_plots/ [--area-norm]
@@ -71,6 +73,10 @@ SEG_KEY = "trkseg"
 CAND_LEVELS = ["file", "__ntuple", "entry", "nu_index"]
 RR_MIP_MIN = 30.0   # cm, residual range above which a muon is a MIP (no Bragg rise)
 MC_COLOR, PRED_COLOR = "#2a78d6", "#1f1f1e"
+TPCS = [   # name, selection on x, colour
+    ("east TPC (x < 0)", lambda x: x < 0, "#2a78d6"),
+    ("west TPC (x > 0)", lambda x: x > 0, "#eb6834"),
+]
 
 
 def _angle_drift(dx):
@@ -86,13 +92,6 @@ def _segments(seg, m):
     s = seg[m(seg)]
     return pd.DataFrame({"dqdx": s.dqdx / DQDX_MIP, "x": s.x, "y": s.y, "z": s.z, "angle_drift": _angle_drift(s.dir_x),
                          "angle_yz": _angle_yz(s.dir_y, s.dir_z), "rr": s.rr}, index=s.index)
-
-
-def _shower_stem(w):
-    s = w[(w.shw_sp_filled == 1) & w.shw1_start_x.notna()]
-    return pd.DataFrame({"dqdx": s.shw_sp_medium_dQ_dx, "x": s.shw1_start_x, "y": s.shw1_start_y, "z": s.shw1_start_z,
-                         "angle_drift": _angle_drift(s.shw1_dir_x), "angle_yz": _angle_yz(s.shw1_dir_y, s.shw1_dir_z)},
-                        index=s.index)
 
 
 def _trk1_vtx(w):
@@ -114,8 +113,6 @@ SAMPLES = {   # name: (needs the trkseg table, function of (candidates, segments
     "proton": (True, lambda w, s: _segments(s, lambda d: d.pdg == PID["proton"]),
                "proton-labelled tracks (4 cm pieces)", np.arange(0, 8.01, 0.2)),
     "all_tracks": (True, lambda w, s: _segments(s, lambda d: d.pdg > 0), "all tracks (4 cm pieces)", np.arange(0, 6.01, 0.1)),
-    "shower_stem": (False, lambda w, s: _shower_stem(w), "SP-tagger shower stem median dQ/dx, at the shower start",
-                    np.arange(0, 5.01, 0.1)),
     "trk1_vtx": (False, lambda w, s: _trk1_vtx(w), "longest track (> 10 cm) median dQ/dx, at the reco vertex",
                  np.arange(0, 6.01, 0.1)),
     "mu1_angle": (False, lambda w, s: _mu1_angle(w), "longest μ-labelled track median dQ/dx, cosmic-tagger track direction",
@@ -214,6 +211,50 @@ def plot_profile(name, title, coord, bins, label, on, mc, off, out):
     plt.close(fig)
 
 
+def plot_profile_tpc(name, title, coord, bins, label, on, mc, off, out):
+    """The median profile and data / prediction ratio for each TPC."""
+    pred = pd.concat([mc, off])
+    c = 0.5 * (bins[1:] + bins[:-1])
+    xe = np.diff(bins) / 2
+    fig, (a, r) = plt.subplots(2, 1, figsize=(10, 7), sharex=True, gridspec_kw=dict(height_ratios=[3, 1], hspace=0.05))
+    lims = [0.1]
+    for i, (tpc, sel, col) in enumerate(TPCS):
+        d, p = on[sel(on.x)], pred[sel(pred.x)]
+        Pd, Pp = profile(d, coord, bins), profile(p, coord, bins)
+        lo, hi = Pp[:, 0] - Pp[:, 1], Pp[:, 0] + Pp[:, 1]
+        a.fill_between(bins, np.r_[lo, lo[-1]], np.r_[hi, hi[-1]], step="post", color=col, alpha=0.2, lw=0)
+        a.stairs(Pp[:, 0], bins, baseline=None, color=col, lw=2, label="%s: prediction" % tpc)
+        a.errorbar(c, Pd[:, 0], Pd[:, 1], xerr=xe, fmt="o", color=col, mec="k", ms=4.5, label="%s: on-beam data" % tpc)
+        ratio = Pd[:, 0] / Pp[:, 0]
+        rerr = ratio * np.hypot(Pd[:, 1] / Pd[:, 0], Pp[:, 1] / Pp[:, 0])
+        sh = (i - 0.5) * 0.3 * xe   # side by side
+        r.errorbar(c + sh, ratio, rerr, fmt="o", color=col, mec="k", ms=3.5)
+        if np.isfinite(ratio).any():
+            lims.append(1.2 * np.nanmax(np.abs(ratio - 1) + np.nan_to_num(rerr)))
+    r.axhline(1, color="k", lw=1)
+    r.set_ylim(1 - max(lims), 1 + max(lims))
+    r.set_ylabel("data / pred.")
+    r.set_xlabel(label)
+    r.set_xlim(bins[0], bins[-1])
+    a.set_ylabel("median dQ/dx [MIP]")
+    a.set_title(title, loc="left", fontsize=11)
+    a.legend(frameon=False, fontsize=9.5)
+    fig.savefig(os.path.join(out, "dqdx_%s_%s_bytpc.png" % (name, coord)), dpi=130, bbox_inches="tight")
+    plt.close(fig)
+
+
+def tpc_medians(on, mc, off):
+    """'east data/pred r, west data/pred r' of the median dQ/dx."""
+    pred = pd.concat([mc, off])
+    out = []
+    for tpc, sel, _ in TPCS:
+        d, p = on[sel(on.x)], pred[sel(pred.x)]
+        md = median_err(d.dqdx.to_numpy(float), d.w.to_numpy(float))[0]
+        mp = median_err(p.dqdx.to_numpy(float), p.w.to_numpy(float))[0]
+        out.append("%s %.3f" % (tpc.split()[0], md / mp))
+    return ", ".join(out)
+
+
 def load_segments(inputs, keep, nproc=None):
     """The trkseg table for the candidates in keep (an index over CAND_LEVELS);
     None if the inputs have none."""
@@ -270,10 +311,13 @@ def main():
         pts = {k: p[np.isfinite(p.dqdx)] for k, p in pts.items()}
         full = "%s, %s (%d data / %d MC / %d off-beam entries)" % (title, stage_title, len(pts["on"]), len(pts["mc"]), len(pts["off"]))
         md, mp = plot_dist(name, full, bins, pts["on"], pts["mc"], pts["off"], args.outdir)
-        lines.append("%-12s median dQ/dx data %.3f, prediction %.3f, ratio %.3f" % (name, md, mp, md / mp))
+        lines.append("%-12s median dQ/dx data %.3f, prediction %.3f, ratio %.3f (by TPC: %s)"
+                     % (name, md, mp, md / mp, tpc_medians(pts["on"], pts["mc"], pts["off"])))
         for coord, cbins, label in COORDS:
             if coord in pts["on"]:
                 plot_profile(name, full, coord, cbins, label, pts["on"], pts["mc"], pts["off"], args.outdir)
+                if coord != "x":
+                    plot_profile_tpc(name, full, coord, cbins, label, pts["on"], pts["mc"], pts["off"], args.outdir)
     open(os.path.join(args.outdir, "summary.txt"), "w").write("\n".join(lines) + "\n")
     print("\n".join(lines))
     print("wrote the plots to %s" % args.outdir)
