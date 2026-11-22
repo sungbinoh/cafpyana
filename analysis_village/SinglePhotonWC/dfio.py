@@ -109,7 +109,7 @@ def default_nproc(n_files):
     return max(1, min(n_files, os.cpu_count() or 1, 8))
 
 
-def load(files, keys=("wc",), nproc=None):
+def load(files, keys=("wc",), nproc=None, select=None):
     """Concatenate dataframes over all readable files.
 
     Returns ({key: DataFrame}, totals). Each frame gets an outer "file" index
@@ -121,6 +121,8 @@ def load(files, keys=("wc",), nproc=None):
 
     Files are read by nproc worker processes (default: up to 8; HDF5 holds a
     global lock, so threads would not help); 1 reads in this process.
+    select(key, df) -> df, if given, filters each file's frames before the
+    concatenation (e.g. to keep a large table's needed rows only).
     """
     read_keys = list(dict.fromkeys(list(keys) + [POT_KEY, GENEVT_KEY]))
     parts = {k: [] for k in read_keys}
@@ -138,7 +140,7 @@ def load(files, keys=("wc",), nproc=None):
             bad.append((path, err))
             continue
         for k in read_keys:
-            parts[k] += [_tag_file(d, offset) for d in got[k]]
+            parts[k] += [_tag_file(d, offset) if select is None else select(k, _tag_file(d, offset)) for d in got[k]]
         offset += _n_files(got)
         if (ifile + 1) % 50 == 0:
             print("  read %d / %d files" % (ifile + 1, len(files)))

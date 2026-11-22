@@ -14,11 +14,15 @@ without a candidate (no row in the wc table) can be accounted for.
 valid = 1 with n_nu = 0 is a processed event Wire-Cell found no candidate in;
 the reason counts say which step dropped its bundles (none: no bundle).
 Joins to mcnu on (file, __ntuple, entry).
+
+make_hdrdf: the rec.hdr header per event (pot, noffbeambnb, ...) for the
+data POT / off-beam gate normalisation.
 """
 
 import pandas as pd
 
 from makedf import wirecell as wc
+from pyanalib.pandas_helpers import loadbranches
 
 BUNDLE_REASONS = range(7)
 RUN_COLUMNS = ["nu_n_flashes", "nu_n_flashes_in_window", "nu_n_bundles"]
@@ -34,3 +38,9 @@ def make_wc_event_df(f):
     n.columns.name = None
     # valid = 0 events have no Trun row: their counts are 0
     return ev.join(run.reindex(ev.index).fillna(0).astype(int)).join(n)
+
+
+def make_hdrdf(f):
+    """rec.hdr pot and noffbeambnb (as makedf.make_hdrdf, without its CVMFS imports)."""
+    return loadbranches(f["recTree"], ["rec.hdr.run", "rec.hdr.subrun", "rec.hdr.evt", "rec.hdr.pot",
+                                       "rec.hdr.noffbeambnb", "rec.hdr.nbnbinfo", "rec.hdr.first_in_subrun"]).rec.hdr
