@@ -20,14 +20,15 @@ The imports avoid makedf.makedf (it needs CVMFS for chi2pid).
 import numpy as np
 import pandas as pd
 
-from makedf import bnbsyst, geniesyst, g4syst
+from makedf import bnbsyst, geniesyst, g4syst, getsyst
 from makedf import wirecell as wc
 
 from analysis_village.SinglePhotonWC import cuts
 from analysis_village.SinglePhotonWC.make_truth import _load
 
 # gump_genie_systematics (analysis_village/gump/makedf.py), plus the radiative and
-# eta resonance-decay branching ratios that move the NC Delta -> N gamma signal
+# eta resonance-decay branching ratios (in later gump versions) that move the NC
+# Delta -> N gamma signal
 GENIE_SYSTEMATICS = [
     # CCQE
     "GENIEReWeight_SBN_v1_multisigma_VecFFCCQEshape",
@@ -48,8 +49,8 @@ GENIE_SYSTEMATICS = [
     "GENIEReWeight_SBN_v1_multisigma_MaNCRES",
     "GENIEReWeight_SBN_v1_multisigma_MvCCRES",
     "GENIEReWeight_SBN_v1_multisigma_MvNCRES",
-    "GENIEReWeight_SBN_v1_multisigma_RDecBR1gamma",   # not in gump: Delta -> N gamma branching ratio
-    "GENIEReWeight_SBN_v1_multisigma_RDecBR1eta",     # not in gump
+    "GENIEReWeight_SBN_v1_multisigma_RDecBR1gamma",   # Delta -> N gamma branching ratio
+    "GENIEReWeight_SBN_v1_multisigma_RDecBR1eta",
     # DIS
     "GENIEReWeight_SBN_v1_multisigma_AhtBY",
     "GENIEReWeight_SBN_v1_multisigma_BhtBY",
@@ -74,7 +75,7 @@ GENIE_SYSTEMATICS = [
     "GENIEReWeight_SBN_v1_multisigma_EtaNCEL",
 ]
 
-MULTISIM_NUNIV = 100   # universes kept per flux / Geant4 multisim (gump: 100)
+MULTISIM_NUNIV = 250   # universes per flux / Geant4 multisim, and slim GENIE throws
 
 
 def _kept_neutrinos(f, N):
@@ -104,7 +105,8 @@ def make_sp_wgtdf(f, slim=False, wgt_types=("bnb", "genie", "g4")):
     if "genie" in wgt_types:
         parts.append(geniesyst.geniesyst(f, nuind, multisim_nuniv=MULTISIM_NUNIV, slim=slim, systematics=GENIE_SYSTEMATICS))
     if "g4" in wgt_types:
-        parts.append(g4syst.g4syst(f, nuind))
+        # g4syst.g4syst has no universe argument (getsyst's default, 100)
+        parts.append(getsyst.getsyst(f, g4syst.g4_systematics, nuind, multisim_nuniv=MULTISIM_NUNIV))
     w = pd.concat(parts, axis=1).astype(np.float32)
     return w[_kept_neutrinos(f, N)]   # index (entry, rec.mc.nu..index), as the mcnu table
 
