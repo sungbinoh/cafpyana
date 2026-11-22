@@ -253,14 +253,14 @@ def ub_selection(th=SCORE_CUTS, ncpi0="shape"):
 
 UB_SELECTION = ub_selection()
 
-# Muon sample for the dQ/dx calibration checks (plot_dqdx_data_mc.py): Wire-Cell's
-# cosmic tagger fired (cosmict_flag) and a muon-labelled track > 30 cm.
-# Nov22 MC after preselection: 4.4% of candidates, 86% CC numu or cosmic.
-COSMIC_MUON_LEN_MIN = 30.0
-COSMIC_MUON = {
-    "cosmic_tagged": lambda df: df.cosmict_flag == 1,
-    "muon_track": lambda df: df.mu1_len > COSMIC_MUON_LEN_MIN,
-}
+# Muon samples for the dQ/dx calibration checks (plot_dqdx_data_mc.py): a
+# muon-labelled track > 30 cm, after preselection ("muon"; Nov22 MC: 95k
+# candidates / 2.7e19 POT, 95% CC numu or cosmic), without the FV ("muon_nofv",
+# 110k, 90%), or also with Wire-Cell's cosmic tagger fired ("cosmic", 8.6k, 86%).
+MUON_TRACK_LEN_MIN = 30.0
+MUON_TRACK = {"muon_track": lambda df: df.mu1_len > MUON_TRACK_LEN_MIN}
+COSMIC_TAG = {"cosmic_tagged": lambda df: df.cosmict_flag == 1}
+
 
 CHAINS = {
     "presel": PRESELECTION,
@@ -269,7 +269,9 @@ CHAINS = {
     "presel+uboone_shape2d": {**PRESELECTION, **ub_selection(ncpi0="shape2d")},
     "presel+uboone_ncpi0bdt": {**PRESELECTION, **ub_selection(ncpi0="bdt")},
     "presel+uboone_nov14": {**PRESELECTION, **ub_selection(SCORE_CUTS_NOV14, ncpi0="bdt")},
-    "presel+cosmic": {**PRESELECTION, **COSMIC_MUON},
+    "presel+muon": {**PRESELECTION, **MUON_TRACK},
+    "presel+muon_nofv": {**{k: v for k, v in PRESELECTION.items() if k != "fv"}, **MUON_TRACK},
+    "presel+cosmic": {**PRESELECTION, **COSMIC_TAG, **MUON_TRACK},
 }
 
 

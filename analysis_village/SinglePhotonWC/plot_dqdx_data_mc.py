@@ -9,10 +9,11 @@ prediction ratio panel. What a pattern points to:
   trend with the angle      recombination angle dependence, wire response
   offset growing with dQ/dx recombination (protons vs MIPs)
 
-Candidates: --stage, default "cosmic" (cuts.CHAINS["presel+cosmic"]:
-preselection, the Wire-Cell cosmic tagger fired and a muon-labelled track
-> 30 cm, to isolate muons), or a plot_data_mc.py stage. summary.txt has the
-MC truth make-up of the candidates.
+Candidates: --stage, default "muon" (cuts.CHAINS["presel+muon"]:
+preselection and a muon-labelled track > 30 cm, to isolate muons);
+"muon_nofv" without the FV, "cosmic" with the Wire-Cell cosmic tagger fired
+too, or a plot_data_mc.py stage. summary.txt has the MC truth make-up of the
+candidates.
 
 Samples (SAMPLES):
   from the trkseg table (make_wc_candidates.make_wc_trkseg_df: one row per
@@ -61,7 +62,10 @@ from analysis_village.SinglePhotonWC.plot_data_mc import (STAGES, UBOONE_BDT_DIR
 
 plt.style.use(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dune.mplstyle"))
 
-STAGES = {"cosmic": (cuts.CHAINS["presel+cosmic"], "preselection + cosmic tag + μ track > %g cm" % cuts.COSMIC_MUON_LEN_MIN),
+_mu = "μ track > %g cm" % cuts.MUON_TRACK_LEN_MIN
+STAGES = {"muon": (cuts.CHAINS["presel+muon"], "preselection + " + _mu),
+          "muon_nofv": (cuts.CHAINS["presel+muon_nofv"], "preselection without the FV + " + _mu),
+          "cosmic": (cuts.CHAINS["presel+cosmic"], "preselection + cosmic tag + " + _mu),
           **STAGES}
 SEG_KEY = "trkseg"
 CAND_LEVELS = ["file", "__ntuple", "entry", "nu_index"]
@@ -231,7 +235,7 @@ def main():
     ap.add_argument("--onbeam", nargs="+", required=True, help="on-beam data .df files, directories or globs")
     ap.add_argument("--offbeam", nargs="+", required=True, help="off-beam data .df files, directories or globs")
     ap.add_argument("-o", "--outdir", default="dqdx_plots")
-    ap.add_argument("--stage", default="cosmic", choices=list(STAGES), help="candidates used (default: cosmic)")
+    ap.add_argument("--stage", default="muon", choices=list(STAGES), help="candidates used (default: muon)")
     ap.add_argument("--area-norm", action="store_true", help="without POT / gate information: fit the off-beam share "
                     "(as plot_data_mc.py); only the MC / off-beam mix matters for the medians")
     ap.add_argument("--offbeam-frac", type=float, help="off-beam share of the prediction at preselection, with --area-norm")
@@ -240,7 +244,7 @@ def main():
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
-    bdt = args.stage not in ("presel", "cosmic")   # the later stages cut on the uB scores
+    bdt = args.stage not in ("presel", "muon", "muon_nofv", "cosmic")   # the later stages cut on the uB scores
     mc, _, pot_mc = load_mc(args.mc, UBOONE_BDT_DIR if bdt else None, nproc=args.nproc)
     on, pot_on, _ = load_data(args.onbeam, args.nproc, uboone_bdt=bdt)
     off, _, gates_off = load_data(args.offbeam, args.nproc, uboone_bdt=bdt)
