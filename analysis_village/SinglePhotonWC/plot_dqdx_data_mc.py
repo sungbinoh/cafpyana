@@ -9,7 +9,12 @@ prediction ratio panel. What a pattern points to:
   trend with the angle      recombination angle dependence, wire response
   offset growing with dQ/dx recombination (protons vs MIPs)
 
-Samples (SAMPLES; candidates passing --stage, default preselection):
+Candidates: --stage, default "cosmic" (cuts.CHAINS["presel+cosmic"]:
+preselection, the Wire-Cell cosmic tagger fired and a muon-labelled track
+> 30 cm, to isolate muons), or a plot_data_mc.py stage. summary.txt has the
+MC truth make-up of the candidates.
+
+Samples (SAMPLES):
   from the trkseg table (make_wc_candidates.make_wc_trkseg_df: one row per
   4 cm of each track, position and direction of that piece):
     mu_mip       muon-labelled tracks, residual range > RR_MIP_MIN (MIP region)
@@ -51,6 +56,8 @@ from analysis_village.SinglePhotonWC.plot_data_mc import (STAGES, UBOONE_BDT_DIR
 
 plt.style.use(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dune.mplstyle"))
 
+STAGES = {"cosmic": (cuts.CHAINS["presel+cosmic"], "preselection + cosmic tag + μ track > %g cm" % cuts.COSMIC_MUON_LEN_MIN),
+          **STAGES}
 SEG_KEY = "trkseg"
 CAND_LEVELS = ["file", "__ntuple", "entry", "nu_index"]
 RR_MIP_MIN = 30.0   # cm, residual range above which a muon is a MIP (no Bragg rise)
@@ -209,7 +216,7 @@ def main():
     ap.add_argument("--onbeam", nargs="+", required=True, help="on-beam data .df files, directories or globs")
     ap.add_argument("--offbeam", nargs="+", required=True, help="off-beam data .df files, directories or globs")
     ap.add_argument("-o", "--outdir", default="dqdx_plots")
-    ap.add_argument("--stage", default="presel", choices=list(STAGES), help="candidates used (default: preselection)")
+    ap.add_argument("--stage", default="cosmic", choices=list(STAGES), help="candidates used (default: cosmic)")
     ap.add_argument("--area-norm", action="store_true", help="without POT / gate information: fit the off-beam share "
                     "(as plot_data_mc.py); only the MC / off-beam mix matters for the medians")
     ap.add_argument("--offbeam-frac", type=float, help="off-beam share of the prediction at preselection, with --area-norm")
@@ -218,7 +225,7 @@ def main():
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
-    bdt = args.stage != "presel"   # the later stages cut on the uB scores
+    bdt = args.stage not in ("presel", "cosmic")   # the later stages cut on the uB scores
     mc, _, pot_mc = load_mc(args.mc, UBOONE_BDT_DIR if bdt else None, nproc=args.nproc)
     on, pot_on, _ = load_data(args.onbeam, args.nproc, uboone_bdt=bdt)
     off, _, gates_off = load_data(args.offbeam, args.nproc, uboone_bdt=bdt)
@@ -233,7 +240,9 @@ def main():
         if any(v is None for v in segs.values()):
             print("no %s table in some inputs (dataframes made before make_wc_trkseg_df): track-piece samples skipped" % SEG_KEY)
             segs = {}
-    lines = [norm_line, "stage: %s" % stage_title, ""]
+    comp = cands["mc"].cat.map(cuts.CATEGORY_LABELS).value_counts(normalize=True)
+    lines = [norm_line, "stage: %s (%d MC candidates; MC truth: %s)" % (
+        stage_title, len(cands["mc"]), ", ".join("%s %.0f%%" % (k, 100 * v) for k, v in comp.head(5).items())), ""]
     for name in args.samples:
         need_seg, fn, title, bins = SAMPLES[name]
         if need_seg and not segs:

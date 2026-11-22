@@ -253,6 +253,15 @@ def ub_selection(th=SCORE_CUTS, ncpi0="shape"):
 
 UB_SELECTION = ub_selection()
 
+# Muon sample for the dQ/dx calibration checks (plot_dqdx_data_mc.py): Wire-Cell's
+# cosmic tagger fired (cosmict_flag) and a muon-labelled track > 30 cm.
+# Nov22 MC after preselection: 4.4% of candidates, 86% CC numu or cosmic.
+COSMIC_MUON_LEN_MIN = 30.0
+COSMIC_MUON = {
+    "cosmic_tagged": lambda df: df.cosmict_flag == 1,
+    "muon_track": lambda df: df.mu1_len > COSMIC_MUON_LEN_MIN,
+}
+
 CHAINS = {
     "presel": PRESELECTION,
     "uboone": UB_SELECTION,
@@ -260,6 +269,7 @@ CHAINS = {
     "presel+uboone_shape2d": {**PRESELECTION, **ub_selection(ncpi0="shape2d")},
     "presel+uboone_ncpi0bdt": {**PRESELECTION, **ub_selection(ncpi0="bdt")},
     "presel+uboone_nov14": {**PRESELECTION, **ub_selection(SCORE_CUTS_NOV14, ncpi0="bdt")},
+    "presel+cosmic": {**PRESELECTION, **COSMIC_MUON},
 }
 
 
