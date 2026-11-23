@@ -6,11 +6,11 @@ __pycache__/
 *.png
 *.pdf
 *.root
+*.paths
 envs/cmake3
 envs/venv_py39_cafpyana/
 envs/venv_py310_cafpyana/
 envs/xrootd-5.6.1/
-
 envs/xrootd-5.6.9/
 envs/local/
 envs/logs/

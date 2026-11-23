@@ -14,10 +14,10 @@ regen_systematics = [
     'GENIEReWeight_SBN_v1_multisigma_ZExpA2CCQE',
     'GENIEReWeight_SBN_v1_multisigma_ZExpA3CCQE',
     'GENIEReWeight_SBN_v1_multisigma_ZExpA4CCQE',
-    # 'ZExpPCAWeighter_SBNnusyst_b1',
-    # 'ZExpPCAWeighter_SBNnusyst_b2', 
-    # 'ZExpPCAWeighter_SBNnusyst_b3',
-    # 'ZExpPCAWeighter_SBNnusyst_b4'
+    'ZExpPCAWeighter_SBNnusyst_b1',
+    'ZExpPCAWeighter_SBNnusyst_b2',
+    'ZExpPCAWeighter_SBNnusyst_b3',
+    'ZExpPCAWeighter_SBNnusyst_b4'
 
     # "GENIEReWeight_SBN_v1_multisim_ZExpAVariationResponse",
 
@@ -140,11 +140,16 @@ ar23p_genie_systematics = [
     'MECq0q3InterpWeighting_SuSAv2ToMartini_q0binned_MECResponse_q0bin3'
 ]
 
-#regen_systematics = ar23p_genie_systematics + regen_systematics
+def geniesyst(f, nuind, multisim_nuniv=100, slim=False, systematics=None, ar23p=False, ar23p_only=False):
 
-def geniesyst(f, nuind, multisim_nuniv=100, slim=False, systematics=None):
+    if ar23p:
+        systematics_list = ar23p_genie_systematics + regen_systematics
+    elif ar23p_only:
+        systematics_list = ar23p_genie_systematics
+    else:
+        systematics_list = regen_systematics
     if systematics is None:
-        systematics = regen_systematics
+        systematics = systematics_list
 
     geniewgtdf = getsyst.getsyst(f, systematics, nuind, multisim_nuniv=multisim_nuniv, slim=slim, slimname="GENIE")
 

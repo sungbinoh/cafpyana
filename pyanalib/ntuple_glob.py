@@ -27,6 +27,75 @@ CPU_COUNT = multiprocessing.cpu_count()
 if CPU_COUNT == 0:
     CPU_COUNT = os.cpu_count()
 
+NTUPLE_OPEN_TIMEOUT = int(os.getenv("CAF_NTUPLE_OPEN_TIMEOUT", "300"))
+NTUPLE_READ_RETRIES = int(os.getenv("CAF_NTUPLE_READ_RETRIES", "3"))
+NTUPLE_RETRY_SLEEP = float(os.getenv("CAF_NTUPLE_RETRY_SLEEP", "4.0"))
+NTUPLE_MAX_REMOTE_NPROC = int(os.getenv("CAF_NTUPLE_MAX_REMOTE_NPROC", "8"))
+NTUPLE_REDIRECTORS = [r.strip() for r in os.getenv("CAF_XROOTD_REDIRECTORS", "").split(",") if r.strip()]
+
+
+def _is_remote_path(path):
+    return path.startswith("/pnfs") or path.startswith("root://") or path.startswith("xroot")
+
+
+def _normalize_remote_path(path):
+    # Convert pnfs to xroot URL's
+    if path.startswith("/pnfs"):
+        return path.replace("/pnfs", "root://fndcadoor.fnal.gov:1094/pnfs/fnal.gov/usr")
+    # fix xroot URL's
+    if path.startswith("xroot"):
+        return path[1:]
+    return path
+
+
+def _candidate_paths(path):
+    path = _normalize_remote_path(path)
+    if not path.startswith("root://"):
+        return [path]
+
+    if not NTUPLE_REDIRECTORS:
+        return [path]
+
+    url_no_proto = path[len("root://"):]
+    host_sep = url_no_proto.find("/")
+    if host_sep < 0:
+        return [path]
+
+    suffix = url_no_proto[host_sep:]
+    candidates = [path]
+    for host in NTUPLE_REDIRECTORS:
+        if not host:
+            continue
+        candidates.append("root://%s%s" % (host, suffix))
+
+    # Preserve order and remove duplicates.
+    seen = set()
+    ordered = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            ordered.append(c)
+    return ordered
+
+
+def _is_transient_io_error(exc):
+    msg = str(exc).lower()
+    transient_markers = (
+        "operation expired",
+        "vector_read",
+        "timed out",
+        "timeout",
+        "pool unavailable",
+        "[1010]",
+        "[3012]",
+        "failed to open file",
+        "temporary failure",
+        "connection reset",
+        "socket",
+        "xrootd",
+    )
+    return any(marker in msg for marker in transient_markers)
+
 class NTupleProc(object):
     def __init__(self, f=None, name="None"):
         self.name = name
@@ -142,6 +211,7 @@ def _loaddf(applyfs, preprocess, g):
             tempfiles.append(temp_file_name)
             fname = temp_file_name
 
+    dfs = None
     try:
         # ATTEMPT 1: Normal Streaming
         try:
