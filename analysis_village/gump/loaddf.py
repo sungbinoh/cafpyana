@@ -662,7 +662,7 @@ SPLIT_REGIONS = {
 # plots-gumple-2026-10-20-rewgted25/tracksplit/tracksplit_summary.csv), as used by
 # the signal-box track-split systematic. Updated 2026-10-24 from the 8-01 reCAF
 # values (Z=0 0.0960, East 0.0447, West 0.0398).
-SPLIT_FRAC = {"Z=0": 0.1002, "East Cathode": 0.0292, "West Cathode": 0.0146}  # sync_calibrations.py 2026-10-25 from plots-gumple-2026-10-24-full
+SPLIT_FRAC = {"Z=0": 0.118, "East Cathode": 0.0267, "West Cathode": 0.0147}  # sync_calibrations.py 2026-11-03 from plots-gumple-2026-11-03-rewgted26
 
 # Run periods each plane applies to. The east cathode lies outside the Run 2 muon
 # fiducial volume (the East-East TPC was off in Run 2), so it has Run 4 crossers
@@ -781,8 +781,8 @@ SBND_MC_POT_SCALE = 0.97
 #   all-trigger 0.647 / 0.574 / 0.369, Contained 0.618 / 0.477 / 0.293.
 # NB: keep in sync with tab:trigger-systematic in the technote (see
 # technote/figure_manifest.tsv). The scale enters the MC cache key.
-MC_PE_SCALE = {"SBND": 0.647, "ICARUS Run2": 0.574, "ICARUS Run4": 0.369}
-MC_PE_SCALE_UNC = {"SBND": 0.029, "ICARUS Run2": 0.097, "ICARUS Run4": 0.076}
+MC_PE_SCALE = {"SBND": 0.647, "ICARUS Run2": 0.574, "ICARUS Run4": 0.356}  # sync_calibrations.py 2026-10-26 from plots-gumple-2026-10-26-icarus-dupfix
+MC_PE_SCALE_UNC = {"SBND": 0.029, "ICARUS Run2": 0.097, "ICARUS Run4": 0.074}  # sync_calibrations.py 2026-10-26 from plots-gumple-2026-10-26-icarus-dupfix
 # Run number (the Run column) -> detector key of the two dicts above
 RUN_DETECTOR = {1: "SBND", 2: "ICARUS Run2", 4: "ICARUS Run4"}
 
