@@ -104,6 +104,8 @@ STAGES = {"muon": (cuts.CHAINS["presel+muon"], "preselection + " + _mu),
           **STAGES}
 SEG_KEY = "trkseg"
 PAND_KEY = "pandtrk"
+SEG_LEVELS = ["file", "__ntuple", "entry", "nu_index", "kine_index", "seg"]   # after dfio.load
+PAND_LEVELS = ["file", "__ntuple", "entry", "rec.slc..index", "rec.slc.reco.pfp..index", "plane"]
 CAND_LEVELS = ["file", "__ntuple", "entry", "nu_index"]
 RR_MIP_MIN = 30.0   # cm, residual range above which a muon is a MIP (no Bragg rise)
 MC_COLOR, PRED_COLOR, ALT_COLOR = "#2a78d6", "#1f1f1e", "#1baf7a"
@@ -454,11 +456,25 @@ def load_table(inputs, key, keep=None, nproc=None):
     if key not in dfio.file_keys(files[0]):
         return None
 
+    names = {SEG_KEY: SEG_LEVELS, PAND_KEY: PAND_LEVELS}[key]
+    lost = []
+
     def select(k, d):
-        if k != SEG_KEY or keep is None or not len(d):
+        if k != key or not len(d):
+            return d
+        # a dataframe split whose first CAF had no rows was saved without the level names (or, rarely, with
+        # the levels collapsed): name them by position, drop the unrecoverable ones
+        if d.index.nlevels == len(names):
+            d.index = d.index.set_names(names)
+        else:
+            lost.append(len(d))
+            return pd.DataFrame(columns=d.columns, index=pd.MultiIndex.from_arrays([[]] * len(names), names=names))
+        if k != SEG_KEY or keep is None:
             return d
         return d[d.index.droplevel(["kine_index", "seg"]).isin(keep)]
     frames, _ = dfio.load(files, keys=[key], nproc=nproc, select=select)
+    if lost:
+        print("%s: dropped %d rows in %d splits with a broken index" % (key, sum(lost), len(lost)))
     return frames[key]
 
 

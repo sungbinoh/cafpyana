@@ -399,8 +399,9 @@ def make_wc_trkseg_df(f):
             span = em[:, 2:6].max(0) - em[:, 2:6].min(0)
             rows.append((entry, nu, ki, s, pdg, length, m.sum(), *p[m].mean(0), np.median(q[m]), rr[m].mean(), *(d / n),
                          em[:, 0].sum(), em[:, 1].sum(), *span, np.median(em[:, 6])))
-    if not rows:
-        return pd.DataFrame(columns=cols)
+    if not rows:   # keep the index names: an unnamed empty frame strips them from the whole split
+        return pd.DataFrame(columns=cols, index=pd.MultiIndex.from_arrays([[]] * 4, names=["entry", "nu_index", "kine_index", "seg"]),
+                            dtype=np.float32)
     t = pd.DataFrame(rows, columns=["entry", "nu_index", "kine_index", "seg"] + cols)
     return t.set_index(["entry", "nu_index", "kine_index", "seg"]).astype(np.float32)
 

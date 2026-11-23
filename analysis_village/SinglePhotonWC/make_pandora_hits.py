@@ -72,6 +72,11 @@ def _plane_summary(tree, plane, keep):
     return out.set_index("plane", append=True)
 
 
+def _empty():
+    """No rows, but the index names (an unnamed empty frame strips them from the whole split)."""
+    return pd.DataFrame(index=pd.MultiIndex.from_arrays([[]] * 4, names=LEVELS + ["plane"]))
+
+
 def make_pandora_trkhit_df(f):
     """Never raises: a CAF it cannot read gives an empty table (with a
     warning) rather than failing the whole dataframe job."""
@@ -79,19 +84,19 @@ def make_pandora_trkhit_df(f):
         return _make(f)
     except Exception as e:
         print("make_pandora_trkhit_df: skipped (%s: %s)" % (type(e).__name__, e))
-        return pd.DataFrame()
+        return _empty()
 
 
 def _make(f):
     if "recTree" not in f or not f["recTree"].num_entries:
-        return pd.DataFrame()
+        return _empty()
     tree = f["recTree"]
     t = _tracks(tree)
     if not len(t):
-        return pd.DataFrame()
+        return _empty()
     planes = [p for p in (_plane_summary(tree, pl, t.index) for pl in range(3)) if len(p)]
     if not planes:
-        return pd.DataFrame()
+        return _empty()
     hits = pd.concat(planes)
     out = hits.join(t, on=LEVELS)
     return out.astype(np.float32)
