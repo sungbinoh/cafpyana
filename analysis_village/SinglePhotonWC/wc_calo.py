@@ -9,6 +9,12 @@ stopping muons (2 < rr <= 26 cm) is 1 (Nov16 local CAFs, 103 muons; true
 protons then come out 12% high, per-point spread ~20% for muons, ~27% for
 protons).
 
+Recombination: dqdx_to_dedx / dedx_to_dqdx take the box parameters
+(default: the makedf/calo.py ones the scale was fitted with). RECOMB holds
+the SBND MC and data sets of makedf/chi2pid.SBND_CALO_PARAMS, and
+swap_recombination() re-derives MC dQ/dx as if the charge had recombined as
+the data parameters say: measured dQ/dx -> dE/dx (MC set) -> dQ/dx (data set).
+
 Residual range: Wire-Cell's T_rec_charge.rr restarts on every segment and
 points the wrong way for ~1/4 of segments, so residual_range() uses the path
 length along the particle's own points to the end farther from the vertex
@@ -44,18 +50,38 @@ RR_MAX_CM = 26.0      # cm, residual range used in the chi2 (as LArSoft chi2 PID
 DEDX_SIGMA_FRAC = 0.20   # fractional per-point resolution assumed in the chi2
 CHI2_POINT_MAX = 25.0    # per-point chi2 cap (delta rays, mis-assigned charge)
 DQDX_SCALE = 13.8     # electrons/cm per Wire-Cell q/nq unit; true stopping muons (Nov16)
+RECOMB = {   # (alpha, beta_90, R), makedf/chi2pid.SBND_CALO_PARAMS
+    "mc": (0.904, 0.204, 1.25),
+    "data": (0.9366111025888879, 0.1835451204193374, 1.567685536351266),
+}
 
 
-def _beta(phi):
-    return B90 / np.sqrt(np.sin(phi) ** 2 + np.cos(phi) ** 2 / R_EMB ** 2) / (RHO * EFIELD)
+def _beta(phi, b90=B90, r=R_EMB):
+    return b90 / np.sqrt(np.sin(phi) ** 2 + np.cos(phi) ** 2 / r ** 2) / (RHO * EFIELD)
 
 
-def dqdx_to_dedx(dqdx_wc, phi=np.pi / 2, scale=None):
+def dqdx_to_dedx(dqdx_wc, phi=np.pi / 2, scale=None, recomb=(MODA, B90, R_EMB)):
     """Wire-Cell dQ/dx (q / nq) -> dE/dx [MeV/cm]. phi: track angle to the
-    drift (x) axis [rad]."""
+    drift (x) axis [rad]; recomb: (alpha, beta_90, R)."""
     s = DQDX_SCALE if scale is None else scale
-    b = _beta(phi)
-    return (np.exp(np.asarray(dqdx_wc, float) * s * WION * b) - MODA) / b
+    a, b90, r = recomb
+    b = _beta(phi, b90, r)
+    return (np.exp(np.asarray(dqdx_wc, float) * s * WION * b) - a) / b
+
+
+def dedx_to_dqdx(dedx, phi=np.pi / 2, scale=None, recomb=(MODA, B90, R_EMB)):
+    """dE/dx [MeV/cm] -> Wire-Cell dQ/dx (q / nq), the inverse of dqdx_to_dedx."""
+    s = DQDX_SCALE if scale is None else scale
+    a, b90, r = recomb
+    b = _beta(phi, b90, r)
+    with np.errstate(invalid="ignore"):
+        return np.log(a + b * np.asarray(dedx, float)) / (b * WION * s)
+
+
+def swap_recombination(dqdx_wc, phi, src="mc", dst="data"):
+    """dQ/dx re-derived with the dst recombination: the measured charge's
+    dE/dx under RECOMB[src], back to charge under RECOMB[dst]."""
+    return dedx_to_dqdx(dqdx_to_dedx(dqdx_wc, phi, recomb=RECOMB[src]), phi, recomb=RECOMB[dst])
 
 
 def _density(bg):
