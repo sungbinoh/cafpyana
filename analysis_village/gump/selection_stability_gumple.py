@@ -34,6 +34,17 @@ signalbox_systematics_gumple.py. Every plot is made for each selection; Np keeps
 <name>_stability_date names, 1p / Mp are <name>_1p_stability_date / <name>_Mp_stability_date.
 Each selection is grouped by its own counts (same rule), so Mp has fewer, larger groups.
 
+Options for a single run set / a new on-beam file (2026-11-19):
+  -d/--detector DET   only these run sets (repeatable; the ICARUS-West plot needs both ICARUS runs)
+  --onbeam DET=FILE   replace SAMPLES[DET] by FILE (basename in --df-dir)
+  --offbeam-fill borrow  on-beam runs with no off-beam data (e.g. SBND runs 18525-18592 in
+      SBND_Run1BNBData_Full2p5e20.df, past the end of SBND_SpringBNBOffData.df at 18503) get
+      the off-beam rate per gate of the covered good runs of the same DQ period
+      (BORROW_PERIODS), instead of failing. For such a run with on-beam gates G:
+          ngates_off = G x (G_off/G_on)_ref,   n_off = ngates_off x (N_off/G_off)_ref
+      (fractional), so the per-group subtraction and variance treat it like a covered run
+      of the same exposure. Groups holding borrowed runs are drawn with open markers.
+
 Beam quality includes the FOM
 cut for the run sets in dataquality.FOM_DETECTORS (corrected FOM, dataquality.correct_fom).
 
@@ -82,13 +93,17 @@ SAMPLES = {
     "ICARUS Run2": ["ICARUS_SpringRun2BNB_FullOnBeam.df"],
     "ICARUS Run4": ["ICARUS_SpringRun4BNB_ReCAF2026.df"],
 }
-# run set -> off-beam files (as in mcdata_comparison_gumple.get_files). ICARUS Run 4
-# pairs the ReCAF2026 on-beam file with the ReCAF2026 off-beam file (same processing).
+# run set -> off-beam files (as in mcdata_comparison_gumple.detector_files). ICARUS
+# Run 4 pairs the ReCAF2026 on-beam file with the pre-ReCAF off-beam file (2026-10-26).
 OFFBEAM_SAMPLES = {
     "SBND": ["SBND_SpringBNBOffData.df"],
     "ICARUS Run2": ["ICARUS_SpringRun2BNBOff_unblind.df"],
-    "ICARUS Run4": ["ICARUS_SpringRun4BNBOff_ReCAF2026.df"],
+    "ICARUS Run4": ["ICARUS_SpringRun4BNBOff_unblind.df"],
 }
+# --offbeam-fill borrow: DQ periods (run ranges) within which an uncovered run borrows the
+# off-beam rate of the covered runs (run_lists.md: SBND 1e20 = 18250-18412, post-1e20 = 18414-18592,
+# tagged against separate baselines). Run sets not listed borrow from all their covered runs.
+BORROW_PERIODS = {"SBND": [(18250, 18412), (18414, 18592)]}
 # gate bookkeeping constants of dataquality.data_norm
 SBND_F_FACTOR = 0.0754
 ICARUS_GATE_CORR = {"ICARUS Run2": 1. - 1/200., "ICARUS Run4": 1. - 1/40.}
@@ -210,7 +225,14 @@ def combine_exposure(exposures):
     return r.drop(columns="tpot")
 
 
-def run_table(exposure, sel, sel_off=None, ngates_off=None):
+def borrow_period(run, detector):
+    for lo, hi in BORROW_PERIODS.get(detector, []):
+        if lo <= run <= hi:
+            return (lo, hi)
+    return None
+
+
+def run_table(exposure, sel, sel_off=None, ngates_off=None, borrow=False, detector=None, log=print):
     """Per-run table: exposure, on-beam counts n_sel / n_west and (if given) off-beam
     counts n_off / n_off_west and gates ngates_off, for each selection in SELECTIONS
     (column suffix "" for Np, "_1p", "_mp"). Off-beam runs with no on-beam POT
@@ -236,7 +258,33 @@ def run_table(exposure, sel, sel_off=None, ngates_off=None):
     else:
         tab["ngates_off"] = ngates_off.reindex(tab.index)
         nogate = tab.index[~(tab.ngates_off > 0)]
-        assert not len(nogate), "on-beam runs with no off-beam gates: %s" % list(nogate)
+        tab["borrowed"] = False
+        if borrow and len(nogate):
+            cov = tab[tab.ngates_off > 0]
+            per = pd.Series([borrow_period(r, detector) for r in tab.index], index=tab.index)
+            offcols = [c for c in tab.columns if c.startswith("n_off")]
+            tab[offcols] = tab[offcols].astype(float)
+            same = lambda idx, key: np.array([per[r] == key for r in idx], dtype=bool)
+            for key in sorted(set(per[nogate]), key=lambda k: (k is None, k or ())):
+                runs = nogate[same(nogate, key)]
+                ref = cov[same(cov.index, key)] if key is not None else cov
+                assert len(ref), "no covered runs to borrow from for period %s" % (key,)
+                gratio = ref.ngates_off.sum() / ref.ngates_on.sum()
+                tab.loc[runs, "ngates_off"] = tab.loc[runs, "ngates_on"] * gratio
+                for c in offcols:
+                    tab.loc[runs, c] = tab.loc[runs, "ngates_off"] * ref[c].sum() / ref.ngates_off.sum()
+                tab.loc[runs, "borrowed"] = True
+                msg = ("  off-beam borrowed for %d runs %s (POT %.4e, %.1f%% of the run set) from %d covered runs "
+                       "of period %s (POT %.4e): off/on gate ratio %.4f, off-beam Np per 1e6 off gates %.3f"
+                       % (len(runs), list(runs), tab.loc[runs, "pot"].sum(), 100*tab.loc[runs, "pot"].sum()/tab.pot.sum(),
+                          len(ref), key, ref.pot.sum(), gratio, 1e6*ref.n_off.sum()/ref.ngates_off.sum()))
+                log(msg)
+            for key in sorted(set(k for k in per[cov.index] if k is not None)):
+                r = cov[same(cov.index, key)]
+                log("  (covered period %s: off-beam Np per 1e6 off gates %.3f, off/on gate ratio %.4f, %d runs)"
+                    % (key, 1e6*r.n_off.sum()/r.ngates_off.sum(), r.ngates_off.sum()/r.ngates_on.sum(), len(r)))
+            nogate = tab.index[~(tab.ngates_off > 0)]
+        assert not len(nogate), "on-beam runs with no off-beam gates: %s (see --offbeam-fill)" % list(nogate)
         orphan = sorted(set(ngates_off.index) - set(tab.index))
         if orphan:
             print("  off-beam runs without on-beam POT (dropped): %s (%d selected off-beam slices)"
@@ -262,11 +310,13 @@ def group_runs(tab, rate, nmin):
     if acc > 0 and acc < nmin and g > 0:
         gid[gid == g] = g - 1  # merge the short tail
     t = tab.assign(group=gid, run=tab.index, rpot=tab.index*tab.pot, tpot=tab.t_mean*tab.pot)
+    t["borrowed_pot"] = t.pot.where(t.borrowed.astype(bool), 0.) if "borrowed" in t.columns else 0.
     grp = t.groupby("group").agg(run_min=("run", "min"), run_max=("run", "max"), nruns=("run", "size"),
                                  t_start=("t_start", "min"), t_end=("t_end", "max"),
                                  pot=("pot", "sum"), rpot=("rpot", "sum"), tpot=("tpot", "sum"),
                                  n_sel=("n_sel", "sum"), n_off=("n_off", "sum"),
-                                 ngates_on=("ngates_on", "sum"), ngates_off=("ngates_off", "sum"))
+                                 ngates_on=("ngates_on", "sum"), ngates_off=("ngates_off", "sum"),
+                                 borrowed_pot=("borrowed_pot", "sum"))
     grp["run_mean"] = grp.rpot / grp.pot
     grp["t_mean"] = grp.tpot / grp.pot
     return grp.drop(columns=["rpot", "tpot"])
@@ -341,8 +391,12 @@ def plot_stability(segments, title, outbase, subtract, selname="Np"):
     for ax, s, (lo_s, hi_s), w in zip(axes, segments, spans, widths):
         g = s["groups"]
         x, lo, hi = _xvals(g)
-        ax.errorbar(x, g.y, yerr=g.yerr, xerr=[x - lo, hi - x], fmt="o", ms=4, capsize=0,
+        b = (g.borrowed_pot > 0).to_numpy()
+        ax.errorbar(x[~b], g.y[~b], yerr=g.yerr[~b], xerr=[(x - lo)[~b], (hi - x)[~b]], fmt="o", ms=4, capsize=0,
                     color=s["color"], label=s["label"])
+        if b.any():
+            ax.errorbar(x[b], g.y[b], yerr=g.yerr[b], xerr=[(x - lo)[b], (hi - x)[b]], fmt="o", ms=5, capsize=0,
+                        color=s["color"], mfc="white", label="off-beam rate borrowed\n(runs past off-beam data)")
         pad = 0.04*w
         ax.set_xlim(lo_s - pad, hi_s + pad)
         ax.axhline(1., color="gray", ls="--", lw=1)
@@ -371,7 +425,7 @@ def plot_stability(segments, title, outbase, subtract, selname="Np"):
     ylo = min(0.8, (allg.y - allg.yerr).min() - 0.05)
     yhi = max(1.2, (allg.y + allg.yerr).max() + 0.12)
     axes[0].set_ylim(ylo, yhi)
-    if len(segments) > 1:
+    if len(segments) > 1 or any((s["groups"].borrowed_pot > 0).any() for s in segments):
         handles = [ax.get_legend_handles_labels() for ax in axes]
         axes[-1].legend([h for hs, _ in handles for h in hs], [l for _, ls in handles for l in ls],
                         loc="upper right", fontsize=10)
@@ -420,8 +474,38 @@ def main():
                     help="groups are made smaller (above rel_err) if a plot would otherwise have fewer than this many")
     ap.add_argument("--no-offbeam-sub", action="store_true",
                     help="do not subtract the off-beam data (the previous, on-beam-only behaviour)")
+    ap.add_argument("-d", "--detector", action="append", default=None, choices=sorted(SAMPLES),
+                    help="only these run sets (repeatable; default all)")
+    ap.add_argument("--onbeam", action="append", default=[], metavar="DET=FILE",
+                    help="replace the on-beam file(s) of run set DET by FILE (in --df-dir); repeatable")
+    ap.add_argument("--offbeam", action="append", default=[], metavar="DET=FILE",
+                    help="replace the off-beam file(s) of run set DET by FILE (in --df-dir); repeatable")
+    ap.add_argument("--fom-min", type=float, default=None,
+                    help="lower edge of the beam-quality FOM cut (dataquality.FOM_MIN, default %g)"
+                         % dq.FOM_MIN_DEFAULT)
+    ap.add_argument("--offbeam-fill", choices=["none", "borrow"], default="none",
+                    help="on-beam runs without off-beam data: fail (none) or borrow the off-beam rate "
+                         "of the covered runs of the same DQ period (borrow)")
     args = ap.parse_args()
     subtract = not args.no_offbeam_sub
+    if args.fom_min is not None:
+        os.environ["GUMPLE_FOM_MIN"] = repr(args.fom_min)  # for any loader workers
+        dq.FOM_MIN = args.fom_min
+    for spec in args.onbeam:
+        det, _, f = spec.partition("=")
+        if det not in SAMPLES or not f:
+            ap.error("--onbeam %r: expected DET=FILE with DET in %s" % (spec, sorted(SAMPLES)))
+        SAMPLES[det] = [f]
+    for spec in args.offbeam:
+        det, _, f = spec.partition("=")
+        if det not in OFFBEAM_SAMPLES or not f:
+            ap.error("--offbeam %r: expected DET=FILE with DET in %s" % (spec, sorted(OFFBEAM_SAMPLES)))
+        OFFBEAM_SAMPLES[det] = [f]
+    dets = args.detector or list(SAMPLES)
+    for d in list(SAMPLES):
+        if d not in dets:
+            del SAMPLES[d]
+    borrow_log = []
     os.makedirs(args.outdir, exist_ok=True)
     nmin = 1. / args.rel_err**2
 
@@ -442,7 +526,8 @@ def main():
             offs = [os.path.join(args.df_dir, f) for f in OFFBEAM_SAMPLES[det]]
             sel_off = pd.concat([selected_events(f, det, offbeam=True) for f in offs], ignore_index=True)
             ngates_off = pd.concat([per_run_offbeam_gates(f, det) for f in offs]).groupby(level=0).sum()
-            tab = run_table(exp, sel, sel_off, ngates_off)
+            tab = run_table(exp, sel, sel_off, ngates_off, borrow=args.offbeam_fill == "borrow", detector=det,
+                            log=lambda m: (print(m), borrow_log.append(m)))
             # cross-check of the per-run gates against the global normalization
             if len(fnames) == 1:
                 norm = dq.data_norm(det, fnames[0], offs, log=lambda m: None)
@@ -464,11 +549,13 @@ def main():
     plots = []
     for selname, (suf, _) in SELECTIONS.items():
         tag = "" if selname == "Np" else "_" + selname
-        plots += [(selname, "SBND" + tag, "SBND Run 1", seg(["SBND"], "n_sel" + suf, "n_off" + suf)),
-                  (selname, "ICARUS-Run2" + tag, "ICARUS Run 2", seg(["ICARUS Run2"], "n_sel" + suf, "n_off" + suf)),
-                  (selname, "ICARUS-Run4" + tag, "ICARUS Run 4", seg(["ICARUS Run4"], "n_sel" + suf, "n_off" + suf)),
-                  (selname, "ICARUS-West-Run2+4" + tag, "ICARUS West Cryostat",
-                   seg(["ICARUS Run2", "ICARUS Run4"], "n_west" + suf, "n_off_west" + suf))]
+        for det, name, title in (("SBND", "SBND", "SBND Run 1"), ("ICARUS Run2", "ICARUS-Run2", "ICARUS Run 2"),
+                                 ("ICARUS Run4", "ICARUS-Run4", "ICARUS Run 4")):
+            if det in tabs:
+                plots.append((selname, name + tag, title, seg([det], "n_sel" + suf, "n_off" + suf)))
+        if "ICARUS Run2" in tabs and "ICARUS Run4" in tabs:
+            plots.append((selname, "ICARUS-West-Run2+4" + tag, "ICARUS West Cryostat",
+                          seg(["ICARUS Run2", "ICARUS Run4"], "n_west" + suf, "n_off_west" + suf)))
 
     rows, summary = [], []
     for selname, name, title, segs in plots:
@@ -490,6 +577,7 @@ def main():
                                  t_start=datetime.datetime.fromtimestamp(r.t_start, datetime.timezone.utc).isoformat(),
                                  t_end=datetime.datetime.fromtimestamp(r.t_end, datetime.timezone.utc).isoformat(),
                                  pot_frac=r.pot/pot_tot, rel_rate=r.y, rel_rate_err=r.yerr,
+                                 borrowed_pot_frac=r.borrowed_pot/r.pot,
                                  **(dict(offbeam_frac=r.offbeam_frac) if subtract else {})))
     # NB: no absolute counts or rates are written (blinded) -- only POT fractions, relative rates and
     # off-beam fractions.
@@ -497,7 +585,8 @@ def main():
     with open(os.path.join(args.outdir, "stability_summary.txt"), "w") as out:
         out.write("GUMPLE PID Np / 1p / Mp selected events / POT, normalized to the average (%s)\n" % _sub_tag(subtract))
         out.write("Data cuts: dataquality.py beam quality (FOM cut %s) + good-run lists data/run_lists.md\n" % (
-                      "applied to " + ", ".join(sorted(dq.FOM_DETECTORS)) if dq.FOM_DETECTORS else "NOT applied"))
+                      ("%g < FOM <= 1, applied to " % dq.FOM_MIN) + ", ".join(sorted(dq.FOM_DETECTORS))
+                      if dq.FOM_DETECTORS else "NOT applied"))
         out.write("Samples (full on-beam data): %s\n"
                   % "; ".join("%s=%s" % (d, " + ".join(fl)) for d, fl in SAMPLES.items()))
         if subtract:
@@ -510,6 +599,8 @@ def main():
                   "chi2 is against a flat line at the (common) average, 1 fitted normalization.\n\n"
                   % (nmin, args.max_groups, args.min_groups, 100*args.rel_err, args.min_groups))
         out.write("\n".join(summary) + "\n")
+        if borrow_log:
+            out.write("\nOff-beam borrowed (--offbeam-fill borrow):\n" + "\n".join(borrow_log) + "\n")
         if gate_check:
             out.write("\nGate bookkeeping (per-run sums vs dataquality.data_norm):\n" + "\n".join(gate_check) + "\n")
     print(open(os.path.join(args.outdir, "stability_summary.txt")).read())

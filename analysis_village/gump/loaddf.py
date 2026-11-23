@@ -883,6 +883,10 @@ def load_one(fname, idf,
         data_cut_key = dict(beam_quality=beam_quality, data_quality=data_quality,
                             run_list=dq.RUN_LIST_HASH) if _is_data else dict(mc_pe_scale=MC_PE_SCALE[detector], g4_unc_scale=G4_UNC_SCALE,
                                                                               dedup_truth=dedup_truth)
+        # non-default FOM cut edge (dq.FOM_MIN); keyed only when changed so the
+        # default cache entries are unchanged
+        if _is_data and dq.FOM_MIN != dq.FOM_MIN_DEFAULT:
+            data_cut_key["fom_min"] = dq.FOM_MIN
         # the cached off-beam POT depends on the gates/POT constant (on-beam unchanged)
         if offbeampot:
             data_cut_key["offbeam_gates_per_5e12pot"] = OFFBEAM_GATES_PER_5e12POT[detector]

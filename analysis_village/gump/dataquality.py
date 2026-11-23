@@ -149,6 +149,11 @@ def parse_run_lists(fname=RUN_LIST_FILE):
 # corrected FOM (NaN) fails it. (With the *_fx files Run 2 runs 9941-9945, which
 # had no multiwire fits at all in the 2026-10-02 file, have a FOM again.)
 FOM_DETECTORS = {"SBND", "ICARUS Run2", "ICARUS Run4"}
+# Lower edge of the FOM cut (FOM_MIN < FOM <= 1). 0.98 is the analysis value; a
+# different value (GUMPLE_FOM_MIN env, so loader workers see it, or set
+# dq.FOM_MIN) enters loaddf's data cache key, so it never reuses 0.98 entries.
+FOM_MIN_DEFAULT = 0.98
+FOM_MIN = float(os.environ.get("GUMPLE_FOM_MIN", FOM_MIN_DEFAULT))
 
 # Beam-quality ROOT files carrying the corrected FOM (FOM_best), per run set
 # (the *_fx files of the 2026-10 recalculation behind data/good_beam_lists.md,
@@ -219,7 +224,7 @@ def beam_quality_cut(df, detector, prefix="spill_"):
     intensity = (v("TOR860") > 1e11) & (v("TOR875") > 1e11)
     horn = (v("THCURR") >= 173) & (v("THCURR") <= 175)
     if detector in FOM_DETECTORS:
-        fom = (v("FOM") > 0.98) & (v("FOM") <= 1)
+        fom = (v("FOM") > FOM_MIN) & (v("FOM") <= 1)
         return intensity & horn & fom
     return intensity & horn
 
