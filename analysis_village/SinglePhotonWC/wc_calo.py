@@ -50,6 +50,8 @@ RR_MAX_CM = 26.0      # cm, residual range used in the chi2 (as LArSoft chi2 PID
 DEDX_SIGMA_FRAC = 0.20   # fractional per-point resolution assumed in the chi2
 CHI2_POINT_MAX = 25.0    # per-point chi2 cap (delta rays, mis-assigned charge)
 DQDX_SCALE = 13.8     # electrons/cm per Wire-Cell q/nq unit; true stopping muons (Nov16)
+# Pandora calorimetry gains, ADC per electron for planes 0-2 (makedf/chi2pid.SBND_CALO_PARAMS)
+PANDORA_GAIN = {"mc": (0.0203521, 0.0202351, 0.0200727), "data": (0.02, 0.02, 0.02)}
 RECOMB = {   # (alpha, beta_90, R), makedf/chi2pid.SBND_CALO_PARAMS
     "mc": (0.904, 0.204, 1.25),
     "data": (0.9366111025888879, 0.1835451204193374, 1.567685536351266),
@@ -78,10 +80,12 @@ def dedx_to_dqdx(dedx, phi=np.pi / 2, scale=None, recomb=(MODA, B90, R_EMB)):
         return np.log(a + b * np.asarray(dedx, float)) / (b * WION * s)
 
 
-def swap_recombination(dqdx_wc, phi, src="mc", dst="data"):
+def swap_recombination(dqdx_wc, phi, src="mc", dst="data", scale=None):
     """dQ/dx re-derived with the dst recombination: the measured charge's
-    dE/dx under RECOMB[src], back to charge under RECOMB[dst]."""
-    return dedx_to_dqdx(dqdx_to_dedx(dqdx_wc, phi, recomb=RECOMB[src]), phi, recomb=RECOMB[dst])
+    dE/dx under RECOMB[src], back to charge under RECOMB[dst]. scale:
+    electrons per cm per unit of dqdx (default DQDX_SCALE, Wire-Cell q / nq;
+    1 / gain for Pandora's ADC/cm)."""
+    return dedx_to_dqdx(dqdx_to_dedx(dqdx_wc, phi, scale, recomb=RECOMB[src]), phi, scale, recomb=RECOMB[dst])
 
 
 def _density(bg):

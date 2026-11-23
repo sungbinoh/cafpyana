@@ -15,6 +15,20 @@ One row per (entry, slice, pfp, plane) for Pandora tracks >= TRK_MIN_LEN:
                dqdx_mip, width_mip, mult_mip, int_over_sum_mip over the hits
                with residual range > RR_MIP_MIN (no Bragg rise)
 
+make_pandora_hittrain_df: a separate table (key "pandtrain") of hit trains,
+the consecutive hits one track leaves on one wire (a track near the drift
+direction keeps one wire busy for tens to hundreds of us and Pandora splits
+that signal into several hits). One row per (entry, slice, pfp, plane, wire,
+train) with >= 2 hits whose windows touch (gap <= TRAIN_GAP_TICKS): n_hits,
+t_start / t_end (first hit start, last hit end, ticks), span_us, q (summed
+integral), sumadc, q_first / q_last / q_mean (hit integral per tick of its
+window), slope_frac_per_us (fitted slope of the hit integral per tick vs the
+hit time since t_start, / q_mean), rr_min / rr_max, x, phi (deg), pitch,
+plus the track variables of the pandtrk table. An under- (over-) correction
+of the AC coupling in data makes later hits of a train lower (higher), a
+negative (positive) slope; the simulation closes by construction. Lifetime
+also lowers later hits (they drifted further): ~-0.003 %/us at 35 ms.
+
 Reco only from recTree via pyanalib.loadbranches, so it runs on MC and data
 (no CVMFS imports).
 """
@@ -100,3 +114,69 @@ def _make(f):
     hits = pd.concat(planes)
     out = hits.join(t, on=LEVELS)
     return out.astype(np.float32)
+
+
+TRAIN_GAP_TICKS = 5          # hits on one wire whose windows are this close belong to one train
+TICK_US = 0.5
+TRAIN_LEAVES = ["wire", "t", "start", "end", "integral", "sumadc", "rr", "x", "phi", "pitch"]
+
+
+def _empty_trains():
+    return pd.DataFrame(index=pd.MultiIndex.from_arrays([[]] * 6, names=LEVELS + ["plane", "wire", "train"]))
+
+
+def _plane_trains(tree, plane, keep):
+    h = loadbranches(tree, [TRK + "calo.%d.points.%s" % (plane, k) for k in TRAIN_LEAVES])
+    h.columns = [col[-1] for col in h.columns]
+    h = h[h.index.droplevel(-1).isin(keep)].reset_index(level=-1, drop=True).reset_index()
+    if not len(h):
+        return pd.DataFrame()
+    h = h.sort_values(LEVELS + ["wire", "t"]).reset_index(drop=True)
+    key = h[LEVELS + ["wire"]]
+    same = (key == key.shift()).all(axis=1)
+    new = ~same | (h.start - h.end.shift() > TRAIN_GAP_TICKS)
+    h["train"] = new.cumsum() - 1
+    h["dens"] = h.integral / (h.end - h.start + 1).clip(lower=1)
+    g = h.groupby("train")
+    n = g.size()
+    h = h[h.train.map(n) >= 2]
+    if not len(h):
+        return pd.DataFrame()
+    g = h.groupby("train")
+    t0 = g.start.transform("min")
+    h["dt"] = (h.t - t0) * TICK_US
+    dm, qm = g.dt.transform("mean"), g.dens.transform("mean")
+    h["sxy"], h["sxx"] = (h.dt - dm) * (h.dens - qm), (h.dt - dm) ** 2
+    g = h.groupby("train")
+    out = pd.DataFrame({
+        "n_hits": g.size(), "t_start": g.start.min(), "t_end": g.end.max(), "q": g.integral.sum(), "sumadc": g.sumadc.sum(),
+        "q_first": g.dens.first(), "q_last": g.dens.last(), "q_mean": g.dens.mean(),
+        "rr_min": g.rr.min(), "rr_max": g.rr.max(), "x": g.x.median(), "phi": np.degrees(g.phi.median()), "pitch": g.pitch.median()})
+    out["span_us"] = (out.t_end - out.t_start) * TICK_US
+    out["slope_frac_per_us"] = g.sxy.sum() / g.sxx.sum().replace(0, np.nan) / out.q_mean.replace(0, np.nan)
+    first = g[LEVELS + ["wire"]].first()
+    out = pd.concat([first, out], axis=1)
+    out["plane"] = plane
+    out["train"] = out.groupby(LEVELS + ["wire"]).cumcount()
+    return out.set_index(LEVELS + ["plane", "wire", "train"])
+
+
+def make_pandora_hittrain_df(f):
+    """Never raises (see make_pandora_trkhit_df)."""
+    try:
+        if "recTree" not in f or not f["recTree"].num_entries:
+            return _empty_trains()
+        tree = f["recTree"]
+        t = _tracks(tree)
+        if not len(t):
+            return _empty_trains()
+        parts = [p for p in (_plane_trains(tree, pl, t.index) for pl in range(3)) if len(p)]
+        if not parts:
+            return _empty_trains()
+        out = pd.concat(parts)
+        tcols = ["len", "dir_x", "dir_y", "dir_z", "chi2_mu", "chi2_p", "track_score", "is_clear_cosmic", "nu_score"] + \
+                (["true_pdg"] if "true_pdg" in t else [])
+        return out.join(t[tcols], on=LEVELS).astype(np.float32)
+    except Exception as e:
+        print("make_pandora_hittrain_df: skipped (%s: %s)" % (type(e).__name__, e))
+        return _empty_trains()

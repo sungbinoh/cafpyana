@@ -20,15 +20,36 @@ Samples (SAMPLES):
   from the trkseg table (make_wc_candidates.make_wc_trkseg_df: one row per
   4 cm of each track, position and direction of that piece):
     mu_mip       muon-labelled tracks, residual range > RR_MIP_MIN (MIP region)
+    muon         muon-labelled tracks, every residual range (for --coords rr;
+                 not in the defaults)
     proton       proton-labelled tracks
     all_tracks   every track
   from the pandtrk table (make_pandora_hits.py: Pandora tracks > 30 cm,
   per plane; every event, the --stage cut does not apply): Pandora
   muon-like tracks (track score > 0.5, chi2_mu < chi2_p), per plane p0-p2:
-    pandora_dqdx_p<n>         median hit dQ/dx (the CAF's calibrated value)
+    pandora_dqdx_p<n>         median hit dQ/dx (the CAF's calibrated value,
+                              ADC/cm); with the MC also re-derived with the
+                              data recombination (to electrons with the MC
+                              plane gain of chi2pid, the track's median hit
+                              angle to the field, 0.5 kV/cm)
     pandora_width_p<n>        median hit width [ticks]
     pandora_mult_p<n>         mean hit multiplicity
     pandora_int_over_sum_p<n> median hit integral / ADC sum
+    pandora_integral_p<n>     median hit integral (all hits)
+    t_wire (Pandora samples): how long the track's signal lasts on one wire,
+    pitch x |cos(angle to the field)| / 1.563 mm/us; an AC-coupling (RC)
+    response mismatch between data and simulation acts on long signals, so a
+    ratio falling with t_wire the same way on every plane points to it
+    pandora_pitch_p<n>        median hit pitch (all hits):
+                              dQ/dx = integral / pitch (x calibration), so
+                              these split a dQ/dx difference into charge and
+                              length
+  profiled in angle to drift and in angle_wire, the angle of the track's
+  y-z projection to the plane's wires (WIRE_ANGLE_Z: induction at +-60 deg
+  to the vertical, mirrored between the TPCs; collection vertical), plus
+  dqdx_<sample>_drift_wire_map.png: the data / prediction ratio of the
+  per-track median in cells of both angles (the MC with the data
+  recombination for dQ/dx)
   all over hits with residual range > 30 cm; Pandora's hits come from the
   same signal-processing output as Wire-Cell's imaging
   from the candidate table (any dataframes):
@@ -38,6 +59,25 @@ Samples (SAMPLES):
                  polar angle to z, azimuth from x; the same track as the
                  trkseg direction to |cos| > 0.99 for 3/4 of the candidates),
                  position at the reco vertex
+
+Residual range (--coords rr, trkseg samples): also
+dqdx_<sample>_rr_angle_slices.png, the profile in slices of angle to drift
+(--angle-slices), ratios to the nominal MC and to the MC with the data
+recombination per slice: a ratio changing with residual range points to the
+dE/dx dependence of recombination, one changing between slices to its angle
+dependence (or another angle effect), a common flat offset to a scale.
+
+Pandora grids: dqdx_pandora_grid_<coordinate>.png (angle_drift, angle_wire,
+t_wire): the data / prediction ratio for every Pandora quantity (rows: dQ/dx,
+width, multiplicity, integral / ADC sum, integral, pitch) and plane
+(columns), rows on a shared y range: a change of the charge before readout
+(recombination, lifetime, a common gain) moves the planes together, signal
+processing / field response / electronics do not.
+
+profiles.csv: every plotted bin (sample, coordinate, angle slice for the
+residual-range and wire-angle cells, entries, data / prediction medians and
+errors, and the MC with the data recombination): aggregates only, no
+events, small enough to share.
 
 Angles: --angle-bin wide bins (default 5 deg) in the profiles; the
 statistics at small angles go as sin(angle). Each angle profile also has
@@ -144,12 +184,29 @@ def _mu1_angle(w):
                          "angle_drift": _angle_drift(dx), "angle_yz": _angle_yz(dy, dz)}, index=s.index)
 
 
+def _wc_swap(mc):
+    """Wire-Cell dQ/dx (MIPs) of the MC with the data recombination, at the track's angle to drift."""
+    return wc_calo.swap_recombination(mc.dqdx * DQDX_MIP, np.radians(mc.angle_drift)) / DQDX_MIP
+
+
+def _pandora_swap(plane):
+    """Pandora MC hit dQ/dx (ADC/cm) with the data recombination: to electrons with the MC gain of the plane,
+    at the track's median hit angle to the field (phi), nominal 0.5 kV/cm field."""
+    scale = 1.0 / wc_calo.PANDORA_GAIN["mc"][plane]
+    return lambda mc: wc_calo.swap_recombination(mc.dqdx, np.radians(mc.phi), scale=scale)
+
+
 def _pandora(t, plane, q):
     """Pandora muon-like tracks (track score > 0.5, collection-plane chi2_mu
     < chi2_p) on one plane: quantity q (column of the pandtrk table)."""
     s = t[(t.index.get_level_values("plane") == plane) & (t.track_score > 0.5) & (t.chi2_mu < t.chi2_p)]
-    return pd.DataFrame({"dqdx": s[q], "x": s.x, "y": 0.5 * (s.start_y + s.end_y), "z": 0.5 * (s.start_z + s.end_z),
-                         "angle_drift": _angle_drift(s.dir_x), "angle_yz": _angle_yz(s.dir_y, s.dir_z)}, index=s.index)
+    # drift length one wire sees from the track: the hit pitch times |cos(angle to the field)|; / drift speed
+    # = how long the signal on one wire lasts, what an AC-coupling (RC) mismatch would act on
+    dx_wire = (s.pitch * np.abs(np.cos(np.radians(s.phi)))).to_numpy(float)
+    return pd.DataFrame({"dqdx": s[q], "phi": s.phi, "x": s.x, "y": 0.5 * (s.start_y + s.end_y), "z": 0.5 * (s.start_z + s.end_z),
+                         "angle_drift": _angle_drift(s.dir_x), "angle_yz": _angle_yz(s.dir_y, s.dir_z),
+                         "angle_wire": _angle_wire(plane, s.x, s.dir_y, s.dir_z),
+                         "t_wire": dx_wire / DRIFT_SPEED_CM_US}, index=s.index)
 
 
 # name: table needed (None: the candidates only), function of (candidates, table) -> points (the plotted
@@ -159,6 +216,8 @@ SAMPLES = {
     "mu_mip": dict(table=SEG_KEY, fn=lambda w, s: _segments(s, lambda d: (d.pdg == PID["muon"]) & (d.rr > RR_MIP_MIN)),
                    title="muon-labelled tracks, residual range > %g cm (4 cm pieces)" % RR_MIP_MIN,
                    bins=np.arange(0, 3.01, 0.05)),
+    "muon": dict(table=SEG_KEY, fn=lambda w, s: _segments(s, lambda d: d.pdg == PID["muon"]),
+                 title="muon-labelled tracks, all residual ranges (4 cm pieces)", bins=np.arange(0, 4.01, 0.05)),
     "proton": dict(table=SEG_KEY, fn=lambda w, s: _segments(s, lambda d: d.pdg == PID["proton"]),
                    title="proton-labelled tracks (4 cm pieces)", bins=np.arange(0, 8.01, 0.2)),
     "all_tracks": dict(table=SEG_KEY, fn=lambda w, s: _segments(s, lambda d: d.pdg > 0), title="all tracks (4 cm pieces)",
@@ -173,14 +232,17 @@ for _pl in range(3):   # Pandora hits (pandtrk table), every event (not --stage)
     for _q, _lab, _bins in [("dqdx_mip", "hit dQ/dx [CAF units]", np.arange(0, 3001, 50)),
                             ("width_mip", "hit width [ticks]", np.arange(0, 15.01, 0.25)),
                             ("mult_mip", "hit multiplicity", np.arange(1, 3.01, 0.05)),
-                            ("int_over_sum_mip", "hit integral / ADC sum", np.arange(0.8, 1.201, 0.01))]:
+                            ("int_over_sum_mip", "hit integral / ADC sum", np.arange(0.8, 1.201, 0.01)),
+                            ("integral", "hit integral [ADC tick]", np.arange(0, 2001, 25)),
+                            ("pitch", "hit pitch [cm]", np.arange(0, 3.01, 0.05))]:
         SAMPLES["pandora_%s_p%d" % (_q.replace("_mip", ""), _pl)] = dict(
             table=PAND_KEY, fn=(lambda pl, q: lambda w, t: _pandora(t, pl, q))(_pl, _q),
-            title="Pandora muon-like tracks > 30 cm, plane %d: per-track %s %s (hits with rr > 30 cm)"
-                  % (_pl, "mean" if _q == "mult_mip" else "median", _lab),
-            bins=_bins, ylabel=("mean " if _q == "mult_mip" else "median ") + _lab, wc=False)
+            title="Pandora muon-like tracks > 30 cm, plane %d: per-track %s %s (%s)"
+                  % (_pl, "mean" if _q == "mult_mip" else "median", _lab, "hits with rr > 30 cm" if _q.endswith("_mip") else "all hits"),
+            bins=_bins, ylabel=("mean " if _q == "mult_mip" else "median ") + _lab, wc=False,
+            swap=(lambda pl: _pandora_swap(pl))(_pl) if _q == "dqdx_mip" else None)
 DEFAULT_SAMPLES = ["mu_mip", "proton", "all_tracks", "mu1_angle"] + [   # trk1_vtx has no angle: --samples trk1_vtx --coords x
-    "pandora_%s_p%d" % (q, pl) for q in ("dqdx", "width", "mult", "int_over_sum") for pl in range(3)]
+    "pandora_%s_p%d" % (q, pl) for q in ("dqdx", "width", "mult", "int_over_sum", "integral", "pitch") for pl in range(3)]
 
 COORDS = [   # column, bins, label
     ("x", np.linspace(-200, 200, 21), "x [cm] (drift; cathode at 0, anodes at ±200)"),
@@ -188,9 +250,29 @@ COORDS = [   # column, bins, label
     ("z", np.linspace(0, 500, 26), "z [cm]"),
     ("angle_drift", None, "angle to the drift (x) direction [deg]"),   # angle bins: --angle-bin
     ("angle_yz", None, "angle in the y-z (wire) plane to the beam axis [deg]"),
-    ("rr", np.linspace(0, 150, 31), "residual range [cm]"),
+    ("angle_wire", None, "angle of the track's y-z projection to the plane's wires [deg]"),
+    ("rr", np.r_[np.arange(0, 30, 2), np.arange(30, 151, 10)], "residual range [cm] (4 cm pieces: mean of the piece)"),
+    ("t_wire", np.r_[0.01, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64],
+     "signal duration per wire, pitch |cos φ| / v_drift [µs] (log axis)"),
 ]
-ANGLE_RANGE = {"angle_drift": (0, 90), "angle_yz": (-90, 90)}
+ANGLE_RANGE = {"angle_drift": (0, 90), "angle_yz": (-90, 90), "angle_wire": (0, 90)}
+# wire direction in the y-z plane, angle to z [deg], per (plane, TPC; 0: x < 0, 1: x > 0); fitted to the
+# Pandora hit wire numbers vs (y, z) on local MC CAFs (0.30 cm pitch): induction wires at +-60 deg to the
+# vertical, mirrored between the TPCs, collection wires vertical
+WIRE_ANGLE_Z = {(0, 0): 30.0, (0, 1): -30.0, (1, 0): -30.0, (1, 1): 30.0, (2, 0): 90.0, (2, 1): 90.0}
+DRIFT_SPEED_CM_US = 0.1563   # Wire-Cell simulation / reconstruction (simparams.jsonnet)
+MAP_BINS = np.linspace(0, 90, 10)
+LOG_COORDS = {"t_wire"}   # most tracks sit at 1-3 us, the tail reaches 60 us: unreadable on a linear axis   # both angles of the Pandora drift x wire-angle maps
+MAP_MIN_ENTRIES = 30
+
+
+def _angle_wire(plane, x, dy, dz):
+    """Angle [deg] between the track's y-z projection and the wires of the plane (in the track's TPC),
+    folded to 0-90: 0 along the wires, 90 across them."""
+    a = np.radians(np.where(np.asarray(x) < 0, WIRE_ANGLE_Z[(plane, 0)], WIRE_ANGLE_Z[(plane, 1)]))
+    dy, dz = np.asarray(dy, float), np.asarray(dz, float)
+    c = np.abs(dy * np.sin(a) + dz * np.cos(a)) / np.maximum(np.hypot(dy, dz), 1e-9)
+    return np.degrees(np.arccos(np.clip(c, 0, 1)))
 
 
 def angle_bins(coord, width):
@@ -261,8 +343,25 @@ def plot_dist(name, title, bins, on, mc, off, out, mc_alt=None):
     return md, mp
 
 
+PROFILE_ROWS = []   # binned medians of every plot, written to profiles.csv (aggregates only, shareable)
+
+
+def _record(sample, coord, lo, hi, on, pred, alt=None, extra=None):
+    """Append one row per bin: entries and median +- error of data, prediction (and the MC with the data
+    recombination)."""
+    nd = np.histogram(on[coord], np.r_[lo, hi[-1]])[0] if len(on) else np.zeros(len(lo))
+    npred = np.histogram(pred[coord], np.r_[lo, hi[-1]])[0] if len(pred) else np.zeros(len(lo))
+    Pd, Pp = profile(on, coord, np.r_[lo, hi[-1]]), profile(pred, coord, np.r_[lo, hi[-1]])
+    Pa = profile(alt, coord, np.r_[lo, hi[-1]]) if alt is not None else np.full_like(Pd, np.nan)
+    for i in range(len(lo)):
+        PROFILE_ROWS.append(dict(sample=sample, coord=coord, **(extra or {}), lo=lo[i], hi=hi[i], n_data=nd[i],
+                                 data=Pd[i, 0], data_err=Pd[i, 1], n_pred=npred[i], pred=Pp[i, 0], pred_err=Pp[i, 1],
+                                 pred_datarecomb=Pa[i, 0], pred_datarecomb_err=Pa[i, 1]))
+
+
 def plot_profile(name, title, coord, bins, label, on, mc, off, out, mc_alt=None, ylabel="median dQ/dx [MIP]"):
     pred = pd.concat([mc, off])
+    _record(name, coord, bins[:-1], bins[1:], on, pred, pd.concat([mc_alt, off]) if mc_alt is not None else None)
     P = {k: profile(d, coord, bins) for k, d in [("on", on), ("pred", pred), ("mc", mc)]}
     c = 0.5 * (bins[1:] + bins[:-1])
     xe = np.diff(bins) / 2
@@ -304,6 +403,8 @@ def plot_profile(name, title, coord, bins, label, on, mc, off, out, mc_alt=None,
     if not counts:
         r.set_xlabel(label)
     r.set_xlim(bins[0], bins[-1])
+    if coord in LOG_COORDS:
+        r.set_xscale("log")
     a.set_ylabel(ylabel)
     a.set_title(title, loc="left", fontsize=11)
     a.legend(frameon=False, fontsize=9.5)
@@ -340,6 +441,150 @@ def plot_profile_tpc(name, title, coord, bins, label, on, mc, off, out):
     a.set_title(title, loc="left", fontsize=11)
     a.legend(frameon=False, fontsize=9.5)
     fig.savefig(os.path.join(out, "dqdx_%s_%s_bytpc.png" % (name, coord)), dpi=130, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_wire_map(name, title, on, mc, off, out, mc_alt=None, qlabel="median"):
+    """Data / prediction of the per-cell median in angle to drift x angle to the plane's wires (cell values
+    printed; blank: fewer than MAP_MIN_ENTRIES data or MC entries). Against the MC with the data
+    recombination when given, else the nominal MC."""
+    def cells(p):
+        ix = np.digitize(p.angle_drift.to_numpy(float), MAP_BINS) - 1
+        iy = np.digitize(p.angle_wire.to_numpy(float), MAP_BINS) - 1
+        n = len(MAP_BINS) - 1
+        ok = (ix >= 0) & (ix < n) & (iy >= 0) & (iy < n) & np.isfinite(p.dqdx.to_numpy(float))
+        b = (ix * n + iy)[ok]
+        P = _fast_profile(p.dqdx.to_numpy(float)[ok], p.w.to_numpy(float)[ok], b, n * n)
+        return P[:, 0].reshape(n, n), P[:, 1].reshape(n, n), np.bincount(b, minlength=n * n).reshape(n, n)
+    m_ = mc if mc_alt is None else mc_alt
+    for lo, hi in zip(MAP_BINS[:-1], MAP_BINS[1:]):   # the cells, as rows: angle_wire bins per angle_drift slice
+        sl = lambda d: d[(d.angle_drift >= lo) & (d.angle_drift < hi)]
+        _record(name, "angle_wire", MAP_BINS[:-1], MAP_BINS[1:], sl(on), pd.concat([sl(mc), sl(off)]),
+                pd.concat([sl(mc_alt), sl(off)]) if mc_alt is not None else None,
+                extra=dict(angle_drift_lo=lo, angle_drift_hi=hi))
+    Md, Ed, Nd = cells(on)
+    Mp, Ep, _ = cells(pd.concat([m_, off]))
+    Nm = cells(m_)[2]
+    R = np.where((Nd >= MAP_MIN_ENTRIES) & (Nm >= MAP_MIN_ENTRIES), Md / Mp, np.nan)
+    Re = R * np.hypot(Ed / Md, Ep / Mp)
+    fig, a = plt.subplots(figsize=(10, 7.5))
+    lim = max(0.05, min(0.3, np.nanmax(np.abs(R - 1)) if np.isfinite(R).any() else 0.1))
+    im = a.pcolormesh(MAP_BINS, MAP_BINS, R.T, cmap="RdBu_r", vmin=1 - lim, vmax=1 + lim, shading="flat")
+    c = 0.5 * (MAP_BINS[1:] + MAP_BINS[:-1])
+    for i in range(len(c)):
+        for j in range(len(c)):
+            if np.isfinite(R[i, j]):
+                a.text(c[i], c[j], "%.3f\n±%.3f" % (R[i, j], Re[i, j]), ha="center", va="center", fontsize=7.5)
+    fig.colorbar(im, ax=a, label="data / prediction, %s" % qlabel)
+    a.set_xlabel("angle to the drift (x) direction [deg]")
+    a.set_ylabel("angle to the plane's wires (y-z projection) [deg]")
+    a.grid(False)
+    a.set_title("%s\nprediction: %s + off-beam; blank: < %d data or MC entries"
+                % (title, "MC with the data recombination" if mc_alt is not None else "nominal MC", MAP_MIN_ENTRIES),
+                loc="left", fontsize=9.5)
+    fig.savefig(os.path.join(out, "dqdx_%s_drift_wire_map.png" % name), dpi=130, bbox_inches="tight")
+    plt.close(fig)
+
+
+SLICE_COLORS = ["#2a78d6", "#1baf7a", "#eb6834", "#7f5bd5", "#a05a2c"]
+
+
+def plot_rr_angle_slices(name, title, bins, label, on, mc, off, out, slices, mc_alt=None):
+    """Median dQ/dx vs residual range in slices of angle to drift: data (points) and prediction (lines) per
+    slice; ratio panel data / nominal prediction (filled) and / the MC with the data recombination (open)."""
+    c = 0.5 * (bins[1:] + bins[:-1])
+    xe = np.diff(bins) / 2
+    fig, (a, r) = plt.subplots(2, 1, figsize=(10, 7.5), sharex=True, gridspec_kw=dict(height_ratios=[3, 1.4], hspace=0.05))
+    lims = [0.05]
+    sel = lambda d, lo, hi: d[(d.angle_drift >= lo) & (d.angle_drift < hi)]
+    for k, (lo, hi) in enumerate(zip(slices[:-1], slices[1:])):
+        col = SLICE_COLORS[k % len(SLICE_COLORS)]
+        Pd = profile(sel(on, lo, hi), "rr", bins)
+        Pp = profile(pd.concat([sel(mc, lo, hi), sel(off, lo, hi)]), "rr", bins)
+        _record(name, "rr", bins[:-1], bins[1:], sel(on, lo, hi), pd.concat([sel(mc, lo, hi), sel(off, lo, hi)]),
+                pd.concat([sel(mc_alt, lo, hi), sel(off, lo, hi)]) if mc_alt is not None else None,
+                extra=dict(angle_drift_lo=lo, angle_drift_hi=hi))
+        a.stairs(Pp[:, 0], bins, baseline=None, color=col, lw=1.8, label="%g-%g°: prediction" % (lo, hi))
+        a.errorbar(c, Pd[:, 0], Pd[:, 1], fmt="o", color=col, mec="k", ms=4, label="%g-%g°: data" % (lo, hi))
+        sh = (k - (len(slices) - 2) / 2) * 0.25 * xe
+        ratio = Pd[:, 0] / Pp[:, 0]
+        rerr = ratio * np.hypot(Pd[:, 1] / Pd[:, 0], Pp[:, 1] / Pp[:, 0])
+        r.errorbar(c + sh, ratio, rerr, fmt="o", color=col, ms=4)
+        if mc_alt is not None:
+            Pa = profile(pd.concat([sel(mc_alt, lo, hi), sel(off, lo, hi)]), "rr", bins)
+            ra = Pd[:, 0] / Pa[:, 0]
+            r.errorbar(c + sh, ra, ra * np.hypot(Pd[:, 1] / Pd[:, 0], Pa[:, 1] / Pa[:, 0]), fmt="o", mfc="white",
+                       color=col, ms=4)
+            if np.isfinite(ra).any():
+                lims.append(1.2 * np.nanmax(np.abs(ra - 1)))
+        if np.isfinite(ratio).any():
+            lims.append(1.2 * np.nanmax(np.abs(ratio - 1) + np.nan_to_num(rerr)))
+    r.axhline(1, color="k", lw=1)
+    lim = min(max(lims), 0.3)
+    r.set_ylim(1 - lim, 1 + lim)
+    r.set_ylabel("data / pred.")
+    r.text(0.99, 0.04, "filled: vs nominal MC" + ("; open: vs MC with data recombination" if mc_alt is not None else ""),
+           transform=r.transAxes, ha="right", va="bottom", fontsize=8.5)
+    r.set_xlabel(label)
+    r.set_xlim(bins[0], bins[-1])
+    a.set_ylabel("median dQ/dx [MIP]")
+    a.set_title(title + "\nslices of angle to the drift direction", loc="left", fontsize=10.5)
+    a.legend(frameon=False, fontsize=8.5, ncol=2)
+    fig.savefig(os.path.join(out, "dqdx_%s_rr_angle_slices.png" % name), dpi=130, bbox_inches="tight")
+    plt.close(fig)
+
+
+PANDORA_QUANTITIES = [("dqdx", "dQ/dx"), ("width", "hit width"), ("mult", "hit multiplicity"),
+                      ("int_over_sum", "integral / ADC sum"), ("integral", "hit integral"), ("pitch", "hit pitch")]
+
+
+def plot_pandora_grid(coord, label, bins, results, out):
+    """One figure: data / prediction vs coord for every Pandora quantity (rows) and plane (columns). For dQ/dx,
+    open markers compare with the MC with the data recombination. Rows share a y range (set by the
+    well-measured bins), so planes compare at a glance. A change of the charge before readout moves the three
+    columns together; signal processing, field response and electronics act per plane."""
+    rows = [(q, lab) for q, lab in PANDORA_QUANTITIES if any("pandora_%s_p%d" % (q, pl) in results for pl in range(3))]
+    if not rows:
+        return
+    c = 0.5 * (bins[1:] + bins[:-1])
+    fig, axs = plt.subplots(len(rows), 3, figsize=(16, 2.7 * len(rows) + 1), sharex=True, squeeze=False)
+    for i, (q, lab) in enumerate(rows):
+        lim = 0.02
+        for pl in range(3):
+            a = axs[i, pl]
+            key = "pandora_%s_p%d" % (q, pl)
+            if key in results:
+                on, mc, off, alt = results[key]
+                Pd = profile(on, coord, bins)
+                for m_, mfc, name in [(mc, None, "vs nominal MC"), (alt, "white", "vs MC with data recombination")]:
+                    if m_ is None:
+                        continue
+                    Pp = profile(pd.concat([m_, off]), coord, bins)
+                    ratio = Pd[:, 0] / Pp[:, 0]
+                    rerr = ratio * np.hypot(Pd[:, 1] / Pd[:, 0], Pp[:, 1] / Pp[:, 0])
+                    a.errorbar(c, ratio, rerr, fmt="o", color="#1f1f1e", mfc=mfc, ms=4, label=name)
+                    good = np.isfinite(ratio) & (rerr < 0.03)
+                    if good.any():
+                        lim = max(lim, 1.25 * np.max(np.abs(ratio[good] - 1) + rerr[good]))
+            a.axhline(1, color="#1f1f1e", lw=1)
+            if i == 0:
+                a.set_title("plane %d%s" % (pl, " (collection)" if pl == 2 else " (induction)"), fontsize=11)
+            if pl == 0:
+                a.set_ylabel("%s\ndata / pred." % lab, fontsize=10)
+            if i == len(rows) - 1:
+                a.set_xlabel(label, fontsize=10)
+            if i == 0 and pl == 2 and q == "dqdx":
+                a.legend(frameon=False, fontsize=8.5)
+        lim = min(lim, 0.4)
+        for pl in range(3):
+            axs[i, pl].set_ylim(1 - lim, 1 + lim)
+            axs[i, pl].set_xlim(bins[0], bins[-1])
+            if coord in LOG_COORDS:
+                axs[i, pl].set_xscale("log")
+    fig.suptitle("Pandora muon-like tracks: data / prediction by quantity (rows) and plane (columns) vs %s" % coord,
+                 x=0.01, ha="left", fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    fig.savefig(os.path.join(out, "dqdx_pandora_grid_%s.png" % coord), dpi=120, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -490,9 +735,11 @@ def main():
     ap.add_argument("--offbeam-frac", type=float, help="off-beam share of the prediction at preselection, with --area-norm")
     ap.add_argument("--samples", nargs="+", default=DEFAULT_SAMPLES, choices=list(SAMPLES))
     ap.add_argument("--angle-bin", type=float, default=5.0, help="angle bin width in the profiles [deg] (default 5)")
-    ap.add_argument("--coords", nargs="+", default=["angle_drift"], choices=[c[0] for c in COORDS],
-                    help="profile coordinates (default: angle_drift)")
+    ap.add_argument("--coords", nargs="+", default=["angle_drift", "angle_wire", "t_wire"], choices=[c[0] for c in COORDS],
+                    help="profile coordinates (default: angle_drift, and angle_wire and t_wire for the Pandora samples)")
     ap.add_argument("--dist", action="store_true", help="also the dQ/dx distribution plots")
+    ap.add_argument("--angle-slices", type=float, nargs="+", default=[0, 40, 60, 90],
+                    help="angle-to-drift slice edges of the residual-range profiles [deg] (default 0 40 60 90)")
     ap.add_argument("--by-tpc", action="store_true", help="also the profiles split by TPC")
     ap.add_argument("--no-recomb-swap", action="store_true", help="no MC prediction with the data recombination")
     ap.add_argument("--fit-recomb", action="store_true", help="fit the ellipsoid ratio R and an MC scale to the angle profile")
@@ -519,6 +766,7 @@ def main():
     comp = cands["mc"].cat.map(cuts.CATEGORY_LABELS).value_counts(normalize=True)
     lines = [norm_line, "stage: %s (%d MC candidates; MC truth: %s)" % (
         stage_title, len(cands["mc"]), ", ".join("%s %.0f%%" % (k, 100 * v) for k, v in comp.head(5).items())), ""]
+    results = {}
     for name in args.samples:
         spec = SAMPLES[name]
         key, title, bins = spec["table"], spec["title"], spec["bins"]
@@ -530,9 +778,10 @@ def main():
             title, stage_title if key != PAND_KEY else "all events", len(pts["on"]), len(pts["mc"]), len(pts["off"]))
         on, mc, off = pts["on"], pts["mc"], pts["off"]
         wcq = spec.get("wc", True)
+        swap = spec.get("swap", _wc_swap if wcq else None)
         alt = None
-        if wcq and "angle_drift" in mc and not args.no_recomb_swap:
-            alt = mc.assign(dqdx=wc_calo.swap_recombination(mc.dqdx * DQDX_MIP, np.radians(mc.angle_drift)) / DQDX_MIP)
+        if swap is not None and "angle_drift" in mc and not args.no_recomb_swap:
+            alt = mc.assign(dqdx=swap(mc))
         if args.dist:
             plot_dist(name, full, bins, on, mc, off, args.outdir, alt)
         md = median_err(on.dqdx.to_numpy(float), on.w.to_numpy(float))[0]
@@ -543,6 +792,7 @@ def main():
             ma = median_err(np.r_[alt.dqdx, off.dqdx], np.r_[alt.w, off.w])[0]
             line += "; MC with data recombination: prediction %.3f, ratio %.3f" % (ma, md / ma)
         lines.append(line)
+        results[name] = (on, mc, off, alt)
         for coord, cbins, label in COORDS:
             if coord in on and coord in args.coords:
                 cbins = angle_bins(coord, args.angle_bin) if cbins is None else cbins
@@ -550,6 +800,10 @@ def main():
                              ylabel=spec.get("ylabel", "median dQ/dx [MIP]"))
                 if args.by_tpc and coord != "x":
                     plot_profile_tpc(name, full, coord, cbins, label, on, mc, off, args.outdir)
+                if coord == "rr" and "angle_drift" in on:
+                    plot_rr_angle_slices(name, full, cbins, label, on, mc, off, args.outdir, args.angle_slices, alt)
+        if "angle_wire" in on:
+            plot_wire_map(name, full, on, mc, off, args.outdir, alt, spec.get("ylabel", "median dQ/dx"))
         if "angle_drift" in on and wcq:
             if args.fit_recomb:
                 fb = angle_bins("angle_drift", args.angle_bin)
@@ -557,6 +811,11 @@ def main():
                 plot_recomb_fit(name, full, fb, on, mc, off, args.outdir, fit)
                 lines.append("%-12s recombination fit: R = %.2f (Delta chi2 = 1: %.2f-%.2f), MC scale k = %.3f, chi2/ndf = %.1f/%d"
                              % ("", fit["R"], *fit["R_range"], fit["k"], fit["chi2_min"], fit["ndf"]))
+    for coord, cbins, label in COORDS:   # Pandora quantity x plane grids, for every Pandora coordinate requested
+        if coord in args.coords and any(k.startswith("pandora_") and coord in v[0] for k, v in results.items()):
+            plot_pandora_grid(coord, label, angle_bins(coord, args.angle_bin) if cbins is None else cbins, results,
+                              args.outdir)
+    pd.DataFrame(PROFILE_ROWS).to_csv(os.path.join(args.outdir, "profiles.csv"), index=False, float_format="%.6g")
     open(os.path.join(args.outdir, "summary.txt"), "w").write("\n".join(lines) + "\n")
     print("\n".join(lines))
     print("wrote the plots to %s" % args.outdir)
