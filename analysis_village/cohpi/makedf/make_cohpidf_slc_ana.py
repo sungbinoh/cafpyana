@@ -1,47 +1,7 @@
 from makedf.makedf import *
 from pyanalib.pandas_helpers import *
 from makedf.util import *
-
-def InFV_nohiyz(data):
-    xmin = 10.
-    xmax = 190.
-    zmin = 10.
-    zmax = 450.
-    ymax_highz = 100.
-    pass_xz = (np.abs(data.x) > xmin) & (np.abs(data.x) < xmax) & (data.z > zmin) & (data.z < zmax)
-    pass_y = ((data.z < 250) & (np.abs(data.y) < 190.)) | ((data.z > 250) & (data.y > -190.) & (data.y < ymax_highz))
-    return pass_xz & pass_y
-
-def InFV_nohiyz_trk(data):
-    xmax = 190.
-    zmin = 10.
-    zmax = 450.
-    ymax_highz = 100.
-    pass_xz = (np.abs(data.x) < xmax) & (data.z > zmin) & (data.z < zmax)
-    pass_y = ((data.z < 250) & (np.abs(data.y) < 190.)) | ((data.z > 250) & (data.y > -190.) & (data.y < ymax_highz))
-    return pass_xz & pass_y
-
-## -- truth level flags
-def Signal(df): # definition
-    is_fv = InFV_nohiyz(df.position)
-    ## is_1pi0p0n = (df.nmu_27MeV == 1) & (df.npi_30MeV == 1) & (df.np_20MeV == 0) & (df.npi0 == 0) & (df.nn_0MeV == 0) -- signal def used until Nu26
-
-    ## updating the signal definition to true CCCOH and have mu & pi above enegy threshold
-    is_1mu1pi_th = (df.nmu_27MeV == 1) & (df.npi_30MeV == 1)
-    is_cccoh = (df.iscc) & (df.genie_mode == 3)
-    return is_fv & is_1mu1pi_th & is_cccoh
-
-def is_contained(trk_df):
-    start_in = InFV_nohiyz_trk(trk_df.pfp.trk.start)
-    end_in = InFV_nohiyz_trk(trk_df.pfp.trk.end)
-    return start_in & end_in
-
-## -- reco level flags
-def is_muon_pion_candidate(evt_df):
-    return (evt_df.pfp.dist_to_vertex < 6.) & (evt_df.pfp.trk.chi2pid.I2.arctan_mu_over_p < 0.4) & (evt_df.pfp.trk.len > 4.) & (evt_df.pfp.trackScore > 0.5)
-
-def is_contained_muon_pion_candidate(evt_df):
-    return (evt_df.pfp.dist_to_vertex < 6.) & (evt_df.pfp.is_contained) & (evt_df.pfp.trk.chi2pid.I2.arctan_mu_over_p < 0.4) & (evt_df.pfp.trk.len > 4.) & (evt_df.pfp.trackScore > 0.5)
+from analysis_village.cohpi.makedf.cohpi_selection import *
 
 def Avg(df, pid, drop_0=True):  # average score of 3 planes, exclude value if 0
     if drop_0:
@@ -176,21 +136,9 @@ def make_cohpidf_slc(f):
     pandora_df[('pfp', 'trk', 'chi2pid', 'I2', 'mu_over_p', '')] = pandora_df.pfp.trk.chi2pid.I2.chi2_muon / pandora_df.pfp.trk.chi2pid.I2.chi2_proton
     pandora_df[('pfp', 'trk', 'chi2pid', 'I2', 'arctan_mu_over_p', '')] = ((2 / np.pi ) * np.arctan(pandora_df.pfp.trk.chi2pid.I2.mu_over_p / 0.8)).fillna(-0.2)
 
-    def is_prong_candidate(df):
-        return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.)
-    def is_trk_candidate(df):
-        return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5)
-    def is_proton_candidate(df):
-        if is_recalo:
-            return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5) & (df.pfp.trk.chi2pid.I2.chi2_muon_new > 25.)
-        else:
-            return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5) & (df.pfp.trk.chi2pid.I2.chi2_muon > 25.)
-    def is_shower_candidate(df):
-        return (df.pfp.trackScore < 0.50)
-
     pandora_df[('pfp', 'is_prong_candidate', '', '', '', '')] = is_prong_candidate(pandora_df)
     pandora_df[('pfp', 'is_trk_candidate', '', '', '', '')] = is_trk_candidate(pandora_df)
-    pandora_df[('pfp', 'is_proton_candidate', '', '', '', '')] = is_proton_candidate(pandora_df)
+    pandora_df[('pfp', 'is_proton_candidate', '', '', '', '')] = is_proton_candidate(pandora_df, is_recalo)
     pandora_df[('pfp', 'is_shower_candidate', '', '', '', '')] = is_shower_candidate(pandora_df)
 
     n_prong = (pandora_df.pfp.is_prong_candidate).groupby(level=[0,1]).sum()
@@ -231,8 +179,7 @@ def make_cohpidf_slc(f):
     #### (4) dir Z cut
     longdf = pandora_df.sort_values(by=("pfp", "trk", "len", "", "", ""), ascending=False).groupby(level=[0,1]).nth(0)
     shortdf = pandora_df.sort_values(by=("pfp", "trk", "len", "", "", ""), ascending=False).groupby(level=[0,1]).nth(1)
-    is_long_dirz_pass = longdf.pfp.trk.dir.z > 0.7
-    is_short_dirz_pass = shortdf.pfp.trk.dir.z > 0.5
+    is_long_dirz_pass, is_short_dirz_pass = dirz_pass(longdf, shortdf)
 
     long_start_x = longdf.pfp.trk.start.x
     long_start_y = longdf.pfp.trk.start.y
@@ -412,11 +359,10 @@ def make_cohpidf_slc(f):
     slcdf['range_p_mu'] = range_p_mu
     slcdf['range_p_cpi'] = range_p_cpi
 
-    #### (7) Add total pe for each entry
-    opflash_df = make_opflashdf(f)
-    opflash_df = opflash_df[(opflash_df.firsttime > -5.) & (opflash_df.firsttime < 5.)]
-    totalpe = (opflash_df.groupby(level=0)["totalpe"].sum())
-    slcdf['total_pe'] = slcdf.index.get_level_values('entry').map(totalpe)
+    #### (7) PE of the barycenter-matched flash for each slice
+    total_pe = pandora_df.slc.barycenterFM.flashPEs
+    total_pe = make_slc_var(total_pe)
+    slcdf['total_pe'] = total_pe
 
     #### (8) charge in spheres with centers at vtx
     hitdf = make_trkhitdf_plane2(f)
@@ -448,7 +394,7 @@ def make_cohpidf_slc(f):
     slcdf['sum_integ_1cm'] = sum_integ_1cm
 
     #### (9) last moment evt selection
-    slcdf = slcdf[(slcdf.is_not_clear_cosmic) & (slcdf.is_fv)]
+    slcdf = slcdf[preselection_mask(slcdf)]
 
     #print(slcdf.columns)
     return slcdf

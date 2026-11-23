@@ -1,51 +1,12 @@
 from makedf.makedf import *
 from pyanalib.pandas_helpers import *
 from makedf.util import *
+from analysis_village.cohpi.makedf.cohpi_selection import *
 from makedf import getsyst
+from makedf import chi2pid
 
 # Define an empty global variable to hold all systematic weights
 all_systs_weights_df = None
-
-def InFV_nohiyz(data):
-    xmin = 10.
-    xmax = 190.
-    zmin = 10.
-    zmax = 450.
-    ymax_highz = 100.
-    pass_xz = (np.abs(data.x) > xmin) & (np.abs(data.x) < xmax) & (data.z > zmin) & (data.z < zmax)
-    pass_y = ((data.z < 250) & (np.abs(data.y) < 190.)) | ((data.z > 250) & (data.y > -190.) & (data.y < ymax_highz))
-    return pass_xz & pass_y
-
-def InFV_nohiyz_trk(data):
-    xmax = 190.
-    zmin = 10.
-    zmax = 450.
-    ymax_highz = 100.
-    pass_xz = (np.abs(data.x) < xmax) & (data.z > zmin) & (data.z < zmax)
-    pass_y = ((data.z < 250) & (np.abs(data.y) < 190.)) | ((data.z > 250) & (data.y > -190.) & (data.y < ymax_highz))
-    return pass_xz & pass_y
-
-## -- truth level flags
-def Signal(df): # definition
-    is_fv = InFV_nohiyz(df.position)
-    ##is_1pi0p0n = (df.nmu_27MeV == 1) & (df.npi_30MeV == 1) & (df.np_20MeV == 0) & (df.npi0 == 0) & (df.nn_0MeV == 0) -- signal def used until Nu26
-
-    ## updating the signal definition to true CCCOH and have mu & pi above enegy threshold
-    is_1mu1pi_th = (df.nmu_27MeV == 1) & (df.npi_30MeV == 1)
-    is_cccoh = (df.iscc) & (df.genie_mode == 3)
-    return is_fv & is_1mu1pi_th & is_cccoh
-
-def is_contained(trk_df):
-    start_in = InFV_nohiyz_trk(trk_df.pfp.trk.start)
-    end_in = InFV_nohiyz_trk(trk_df.pfp.trk.end)
-    return start_in & end_in
-
-## -- reco level flags
-def is_muon_pion_candidate(evt_df):
-    return (evt_df.pfp.dist_to_vertex < 6.) & (evt_df.pfp.trk.chi2pid.I2.arctan_mu_over_p < 0.4) & (evt_df.pfp.trk.len > 4.) & (evt_df.pfp.trackScore > 0.5)
-
-def is_contained_muon_pion_candidate(evt_df):
-    return (evt_df.pfp.dist_to_vertex < 6.) & (evt_df.pfp.is_contained) & (evt_df.pfp.trk.chi2pid.I2.arctan_mu_over_p < 0.4) & (evt_df.pfp.trk.len > 4.) & (evt_df.pfp.trackScore > 0.5)
 
 def Avg(df, pid, drop_0=True):  # average score of 3 planes, exclude value if 0
     if drop_0:
@@ -148,6 +109,21 @@ def make_slc_var(df):
     out = df.groupby(level=['entry', 'rec.slc..index'], sort=False).first()
     return out
 
+def calo_variation_chi2(f, ismc, plane=2):
+    """chi2_muon / chi2_proton on `plane` for every chi2pid.CALO_VARIATIONS entry.
+    Same recipe as make_pandora_df's CV recalo (no hit FV cut), so 'cv' == *_new.
+    Returns {var: {'muon': Series, 'proton': Series}} indexed by (entry, slc, pfp)."""
+    det = loadbranches(f["recTree"], ["rec.hdr.det"]).rec.hdr.det
+    if not (det == 1).all():
+        raise NotImplementedError("CALO_VARIATIONS are SBND parameter sets")
+    trkhitdf = make_trkhitdf(f, plane)
+    out = {}
+    for var in CALO_VARS:
+        trkhitdf["dedx_redo"] = chi2pid.dedx(trkhitdf, gain="SBND", calibrate="SBND", plane=plane,
+                                            isMC=ismc, new_calo_params=chi2pid.CALO_VARIATIONS[var])
+        out[var] = {par: chi2pid.chi2par(trkhitdf, dedxname="dedx_redo", par=par)[0] for par in ("muon", "proton")}
+    return out
+
 ## collect syst weights first
 
 ## -- data fram maker for cohpi analysis
@@ -185,21 +161,9 @@ def make_cohpidf_slc(f):
     pandora_df[('pfp', 'trk', 'chi2pid', 'I2', 'mu_over_p', '')] = pandora_df.pfp.trk.chi2pid.I2.chi2_muon / pandora_df.pfp.trk.chi2pid.I2.chi2_proton
     pandora_df[('pfp', 'trk', 'chi2pid', 'I2', 'arctan_mu_over_p', '')] = ((2 / np.pi ) * np.arctan(pandora_df.pfp.trk.chi2pid.I2.mu_over_p / 0.8)).fillna(-0.2)
 
-    def is_prong_candidate(df):
-        return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.)
-    def is_trk_candidate(df):
-        return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5)
-    def is_proton_candidate(df):
-        if is_recalo:
-            return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5) & (df.pfp.trk.chi2pid.I2.chi2_muon_new > 25.)
-        else:
-            return (df.pfp.dist_to_vertex < 6.) & (df.pfp.trk.len > 4.) & (df.pfp.trackScore > 0.5) & (df.pfp.trk.chi2pid.I2.chi2_muon > 25.)
-    def is_shower_candidate(df):
-        return (df.pfp.trackScore < 0.50)
-
     pandora_df[('pfp', 'is_prong_candidate', '', '', '', '')] = is_prong_candidate(pandora_df)
     pandora_df[('pfp', 'is_trk_candidate', '', '', '', '')] = is_trk_candidate(pandora_df)
-    pandora_df[('pfp', 'is_proton_candidate', '', '', '', '')] = is_proton_candidate(pandora_df)
+    pandora_df[('pfp', 'is_proton_candidate', '', '', '', '')] = is_proton_candidate(pandora_df, is_recalo)
     pandora_df[('pfp', 'is_shower_candidate', '', '', '', '')] = is_shower_candidate(pandora_df)
 
     n_prong = (pandora_df.pfp.is_prong_candidate).groupby(level=[0,1]).sum()
@@ -207,9 +171,21 @@ def make_cohpidf_slc(f):
     n_proton = (pandora_df.pfp.is_proton_candidate).groupby(level=[0,1]).sum()
     n_shower = (pandora_df.pfp.is_shower_candidate).groupby(level=[0,1]).sum()
 
+    #### (3) - 1: plane-2 chi2pid per calo variation (MC only), see calo_variation_chi2();
+    ####          chi2-based cuts (n_proton, chi2_proton) are NOT applied here, apply offline with calo_var_masks()
+    n_proton_calovar = {}
+    if ismc:
+        calo_chi2 = calo_variation_chi2(f, ismc)
+        for var in CALO_VARS:
+            pandora_df[('pfp', 'trk', 'calovar', var, 'chi2_mu', '')] = calo_chi2[var]['muon'].reindex(pandora_df.index).fillna(0.)
+            pandora_df[('pfp', 'trk', 'calovar', var, 'chi2_p', '')] = calo_chi2[var]['proton'].reindex(pandora_df.index).fillna(0.)
+            is_p_v = is_proton_candidate_chi2mu(pandora_df, pandora_df.pfp.trk.calovar[var].chi2_mu)
+            n_proton_calovar[var] = make_slc_var(is_p_v.groupby(level=[0,1]).sum())
+
     pass_n_trk_condition = (n_trk == 2) & (n_proton == 0) & (n_shower == 0)
 
-    two_trk_df_condition = (two_trk_df_condition) & (n_prong == 2) & (n_trk == 2) & (n_proton == 0) & (n_shower == 0)
+    ## n_proton is chi2-dependent -> not required here, so two-track kinematics exist for every calo variation
+    two_trk_df_condition = (two_trk_df_condition) & (n_prong == 2) & (n_trk == 2) & (n_shower == 0)
 
     n_prong = make_slc_var(n_prong)
     n_trk = make_slc_var(n_trk)
@@ -240,8 +216,7 @@ def make_cohpidf_slc(f):
     #### (4) dir Z cut
     longdf = pandora_df.sort_values(by=("pfp", "trk", "len", "", "", ""), ascending=False).groupby(level=[0,1]).nth(0)
     shortdf = pandora_df.sort_values(by=("pfp", "trk", "len", "", "", ""), ascending=False).groupby(level=[0,1]).nth(1)
-    is_long_dirz_pass = longdf.pfp.trk.dir.z > -1. ## not applying dir z cut
-    is_short_dirz_pass = shortdf.pfp.trk.dir.z > -1. ## not applying dir z cut
+    is_long_dirz_pass, is_short_dirz_pass = dirz_pass(longdf, shortdf)
 
     long_start_x = longdf.pfp.trk.start.x
     long_start_y = longdf.pfp.trk.start.y
@@ -360,6 +335,14 @@ def make_cohpidf_slc(f):
         slcdf['short_trk_chi2_mu_new'] = short_trk_chi2_mu_new
         slcdf['short_trk_chi2_pro_new'] = short_trk_chi2_pro_new
 
+    ###### (5) - 3: chi2pid per calo variation
+    for var, n_p_v in n_proton_calovar.items():
+        slcdf['n_proton_' + var] = n_p_v
+        slcdf['long_chi2_mu_' + var] = make_slc_var(longdf.pfp.trk.calovar[var].chi2_mu)
+        slcdf['long_chi2_pro_' + var] = make_slc_var(longdf.pfp.trk.calovar[var].chi2_p)
+        slcdf['short_chi2_mu_' + var] = make_slc_var(shortdf.pfp.trk.calovar[var].chi2_mu)
+        slcdf['short_chi2_pro_' + var] = make_slc_var(shortdf.pfp.trk.calovar[var].chi2_p)
+
     #### (6) measure two-track variables
     two_trk_df = pandora_df[two_trk_df_condition]
     two_trk_df = two_trk_df[two_trk_df.pfp.is_trk_candidate]
@@ -414,11 +397,10 @@ def make_cohpidf_slc(f):
     slcdf['range_p_mu'] = range_p_mu
     slcdf['range_p_cpi'] = range_p_cpi
 
-    #### (7) Add total pe for each entry
-    opflash_df = make_opflashdf(f)
-    opflash_df = opflash_df[(opflash_df.firsttime > -5.) & (opflash_df.firsttime < 5.)]
-    totalpe = (opflash_df.groupby(level=0)["totalpe"].sum())
-    slcdf['total_pe'] = slcdf.index.get_level_values('entry').map(totalpe)
+    #### (7) PE of the barycenter-matched flash for each slice
+    total_pe = pandora_df.slc.barycenterFM.flashPEs
+    total_pe = make_slc_var(total_pe)
+    slcdf['total_pe'] = total_pe
 
     #### (8) charge in spheres with centers at vtx
     hitdf = make_trkhitdf_plane2(f)
@@ -451,39 +433,16 @@ def make_cohpidf_slc(f):
     slcdf['sum_integ_1cm'] = sum_integ_1cm
     slcdf['sphere_3_over_4m3'] = sphere_3_over_4m3
 
-    #### (9) last moment evt selection
-    slcdf = slcdf[(slcdf.is_not_clear_cosmic) & (slcdf.is_fv)]
-
-    ###### (9) - a: total PE, bcfm score
-    pe_cut = 1500.
-    bcfm_score_cut = 0.05
-    slcdf = slcdf[(slcdf.total_pe > pe_cut) & (slcdf.bcfm_score > bcfm_score_cut)]
-
-    ###### (9) - b: pfp multiplicities
-    slcdf = slcdf[(slcdf.n_prong == 2) & (slcdf.n_trk == 2) & (slcdf.n_proton == 0) & (slcdf.n_shower == 0)]
-
-    ###### (9) - c: dir Z and opening ang
-    long_dirz_cut = 0.7
-    short_dir_z_cut = 0.5
-    open_ang_cut = 0.5
-    slcdf = slcdf[(slcdf.long_dirz > long_dirz_cut) & (slcdf.short_dirz > short_dir_z_cut) & (slcdf.opening_angle > open_ang_cut)]
-
-    ###### (9) - d: further chi2pid cut
-    long_chi2_p_cut = 100.
-    short_chi2_p_cut = 75.
-    if is_recalo:
-        slcdf = slcdf[(slcdf.long_trk_chi2_pro_new > long_chi2_p_cut) & (slcdf.short_trk_chi2_pro_new > short_chi2_p_cut)]
-    else:
-        slcdf = slcdf[(slcdf.long_trk_chi2_pro > long_chi2_p_cut) & (slcdf.short_trk_chi2_pro > short_chi2_p_cut)]
-
-    ###### (9) - e: sphere 1cm : 4000, 2 cm : 7000, 3 cm : 10000, 4cm : 13000, and 3 / (4 - 3) ratio < 6
-    #sphere_1cm_cut = 4000.
-    #sphere_2cm_cut = 7000.
-    #sphere_3cm_cut = 10000.
-    #sphere_4cm_cut = 13000.
-    #sphere_ratio_cut = 6.
-    #slcdf = slcdf[(slcdf.sum_integ_1cm < sphere_1cm_cut) & (slcdf.sum_integ_2cm < sphere_2cm_cut) & (slcdf.sum_integ_3cm < sphere_3cm_cut) & (slcdf.sum_integ_4cm < sphere_4cm_cut) & (slcdf.sphere_3_over_4m3 < sphere_ratio_cut)]
-    #### do not apply sphere charge cut
+    #### (9) last moment evt selection -- cuts defined in cohpi_selection.py
+    slcdf = slcdf[preselection_mask(slcdf)]
+    ## MC: chi2pid cuts deferred (apply per calo variation with calo_var_masks); data: full selection
+    slcdf = apply_final_selection(slcdf, is_recalo, apply_chi2=not ismc)
+    if ismc:
+        ## pass flag per calo variation ('cv' == nominal selection, use evt[evt.pass_calovar_cv]);
+        ## keep only slices selected by at least one variation, so syst weights are not attached to slices no variation selects
+        pass_calovar = pd.DataFrame({'pass_calovar_' + var: calo_var_masks(slcdf, var) for var in CALO_VARS}, index=slcdf.index)
+        slcdf = pd.concat([slcdf, pass_calovar], axis=1)
+        slcdf = slcdf[pass_calovar.any(axis=1)]
 
     slcdf.columns = pd.MultiIndex.from_tuples(
         [(*col, '') if isinstance(col, tuple) else (col, '')
