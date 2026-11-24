@@ -40,6 +40,12 @@ of the waveform is used). Untested here (no LArSoft in the cafpyana
 container): if the gallery calls need adjusting for your release, the reading
 is confined to read_event().
 
+Parallel: -j N runs N worker processes on slices of the file list (each into
+<outdir>/part_<k>, log in part_<k>/log.txt) and merges their averages into
+<outdir>; --merge DIR... merges existing output directories. Most of the time
+is reading the files over xrootd, so a few workers per machine help;
+--events-per-file K spreads the same number of events over more files.
+
   python dump_waveforms.py -i $(cat reco1_urls_mc.txt) -o waveforms_mc/ --auto 3 \\
       --raw-label simtpc2d:daq --wire-labels simtpc2d:gauss simtpc2d:dnnsp
   python dump_waveforms.py -i $(cat reco1_urls_data.txt) -o waveforms_data/ --auto 3 \\
@@ -339,6 +345,14 @@ def main():
                          "in every event (default 3)")
     ap.add_argument("--min-us", type=float, default=40.0, help="--auto: shortest ROI kept [us] (default 40)")
     ap.add_argument("--max-events", type=int, default=0, help="stop after this many events (0: all)")
+    ap.add_argument("--events-per-file", type=int, default=0,
+                    help="at most this many events from each file (0: all; opens the files one at a time): "
+                         "more files, fewer events each, for the same time")
+    ap.add_argument("-j", "--jobs", type=int, default=1,
+                    help="split the files over this many worker processes (outputs in <outdir>/part_<k>), then "
+                         "merge their averages into <outdir>")
+    ap.add_argument("--merge", nargs="+", metavar="DIR",
+                    help="only merge the averages (shapes_/tails_plane*.npy) of these output directories into -o")
     ap.add_argument("--list-products", action="store_true",
                     help="print the recob::Wire and raw::RawDigit labels in the first input file and stop")
     ap.add_argument("-o", "--outdir", default="waveforms")
@@ -354,13 +368,21 @@ def main():
         rows = list(csv.DictReader(open(args.channels)))
         for r in rows:
             want.setdefault((int(r["run"]), int(r["subrun"]), int(r["event"])), []).append(r)
+    if args.merge:
+        merge(args.merge, args.outdir)
+        return
     files = expand_inputs(args.inputs)
     print("%d input files" % len(files))
+    if args.jobs > 1 and len(files) > 1:
+        run_parallel(args, files)
+        return
     ROOT = load_gallery()
     if args.list_products:
         print("\n".join(list_products(ROOT, files[0])) or "no recob::Wire / raw::RawDigit branches found")
         return
     saved, tails, shapes, nplot, nev = {}, {}, {}, 0, 0
+    if args.events_per_file:
+        args.chunk = 1
     for k in range(0, len(files), args.chunk):
         if args.max_events and nev >= args.max_events:
             break
@@ -397,8 +419,11 @@ def expand_inputs(items):
 
 
 def loop_events(ROOT, ev, args, want, rows, saved, tails, shapes, nev, nplot):
-    while not ev.atEnd() and (not args.max_events or nev < args.max_events):
+    here = 0
+    while not ev.atEnd() and (not args.max_events or nev < args.max_events) and \
+            (not args.events_per_file or here < args.events_per_file):
         nev += 1
+        here += 1
         aux = ev.eventAuxiliary()
         key = (int(aux.run()), int(aux.subRun()), int(aux.event()))
         chans = None
@@ -455,11 +480,68 @@ def _finish(args, rows, saved, tails, shapes, nplot):
                         **{k: np.array(v, dtype=object) for k, v in saved.items()})
     for p, tl in sorted(tails.items()):
         plot_tail_average(os.path.join(args.outdir, "tail_average_plane%d.png" % p), p, tl)
+        np.save(os.path.join(args.outdir, "tails_plane%d.npy" % p), np.array(tl))
     for p, sh in sorted(shapes.items()):
         plot_shape_average(os.path.join(args.outdir, "shape_average_plane%d.png" % p), p, sh)
         np.save(os.path.join(args.outdir, "shapes_plane%d.npy" % p), np.array(sh))
     print("found %d of %d listed channels; wrote %d plots and the averages to %s"
           % (len(saved), len(rows), nplot, args.outdir))
+
+
+def run_parallel(args, files):
+    """Run this script on args.jobs slices of the files (round robin) in parallel, each into
+    <outdir>/part_<k>, then merge the parts' averages into <outdir>."""
+    import subprocess
+    import sys
+    passthrough, skip = [], False
+    argv = sys.argv[1:]
+    drop = {"-i", "--inputs", "-o", "--outdir", "-j", "--jobs"}
+    for k, a in enumerate(argv):   # every option except the inputs, outdir and jobs
+        if skip:
+            if a.startswith("-"):
+                skip = False
+            else:
+                continue
+        if a in drop:
+            skip = True
+            continue
+        if any(a.startswith(d + "=") for d in drop):
+            continue
+        passthrough.append(a)
+    procs, parts = [], []
+    for k in range(args.jobs):
+        part = os.path.join(args.outdir, "part_%d" % k)
+        os.makedirs(part, exist_ok=True)
+        lst = os.path.join(part, "inputs.txt")
+        open(lst, "w").write("\n".join(files[k::args.jobs]) + "\n")
+        if not files[k::args.jobs]:
+            continue
+        log = open(os.path.join(part, "log.txt"), "w")
+        cmd = [sys.executable, os.path.abspath(__file__), "-i", lst, "-o", part] + passthrough
+        procs.append((subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT), part))
+        parts.append(part)
+    print("%d workers running (logs in %s/part_*/log.txt) ..." % (len(procs), args.outdir))
+    for p, part in procs:
+        if p.wait() != 0:
+            print("worker %s exited with %d: see its log.txt" % (part, p.returncode))
+    merge(parts, args.outdir)
+
+
+def merge(dirs, outdir):
+    """Combine shapes_plane*.npy and tails_plane*.npy of several output directories and replot the averages."""
+    import glob
+    os.makedirs(outdir, exist_ok=True)
+    for kind, plot in [("shapes", plot_shape_average), ("tails", plot_tail_average)]:
+        per = {}
+        for d in dirs:
+            for f in glob.glob(os.path.join(d, "%s_plane*.npy" % kind)):
+                p = int(os.path.basename(f).split("plane")[1].split(".")[0])
+                per.setdefault(p, []).append(np.load(f))
+        for p, arrs in sorted(per.items()):
+            a = np.concatenate(arrs)
+            np.save(os.path.join(outdir, "%s_plane%d.npy" % (kind, p)), a)
+            plot(os.path.join(outdir, "%s_average_plane%d.png" % ("shape" if kind == "shapes" else "tail", p)), p, list(a))
+            print("%s plane %d: %d signals from %d directories" % (kind, p, len(a), len(arrs)))
 
 
 if __name__ == "__main__":
