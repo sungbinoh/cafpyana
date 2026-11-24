@@ -199,7 +199,9 @@ g4_syst = [
 # the CV is scaled per system, w -> 1 + G4_UNC_SCALE*(w - 1) (clipped at 0), before
 # building g4_univ (G4Systematic) and the multisim_* columns (PROfit). Enters the MC
 # cache key.
-G4_UNC_SCALE = 2.0
+# GUMPLE_G4_UNC_SCALE in the environment overrides it (e.g. nminus1_gumple.py
+# --g4-scale; read at import so spawned loader workers see it).
+G4_UNC_SCALE = float(os.environ.get("GUMPLE_G4_UNC_SCALE", 2.0))
 
 def _scale_g4(w):
     """Scale the universe weight(s) w (Series or DataFrame) by G4_UNC_SCALE about 1."""
@@ -230,6 +232,15 @@ truthvars = {
   "true_delphi_psum50": ("del_phi_psum50", ""),
   "true_delalpha_psum50": ("del_alpha_psum50", ""),
 }
+
+# Opt-in (environment, so spawned loader workers see it): also load the MAPLE
+# truth-class failure flags -- any vetoed primary (visible pi+-, pi0 photon or
+# photon) and any truth-uncontained charged primary. Adds a cache-key entry only
+# when on, so default cache entries are unchanged. Used by trkscore_eff_gumple.py.
+EXTRA_TRUTH = os.environ.get("GUMPLE_EXTRA_TRUTH") == "1"
+if EXTRA_TRUTH:
+    truthvars["true_veto"] = ("veto_particles", "")
+    truthvars["true_uncont"] = ("uncontained_truth", "")
 
 
 # ---------------------------------------------------------------------------
@@ -890,6 +901,8 @@ def load_one(fname, idf,
         # the cached off-beam POT depends on the gates/POT constant (on-beam unchanged)
         if offbeampot:
             data_cut_key["offbeam_gates_per_5e12pot"] = OFFBEAM_GATES_PER_5e12POT[detector]
+        if EXTRA_TRUTH and load_truth and not _is_data:
+            data_cut_key["extra_truth"] = 1
         # SBND slice-vertex APA-gap exclusion (gmpl.slcfv_cut, 2026-11-13): the
         # preselection body changed without its qualname, so key on it explicitly
         if detector == "SBND":

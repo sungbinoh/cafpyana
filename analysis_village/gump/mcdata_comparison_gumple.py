@@ -113,8 +113,8 @@ import syst
 
 DETECTORS = ["ICARUS Run2", "ICARUS Run4", "SBND"]
 
-DEFAULT_DF_DIR = "/Users/gputnam/Work/osc/sbn-rewgted-20/"
-DEFAULT_PLOTDIR = "/Users/gputnam/Work/osc/cafpyana/plots-gumple-2026-08-26/evtsel/"
+DEFAULT_DF_DIR = "/Users/gputnam/Work/osc/sbn-rewgted-29/"
+DEFAULT_PLOTDIR = "/Users/gputnam/Work/osc/cafpyana/plots-gumple-2026-11-03-rewgted26/evtsel/"
 
 # ============================================================
 # BLINDING: absolute (POT) normalization
@@ -193,6 +193,10 @@ OFFdf = None
 OFF_w = None
 POT = None
 systematics_by_cut = None
+# Covariance components drawn as lines on the ratio panel of PID comparisons
+# (make_plot_data(..., components=COMPONENT_SYSTS)): {plotdata key: (label,
+# color, Systematic)}. Set by prepare_detector (2026-11-18).
+COMPONENT_SYSTS = None
 
 
 # ============================================================
@@ -211,6 +215,11 @@ FULL_ONBEAM = {
     "ICARUS Run2": "ICARUS_SpringRun2BNB_FullOnBeam.df",
     "ICARUS Run4": "ICARUS_SpringRun4BNB_ReCAF2026.df",
 }
+
+# Opt-in off-beam file override: detector -> list of basenames in df_dir, replacing
+# detector_files' default OFFBEAM_FILES (e.g. nminus1_gumple.py --offbeam-file).
+# Empty by default.
+OFFBEAM_OVERRIDE = {}
 
 
 def numbered_files(df_dir, pattern):
@@ -285,7 +294,10 @@ def detector_files(detector, df_dir, full_onbeam=False):
     elif detector == "ICARUS Run4":
         # 10% unblind subset of the full ReCAF2026 dataset (random 10% of its CAF
         # files, with their own spills; make_unblind_subsample.py, 2026-10-20).
-        # The full file is FULL_ONBEAM["ICARUS Run4"].
+        # The full file is FULL_ONBEAM["ICARUS Run4"]. Off-beam is the full-stat
+        # ReCAF2026 stream of sbn-rewgted-29 (2.11M triggers, runs 12965-13271, no
+        # duplicated (run, evt)); since 2026-11-23 it replaces the pre-ReCAF
+        # ICARUS_SpringRun4BNBOff_unblind.df (314k triggers, OFF_w ~6.7 at full POT).
         onbeam = D + "ICARUS_SpringRun4BNB_ReCAF2026_unblind.df"
         offbeam_files = [D + "ICARUS_SpringRun4BNBOff_ReCAF2026.df"]
 
@@ -313,6 +325,9 @@ def detector_files(detector, df_dir, full_onbeam=False):
                 "no full-statistics on-beam stream for %r (have: %s)"
                 % (detector, ", ".join(sorted(FULL_ONBEAM))))
         onbeam = D + FULL_ONBEAM[detector]
+
+    if detector in OFFBEAM_OVERRIDE:
+        offbeam_files = [D + f for f in OFFBEAM_OVERRIDE[detector]]
 
     return dict(ONBEAM=onbeam, OFFBEAM_FILES=offbeam_files, MC_FILES=mc_files,
                 DIRT_FILES=dirt_files, DETVAR_FILES=detvar_files,
@@ -359,9 +374,31 @@ def FV(df):
     return gc.sanity_cut(df) & gc.slcfv_cut(df) & df.cut_contained & df.cut_cathode
 
 
+ICARUS_TPCS = ("EE", "EW", "WE", "WW")
+
+
+def icarus_tpc(d):
+    """ICARUS TPC of the reconstructed slice vertex, split at x = 0 (cryostats)
+    and at each cryostat's cathode (loaddf.SPLIT_REGIONS): EE | EW | WE | WW."""
+    x = d.slc_vtx_x
+    xe = loaddf.SPLIT_REGIONS["East Cathode"][1]
+    xw = loaddf.SPLIT_REGIONS["West Cathode"][1]
+    return pd.Series(np.select([x < xe, x < 0, x < xw], ["EE", "EW", "WE"], "WW"), index=d.index)
+
+
 def cryo_mask(d, cryo):
     # ICARUS cryostat from the reconstructed slice vertex (same convention as the
-    # flash_maxpe cryostat pick in loaddf): East = cryo 0 (x < 0), West = cryo 1 (x > 0)
+    # flash_maxpe cryostat pick in loaddf): East = cryo 0 (x < 0), West = cryo 1 (x > 0).
+    # "no-<TPC>" (e.g. "no-EW") instead drops the slices with their vertex in that TPC.
+    if cryo.startswith("no-"):
+        tpc = cryo[3:]
+        assert tpc in ICARUS_TPCS, cryo
+        return (icarus_tpc(d) != tpc) & d.slc_vtx_x.notna()
+    # "only-<TPC>" keeps only the slices with their vertex in that TPC.
+    if cryo.startswith("only-"):
+        tpc = cryo[5:]
+        assert tpc in ICARUS_TPCS, cryo
+        return (icarus_tpc(d) == tpc) & d.slc_vtx_x.notna()
     return d.slc_vtx_x < 0 if cryo == "east" else d.slc_vtx_x > 0
 
 
@@ -499,15 +536,34 @@ def breakdown_mode(var, d):
     return ret
 
 
+# Particle-type breakdown of a candidate's true particle (2026-11-18):
+#   Cosmic    -- slice matched to a cosmic (true_iscosmic, dirt excluded); tested
+#                first, so a cosmic proton is Cosmic
+#   Stop p    -- proton whose G4 end process is ionization (kG4hIoni = 54 in the
+#                sbnanaobj g4_process_ enum), i.e. it ranges out
+#   Int. p    -- every other proton (in practice kG4protonInelastic = 7)
+#   mu, pi+-  -- by |pdg|
+#   Other     -- anything else, incl. no truth match and dirt
+# NB until 2026-11-18 the pdg test was np.abs(pdg == i) (abs of the boolean), so
+# mu+ (-13) and pi- (-211) were drawn as Other; it is |pdg| == i now.
+G4_HIONI = 54
 pdg_list = [2212, 13, 211]
-pdg_labels = ["$p$", "$\\mu$", "$\\pi^\\pm$", "Other"]
-pdg_colors = ["#315031", "#d54c28", "#1e3f54", "#c89648"]
+pdg_labels = ["Stop $p$", "Int. $p$", "$\\mu$", "$\\pi^\\pm$", "Cosmic", "Other"]
+pdg_colors = ["#315031", "#8a6d9e", "#d54c28", "#1e3f54", "#95af8b", "#c89648"]
+_CAND = {"p": "pcand", "mu": "mucand"}
 
 
 def breakdown_pdg(var, d, particle="p"):
-    ret = [var[np.abs(d["%s_true_pdg" % particle] == i)] for i in pdg_list]
-    ret.append(var[sum([np.abs(d["%s_true_pdg" % particle] == i) for i in pdg_list]) == 0])
-    return ret
+    apdg = np.abs(d["%s_true_pdg" % particle])
+    cosmic = d["true_iscosmic"].fillna(False).astype(bool) & ~d["dirt"].astype(bool)
+    endp = d["true_%s_end_process" % _CAND[particle]]
+    isp = (apdg == 2212) & ~cosmic
+    stop_p = isp & (endp == G4_HIONI)
+    int_p = isp & (endp != G4_HIONI)
+    mu = (apdg == 13) & ~cosmic
+    pi = (apdg == 211) & ~cosmic
+    other = ~(isp | mu | pi | cosmic)
+    return [var[m] for m in (stop_p, int_p, mu, pi, cosmic, other)]
 
 
 def breakdown_pdg_p(var, d):
@@ -730,7 +786,7 @@ def f_chi2(NMC, Ndata, cov, NON=None):
 
 
 def make_plot_data(var, bins, cut, mc_weight, breakdown, areanorm, breakdown_labels, breakdown_colors, xlabel, title,
-                   det="ICARUS", fillna=np.nan, syst=None, annotate=None):
+                   det="ICARUS", fillna=np.nan, syst=None, annotate=None, components=None):
     # Blinding backstop. Every plotdata in this module is built here, and `det`
     # is always in hand, so this is the one place a blinded variable cannot slip
     # past. run_detector filters upstream so this never fires in normal use --
@@ -796,6 +852,12 @@ def make_plot_data(var, bins, cut, mc_weight, breakdown, areanorm, breakdown_lab
     cov_w_stat = cov + np.diag(Nerr_pred**2) # add stat uncertainty (predicted on-beam counts)
     chi2, ndof = f_chi2(NMC, N, cov_w_stat, NON=NON)
 
+    # optional per-source covariances, drawn as lines on the ratio panel
+    cov_components = None
+    if components:
+        cov_components = [(label, color, s.cov(var, cut, bins, NMC_abs, shapeonly=areanorm, fillna=fillna))
+                          for (label, color, s) in components]
+
     return {
         "det": det,
         "title": title,
@@ -812,12 +874,33 @@ def make_plot_data(var, bins, cut, mc_weight, breakdown, areanorm, breakdown_lab
         "NON": NON,  # raw on-beam counts per bin: NON == 0 bins are dropped from the chi2
         "cov": cov,
         "cov_w_stat": cov_w_stat,
+        "cov_components": cov_components,  # [(label, color, cov)] or None
         "chi2": chi2,
         "ndof": ndof,
         "POT": POT,
         # free-text note drawn on the RHS of the plot (used for the del_p range)
         "annotate": annotate,
     }
+
+
+def draw_cov_component_lines(ax1, plotdata):
+    """+1 sigma (relative to the MC; upper side only) of each covariance component in
+    plotdata["cov_components"] as step lines on the ratio panel, with a small
+    legend in that panel. No-op without components."""
+    comps = plotdata.get("cov_components")
+    if not comps:
+        return
+    bins, NMC = plotdata["bins"], plotdata["NMC_total"]
+    handles = []
+    for label, color, c in comps:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            rel = np.sqrt(np.clip(np.diag(c), 0, None))/NMC
+        # +1 sigma side only
+        h, = ax1.step(bins, np.append(1 + rel, 1 + rel[-1]), where="post",
+                      color=color, linewidth=1.2, label=label)
+        handles.append(h)
+    ax1.legend(handles=handles, fontsize=7, loc="lower left", ncol=len(handles),
+               frameon=False, handlelength=1.5, borderaxespad=0.2)
 
 
 def ratio_plot(plt, plotdata, blinded=False, overlay=None):
@@ -856,7 +939,12 @@ def draw_ratio_axes(ax0, ax1, plotdata, blinded=False, overlay=None):
 
     NMC = plotdata["NMC_total"]
     err = np.sqrt(np.diag(plotdata["cov"]))
-    syst_band(ax0, bins, NMC-err, NMC+err)
+    # overlay["band"]: the uncertainty band belongs to the overlay (e.g. a
+    # constrained prediction and its conditional covariance), so it is drawn
+    # around the overlay line, in both panes, instead of around the CV stack
+    band_on_overlay = overlay is not None and overlay.get("band", False)
+    if not band_on_overlay:
+        syst_band(ax0, bins, NMC-err, NMC+err)
 
     if "Maximum" in plotdata["xlabel"]:
         ax0.set_yscale("log")
@@ -865,7 +953,9 @@ def draw_ratio_axes(ax0, ax1, plotdata, blinded=False, overlay=None):
         ax1.errorbar(centers, NData/NMC, NDataErr/NMC, color="black", linestyle="none", marker=".")
     ax1.set_ylim([0.5, 1.5])
     ax1.axhline([1], color="red", linestyle="--")
-    syst_band(ax1, bins, 1-err/NMC, 1+err/NMC)
+    if not band_on_overlay:
+        syst_band(ax1, bins, 1-err/NMC, 1+err/NMC)
+    draw_cov_component_lines(ax1, plotdata)
 
     if overlay is not None:
         NO = np.asarray(overlay["N"], dtype=float)
@@ -880,6 +970,10 @@ def draw_ratio_axes(ax0, ax1, plotdata, blinded=False, overlay=None):
         with np.errstate(divide="ignore", invalid="ignore"):
             ax1.step(bins, np.append(NO, NO[-1])/np.append(NMC, NMC[-1]),
                      where="post", **ostyle)
+        if band_on_overlay:
+            syst_band(ax0, bins, NO-err, NO+err)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                syst_band(ax1, bins, (NO-err)/NMC, (NO+err)/NMC)
 
     ax0.tick_params(axis='both', which='both', direction='in', length=6, width=1.5, labelsize=FONTSIZE, top=True, right=True)
     ax1.tick_params(axis='both', which='both', direction='in', length=6, width=1.5, labelsize=FONTSIZE, top=True, right=True)
@@ -938,8 +1032,11 @@ def _inner_mode(dat):
 def _inner_pdg(dat):
     (v, b, l, cutname) = dat
     bkdwn = breakdown_pdg_p if "prot_cand" in v else breakdown_pdg_mu
+    # PID variables: G4 / calorimetric covariance lines on the ratio panel
+    comps = COMPONENT_SYSTS if v in chi2vars else None
     return v, make_plot_data(v, b, cutname, "glob_scale", bkdwn, True, pdg_labels,
-                             pdg_colors, l, cutname, fillna=-1, det=DETECTOR)
+                             pdg_colors, l, cutname, fillna=-1, det=DETECTOR,
+                             components=comps)
 
 
 # Absolute-(POT-)normalized twins of the two workers above: identical apart from
@@ -955,8 +1052,11 @@ def _inner_mode_abs(dat):
 def _inner_pdg_abs(dat):
     (v, b, l, cutname) = dat
     bkdwn = breakdown_pdg_p if "prot_cand" in v else breakdown_pdg_mu
+    # PID variables: G4 / calorimetric covariance lines on the ratio panel
+    comps = COMPONENT_SYSTS if v in chi2vars else None
     return v, make_plot_data(v, b, cutname, "glob_scale", bkdwn, False, pdg_labels,
-                             pdg_colors, l, cutname, fillna=-1, det=DETECTOR)
+                             pdg_colors, l, cutname, fillna=-1, det=DETECTOR,
+                             components=comps)
 
 
 def _inner_dp(dat):
@@ -1182,6 +1282,7 @@ PLOTVARS = [
     "mu_chi2_of_mu_cand",
     "prot_chi2_of_mu_cand",
     "mu_trackScore",
+    "coltopo_trkscore",
     "del_p",
     "p_len",
 
@@ -1233,6 +1334,7 @@ LABELS = [
     "Muon Cand. $\\mu$-like PID",
     "Muon Cand. $p$-like PID",
     "Muon Cand. Track Score",
+    "Muon Cand. Track/Shower Score (coltopo)",
     "$\\delta p$ [GeV/c]",
     "Proton Cand. Length [cm]",
 
@@ -1278,9 +1380,13 @@ DP_SLICES = [
 
 # Extra del_p cut columns built alongside DP_SLICES (same naming, same BE /
 # track-split re-derivation) but NOT iterated as plotting slices. lt06dp is the
-# del_p < 0.6 Mp channel of mcdata_constraint_gumple's joint signal-box plot.
+# del_p < 0.6 Mp channel of mcdata_constraint_gumple's joint signal-box plot;
+# lt03dp / 03to06dp are the two del_p bins of the PROfit numu1p channel
+# (autoxml/GumpleTemplate.xml.j2), used by mcdata_constraint_gumple.
 DP_CUTS_EXTRA = [
-    ("lt06dp", 0.0, 0.6),
+    ("lt06dp",   0.0, 0.6),
+    ("lt03dp",   0.0, 0.3),
+    ("03to06dp", 0.3, 0.6),
 ]
 
 # 2026-08-25: empty -- the del_p-sliced comparisons were of the two
@@ -1351,7 +1457,7 @@ PID_BINS = [
     np.linspace(0, 60, 13),
     np.linspace(0, 120, 9),
     np.linspace(0, 60, 13),
-    np.linspace(0, 270, 19),  # prot_chi2_of_mu_cand: last two 15-wide bins (270-300) dropped, 2026-10-01
+    np.linspace(0, 255, 18),
 ]
 
 PID_LABELS = [
@@ -1381,8 +1487,9 @@ def plot_bins(detector):
         np.linspace(0, 60, 13),
         np.linspace(0, 120, 9),
         np.linspace(0, 60, 13),
-        np.linspace(0, 270, 19),  # prot_chi2_of_mu_cand: last two bins (270-300) dropped, 2026-10-01
+        np.linspace(0, 255, 18),
         np.linspace(0.4, 1, 13),  # mu_trackScore: doubled to 12 bins of 0.05, 2026-10-02
+        np.linspace(0, 1, 21),    # coltopo_trkscore (analysis track-score cut, sbn-rewgted-26+)
         np.linspace(0, 1, 11),
         np.linspace(0, 50, 11),
 
@@ -1432,7 +1539,7 @@ def prepare_detector(detector, args):
     Split out of run_detector so other scripts (mcdata_constraint.py) can reuse
     the load half without the plotting half.
     """
-    global DETECTOR, df, ONdf, OFFdf, OFF_w, POT, systematics_by_cut
+    global DETECTOR, df, ONdf, OFFdf, OFF_w, POT, systematics_by_cut, COMPONENT_SYSTS
 
     DETECTOR = detector
     include_dirt = not args.no_dirt
@@ -1490,7 +1597,7 @@ def prepare_detector(detector, args):
         for v in chi2_variations))
     log("=" * 70)
 
-    files = detector_files(detector, args.df_dir)
+    files = detector_files(detector, args.df_dir, full_onbeam=getattr(args, "full_onbeam", False))
 
     # ---- normalization ----
     norm = compute_norm(detector, files, log)
@@ -1720,16 +1827,22 @@ def prepare_detector(detector, args):
     # ---- systematics ----
     # NB: no beam-off stat systematic here -- the off-beam statistical uncertainty
     # is already propagated into the data error bars in make_plot_data.
+    # G4 and detector-calorimetric pieces of the budget, kept as handles so the
+    # PID comparisons can draw them separately (COMPONENT_SYSTS)
+    g4_syst = loaddf.G4Systematic(df)
+    calo_systs = [syst.SampleSystematic(d, norm=chi2_norm.get(v, 1.))
+                  for d, v in zip(chi2_detvars, chi2_variations)]
+    COMPONENT_SYSTS = [("G4", "#0077bb", g4_syst),
+                       ("Det. Calo.", "#ee3377", syst.SystematicList(calo_systs))]
     base_systematics = syst.SystematicList([
         loaddf.FluxSystematic(df),
-        loaddf.G4Systematic(df),
+        g4_syst,
         # XSec: the weight-based knobs plus the binding-energy shift
         syst.SystematicList([loaddf.XSecSystematic(df), syst.SampleSystematic(be_df)]),
         syst.NormalizationSystematic(0.005),                                       # POT norm
         syst.SystematicList(
             [syst.SampleSystematic(list(dv[1:]), cvdf=dv[0]) for dv in detvars] +  # detector variations
-            [syst.SampleSystematic(d, norm=chi2_norm.get(v, 1.))                   # calo/chi2 variations
-             for d, v in zip(chi2_detvars, chi2_variations)] +
+            calo_systs +                                                           # calo/chi2 variations
             cosmic_systs +                                                         # cosmic norm (SBND only)
             tracksplit_systs +                                                     # track splitting (ICARUS only)
             [syst.StatSampleSystematic(df)]                                        # MC stat

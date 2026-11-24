@@ -9,10 +9,15 @@ columns). Two additions over the reCAF version:
     nu_E_frac_diff -- in BOTH area and absolute normalization, at the chosen
     selection stage (their plot specs come from mdc.CONSTRAINT_VARS).
   * The proton multiplicity is selected with PROTON_SEL / --proton-sel
-    ("1p" -> the "PID 1p" stage (n_pfp == 2), ">1p" -> "PID Np" (n_pfp > 2),
-    ">=1p" -> multiplicity-inclusive), as in SignalBoxSystematics-GUMPLE.
-    BLINDING: only "1p" may currently be run -- anything else raises
-    BlindedError before any data is touched.
+    ("1p" -> the "PID 1p" stage (n_pfp == 2), "Mp" -> "PID Mp" (n_pfp > 2,
+    no cosmic cut), "Np" -> "PID 1p+Mp" (the union of the two signal boxes,
+    built on demand by add_union_stage), ">1p" -> "PID Np" (n_pfp >= 2, cosmic
+    cut throughout), ">=1p" -> multiplicity-inclusive). The 1p-only blinding
+    gate was lifted 2026-11-23 (SBND 2.5e20 Np/1p/Mp comparisons, by request).
+  * --kinematics adds a round of single-variable absolute-normalized MC/data
+    comparisons (KIN_VARS: p_p, p_mu, muon and leading-proton cos theta_beam,
+    del_p, del_Tp, (E_CCQE - E_calo)/E_calo) for each of Np, 1p and Mp
+    (run_kinematics), one figure per (selection, variable).
 
 Runs the selection for one detector and makes three constraint figures, in the
 same stacked-MC + ratio style as mcdata_comparison_gumple.py:
@@ -47,15 +52,24 @@ Example:
 
     python mcdata_constraint_gumple.py -d SBND --plot-var nu_E_calo --constraint-var nu_E_ccqe
 
+Binning (2026-10-27): the neutrino-energy estimators use the binning of the
+final GUMPLE oscillation fit in PROfit (gumple/autoxml/GumpleTemplate.xml.j2):
+the numu1p channel's E edges (PROFIT_1P_BINS) in its two del_p bins
+(CONSTRAINT_DP_SLICES: [0, 0.3), [0.3, 0.6)), and the numuMP edges
+(PROFIT_MP_BINS) for 1uMp. The inclusive constraint round is restricted to
+del_p < 0.6, the range of the fit. Contents are drawn per 50 MeV (the bins are
+variable-width). --legacy-bins restores the mdc.CONSTRAINT_VARS binning and
+the mdc.DP_SLICES slicing.
+
 A third round (run_joint_signalbox; --joint-only / --no-joint) is a JOINT
-SBND MC/data comparison of the plot variable over four signal-box spectra --
-1u1p in the del_p slices lodp / middp / hidp, and 1uMp ("PID Mp") with
-del_p < 0.6 unsliced -- with one covariance across all four blocks and one
-combined chi2 / ndof, drawn as a four-pane figure. It is made at two selection
+SBND MC/data comparison of the plot variable over three signal-box spectra --
+1u1p in the two del_p bins of the fit, and 1uMp ("PID Mp") with del_p < 0.6
+unsliced -- with one covariance across all blocks and one combined
+chi2 / ndof, drawn as a three-pane figure. It is made at two selection
 stages (JOINT_SB_STAGES): the full signal box (PID 1p / PID Mp) and the
 two-prong stage before the PID cut (Two Prong 1p / Two Prong Mp, the
-mdc.AUX_CUTNAMES stages). BLINDING: this round is the one exception to the
-1p-only gate below. It is SBND-only (absolute normalization) and shows the
+mdc.AUX_CUTNAMES stages). (It predates the 2026-11-23 removal of the 1p-only
+gate.) It is SBND-only (absolute normalization) and shows the
 SBND Mp channel by explicit request (2026-10-20).
 
 Band conventions differ between the figures, deliberately, and are restated on
@@ -94,26 +108,70 @@ import mcdata_comparison_gumple as mdc
 DEFAULT_PLOTDIR = "/Users/gputnam/Work/osc/cafpyana/plots-gumple-2026-08-26/constraint/"
 
 # Proton-multiplicity selection (as SignalBoxSystematics-GUMPLE's PROTON_SEL):
-# maps onto the mcdata_comparison_gumple PID stages. BLINDING: only "1p" may
-# currently be run; every other value raises BlindedError.
+# maps onto the mcdata_comparison_gumple PID stages. (The 1p-only blinding
+# gate was removed 2026-11-23.)
 PROTON_SEL = "1p"
+UNION_STAGE = "PID 1p+Mp"
 PROTON_SEL_STAGE = {
     "1p":   "PID 1p",   # n_pfp == 2, the GUMP selection
-    ">1p":  "PID Np",   # n_pfp > 2, the MAPLE selection
+    "Mp":   "PID Mp",   # n_pfp > 2, no cosmic cut: the MAPLE selection
+    "Np":   UNION_STAGE,  # PID 1p OR PID Mp (add_union_stage)
+    ">1p":  "PID Np",   # n_pfp >= 2 with the cosmic cut throughout
     ">=1p": None,       # multiplicity-inclusive; no stage column yet (blinded anyway)
 }
 
 
 class BlindedError(RuntimeError):
-    """A blinded proton selection was requested."""
+    """A blinded proton selection was requested (no longer raised; kept for
+    importers)."""
 
 
-# The GUMP signal-box binning (historically nb/SignalBoxSystematics cell 53 /
-# enrico_gump.ENU_BINS): fine through the flux peak, coarse in the tail. NB the
-# GUMPLE signal-box notebook has since reverted to its coarse 8-bin array; this
-# stays available here via --gump-bins.
-GUMP_BINS = np.array([0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
-                      0.85, 0.9, 0.95, 1.0, 1.25, 1.5])
+def pid_cut_1p_or_mp(d):
+    """The union of the two signal boxes: PID 1p (n_pfp == 2) OR PID Mp
+    (n_pfp > 2, no cosmic cut). The flash cut is added by mdc._stage_mask."""
+    return mdc.pid_cut_1p(d) | mdc.pid_cut_mp(d)
+
+
+def add_union_stage():
+    """Register UNION_STAGE with mdc's stage builder (the same driver hook
+    nminus1_gumple uses), so it gets cut columns, del_p slices and a
+    systematics_by_cut entry. Must run before mdc.prepare_detector."""
+    if UNION_STAGE not in mdc.STAGE_CUTNAMES:
+        mdc.STAGE_CUTS.append(pid_cut_1p_or_mp)
+        mdc.STAGE_CUTNAMES.append(UNION_STAGE)
+
+
+def sel_infix(args):
+    """File-name infix for the npz / summary outputs: empty for the default 1p
+    selection (names unchanged), "_<stage>" otherwise, so runs with different
+    selections can share one --plotdir without overwriting each other."""
+    if args.cut == PROTON_SEL_STAGE["1p"]:
+        return ""
+    return "_" + args.cut.replace(" ", "").replace(".", "").replace("+", "").lower()
+
+
+def is_mp(args):
+    """Whether this run's selection is the Mp one (numuMP fit binning)."""
+    return args.proton_sel == "Mp" or args.cut == "PID Mp"
+
+
+# The final GUMPLE oscillation-fit binning in PROfit
+# (analysis_village/gumple/autoxml/GumpleTemplate.xml.j2): the numu1p channel
+# is 2-D in (RecoE, del_p), the numuMP channel 1-D in RecoE. Applied to the
+# neutrino-energy estimators (ENERGY_VARS) unless --legacy-bins.
+PROFIT_1P_BINS = np.array([0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
+                           0.85, 0.9, 0.95, 1.0, 1.5])
+PROFIT_MP_BINS = np.array([0.3, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9,
+                           0.95, 1.0, 1.05, 1.10, 1.25, 1.5])
+ENERGY_VARS = ("nu_E_calo", "nu_E_ccqe")
+
+# The numu1p del_p bins (edgesy="0.0 0.3 0.6"). Their cut columns are built by
+# mdc.add_dp_cuts (mdc.DP_CUTS_EXTRA); "lt06dp" is the union, the fit range.
+CONSTRAINT_DP_SLICES = [
+    ("lt03dp",   0.0, 0.3),
+    ("03to06dp", 0.3, 0.6),
+]
+FIT_DP_TAG = "lt06dp"
 
 
 def density_scale(bins, per_mev):
@@ -168,21 +226,40 @@ def _plotvar_spec(detector, var):
     return mdc.plot_bins(detector)[i], mdc.LABELS[i]
 
 
-def removed_var_comparisons(detector, cut, plotdir, no_save, log):
+def _bins_for(detector, var, args, mp=False):
+    """(bins, label) for a constraint-round variable: the PROfit fit binning
+    for the neutrino-energy estimators (numuMP edges if `mp`), else the plot
+    spec."""
+    bins, label = _plotvar_spec(detector, var)
+    if not args.legacy_bins and var in ENERGY_VARS:
+        bins = PROFIT_MP_BINS if mp else PROFIT_1P_BINS
+    return bins, label
+
+
+def removed_var_comparisons(detector, cut, plotdir, no_save, log, args, POT):
     """The plain MC/data comparisons removed from mcdata_comparison_gumple:
     mu_p and the neutrino-energy estimators, area- AND absolute-normalized,
     at the chosen selection stage. Uses the same make_plot_data/_save_plots
-    machinery (and file naming) mcdata_comparison used for them."""
+    machinery (and file naming) mcdata_comparison used for them. nu_E_calo
+    takes the PROfit numu1p binning (unless --legacy-bins), drawn per
+    --per-mev MeV."""
     vars_ = list(mdc.CONSTRAINT_VARS)
     n = 0
     for areanorm, sfx in ((True, ""), (False, "_absnorm")):
         store = {cut: {}}
         for v in vars_:
             bins, label = mdc.CONSTRAINT_VARS[v]
+            rebin = v == "nu_E_calo" and not args.legacy_bins
+            if rebin:
+                bins = PROFIT_MP_BINS if is_mp(args) else PROFIT_1P_BINS
             store[cut][v] = mdc.make_plot_data(
                 v, bins, cut, "glob_scale", mdc.breakdown_mode, areanorm,
                 mdc.mode_labels, mdc.mode_colors, label, cut, fillna=-1,
                 det=detector)
+            if rebin and args.per_mev:
+                ylab = ("Area Normalized / %g MeV" % args.per_mev if areanorm
+                        else ylabel_for(args.per_mev, POT))
+                scale_plotdata(store[cut][v], density_scale(bins, args.per_mev), ylab)
         if not no_save:
             n += mdc._save_plots(store, [cut], vars_, plotdir, suffix=sfx)
         for v in vars_:
@@ -285,7 +362,7 @@ def draw_figures(plotdir, detector, cut, var_y, var_x, label_x,
         ("%s_%s_%s_constraintvar%s" % (detname, cutstem, var_x, sfx), pd_x, None),
         ("%s_%s_%s_constrained_by_%s%s" % (detname, cutstem, var_y, var_x, sfx), pd_c,
          {"N": NMC_y_shift, "label": "Const. MC", "color": "black",
-          "linestyle": "--"}),
+          "linestyle": "--", "band": True}),
     ]
 
     n_saved = 0
@@ -355,9 +432,11 @@ def replot(npz_path, args):
         bx_, by_ = slice(0, nx), slice(nx, nx + ny)
     else:
         ns = Csyst.shape[0]//(nx + ny)          # slices per variable
-        # the tag is the last component of e.g. "_gump_lodp"
-        i = [t for t, _, _ in mdc.DP_SLICES].index(
-            str(z["stem_suffix"]).rsplit("_", 1)[-1])
+        # the tag is the last component of e.g. "_legacy_lodp"; legacy
+        # archives were sliced in mdc.DP_SLICES
+        tag_ = str(z["stem_suffix"]).rsplit("_", 1)[-1]
+        sl_ = CONSTRAINT_DP_SLICES if ns == len(CONSTRAINT_DP_SLICES) else mdc.DP_SLICES
+        i = [t for t, _, _ in sl_].index(tag_)
         bx_, by_ = slice(i*nx, (i+1)*nx), slice(ns*nx + i*ny, ns*nx + (i+1)*ny)
 
     cov_x, cov_y = Csyst[bx_, bx_], Csyst[by_, by_]
@@ -419,10 +498,8 @@ def run(detector, args, ctx=None):
     if var_x == var_y:
         raise ValueError("the constraint variable must differ from the plot variable")
 
-    bins_y, label_y = _plotvar_spec(detector, var_y)
-    bins_x, label_x = _plotvar_spec(detector, var_x)
-    if args.gump_bins:
-        bins_x = bins_y = GUMP_BINS
+    bins_y, label_y = _bins_for(detector, var_y, args, mp=is_mp(args))
+    bins_x, label_x = _bins_for(detector, var_x, args, mp=is_mp(args))
     nx, ny = len(bins_x) - 1, len(bins_y) - 1
 
     # ---- load + build systematics (absolute normalization) ----
@@ -437,13 +514,22 @@ def run(detector, args, ctx=None):
     log("")
     log("Removed-variable MC/data comparisons (proton sel %r, stage %r):"
         % (args.proton_sel, cut))
-    removed_var_comparisons(detector, cut, plotdir, args.no_save, log)
+    removed_var_comparisons(detector, cut, plotdir, args.no_save, log, args, POT)
+
+    # The constraint is drawn over the del_p range of the fit: `cut` stays the
+    # stage name (titles, file names), `sel_cut` is the column that selects.
+    if args.legacy_bins:
+        sel_cut, dp_note = cut, None
+    else:
+        sel_cut = mdc.dp_cutname(cut, FIT_DP_TAG)
+        hi = dict((t, h) for t, _, h in mdc.DP_CUTS_EXTRA)[FIT_DP_TAG]
+        dp_note = "$\\delta p < %.1f$ GeV/c" % hi
 
     log("")
     log("=" * 70)
     log("CONDITIONED CONSTRAINT")
     log("  proton selection    : %s" % args.proton_sel)
-    log("  cut                 : %s" % cut)
+    log("  cut                 : %s" % sel_cut)
     log("  plot variable   (y) : %s  (%d bins)" % (var_y, ny))
     log("  constraint var  (x) : %s  (%d bins)" % (var_x, nx))
     log("=" * 70)
@@ -452,17 +538,17 @@ def run(detector, args, ctx=None):
     # NaN where its denominator is non-positive; with fillna=-1 those events
     # land in underflow and drop out of that histogram. They still count in the
     # other block, so the constraint sees fewer events than the selection does.
-    sel = df[cut]
+    sel = df[sel_cut]
     for name, v in (("plot", var_y), ("constraint", var_x)):
         nnan = int(df.loc[sel, v].isna().sum())
         log("  %-10s variable %-12s: %d / %d selected MC rows are NaN (dropped "
             "from that histogram)" % (name, v, nnan, int(sel.sum())))
 
     # ---- figures 1 and 2: the two single-variable comparisons ----
-    pd_y = mdc.make_plot_data(var_y, bins_y, cut, "glob_scale", mdc.breakdown_mode,
+    pd_y = mdc.make_plot_data(var_y, bins_y, sel_cut, "glob_scale", mdc.breakdown_mode,
                               False, mdc.mode_labels, mdc.mode_colors, label_y,
                               cut, fillna=-1, det=detector)
-    pd_x = mdc.make_plot_data(var_x, bins_x, cut, "glob_scale", mdc.breakdown_mode,
+    pd_x = mdc.make_plot_data(var_x, bins_x, sel_cut, "glob_scale", mdc.breakdown_mode,
                               False, mdc.mode_labels, mdc.mode_colors, label_x,
                               cut, fillna=-1, det=detector)
 
@@ -473,7 +559,7 @@ def run(detector, args, ctx=None):
     jbins = syst.ConcatBins([bins_x, bins_y])
     NCV = np.concatenate((NMC_x, NMC_y))
     log("\nBuilding the joint (%d + %d) systematic covariance..." % (nx, ny))
-    Csyst = ctx["systematics_by_cut"][cut].cov([var_x, var_y], cut, jbins, NCV, fillna=-1)
+    Csyst = ctx["systematics_by_cut"][sel_cut].cov([var_x, var_y], sel_cut, jbins, NCV, fillna=-1)
 
     # cross-check: the joint blocks must reproduce the single-variable covariances
     for name, blk, ref in (("xx", Csyst[:nx, :nx], pd_x["cov"]),
@@ -486,7 +572,7 @@ def run(detector, args, ctx=None):
             log("  !! WARNING: joint block does not reproduce the 1-D covariance")
 
     # ---- data statistical covariance (with cross terms) ----
-    Cstat = data_stat_cov(df, OFFdf, OFF_w, cut, var_x, bins_x, var_y, bins_y)
+    Cstat = data_stat_cov(df, OFFdf, OFF_w, sel_cut, var_x, bins_x, var_y, bins_y)
     # consistency with the stat error the single-variable chi2s use
     for name, got, ref in (("x", np.sqrt(np.diag(Cstat[:nx, :nx])), pd_x["NDataErrPred"]),
                            ("y", np.sqrt(np.diag(Cstat[nx:, nx:])), pd_y["NDataErrPred"])):
@@ -566,15 +652,15 @@ def run(detector, args, ctx=None):
     pd_c["chi2"], pd_c["ndof"] = chi2_c, ndof_c
     pd_c["title"] = cut
 
-    tag = "_gump" if args.gump_bins else ""
+    tag = "_legacy" if args.legacy_bins else ""
     n_saved = draw_figures(plotdir, detector, cut, var_y, var_x, label_x,
                            pd_y, pd_x, pd_c, NMC_y_shift, args.no_save, log,
-                           stem_suffix=tag)
+                           stem_suffix=tag, ax0_note=dp_note)
 
     detname = detector.replace(" ", "-")
     if not args.no_save:
-        npz = os.path.join(plotdir, "%s_constraint_%s_by_%s%s.npz"
-                           % (detname, var_y, var_x, tag))
+        npz = os.path.join(plotdir, "%s_constraint%s_%s_by_%s%s.npz"
+                           % (detname, sel_infix(args), var_y, var_x, tag))
         np.savez(npz, Csyst=Csyst, Cstat=Cstat, cov_cond=cov_cond, K=K,
                  NMC_x=NMC_x, NMC_y=NMC_y, NMC_y_shift=NMC_y_shift,
                  NData_x=ND_x, NData_y=ND_y,
@@ -588,11 +674,13 @@ def run(detector, args, ctx=None):
                  var_x=np.array(var_x), var_y=np.array(var_y),
                  label_x=np.array(label_x), label_y=np.array(label_y),
                  stem_suffix=np.array(tag), ylabel=np.array(ylabel or ""),
+                 **({"ax0_note": np.array(dp_note)} if dp_note else {}),
                  chi2_unconstrained=np.array([chi2_0, ndof_0]),
                  chi2_constrained=np.array([chi2_c, ndof_c]))
         log("Wrote %s" % npz)
 
-        summary = os.path.join(plotdir, "%s_constraint%s_summary.txt" % (detname, tag))
+        summary = os.path.join(plotdir, "%s_constraint%s%s_summary.txt"
+                               % (detname, sel_infix(args), tag))
         with open(summary, "w") as f:
             f.write("\n".join(ctx["summary_lines"]) + "\n")
         print("Wrote %s" % summary, flush=True)
@@ -602,9 +690,10 @@ def run(detector, args, ctx=None):
 
 
 def run_dp(detector, args, ctx=None):
-    """As run(), but sliced into the del_p bins of mcdata_comparison.DP_SLICES.
+    """As run(), but sliced into the del_p bins of the fit, CONSTRAINT_DP_SLICES
+    (mcdata_comparison.DP_SLICES with --legacy-bins).
 
-    Builds ONE joint covariance over the 2N blocks (N = len(DP_SLICES))
+    Builds ONE joint covariance over the 2N blocks (N = number of slices)
 
         [x_lo, x_mid, x_hi, ..., y_lo, y_mid, y_hi, ...]
 
@@ -624,12 +713,10 @@ def run_dp(detector, args, ctx=None):
     if var_x == var_y:
         raise ValueError("the constraint variable must differ from the plot variable")
 
-    bins_y, label_y = _plotvar_spec(detector, var_y)
-    bins_x, label_x = _plotvar_spec(detector, var_x)
-    if args.gump_bins:
-        bins_x = bins_y = GUMP_BINS
+    bins_y, label_y = _bins_for(detector, var_y, args, mp=is_mp(args))
+    bins_x, label_x = _bins_for(detector, var_x, args, mp=is_mp(args))
     nx, ny = len(bins_x) - 1, len(bins_y) - 1
-    slices = mdc.DP_SLICES
+    slices = mdc.DP_SLICES if args.legacy_bins else CONSTRAINT_DP_SLICES
     ns = len(slices)
 
     # a caller running several rounds passes the shared ctx to load only once
@@ -760,7 +847,7 @@ def run_dp(detector, args, ctx=None):
             log("  !! WARNING: the constraint increased the uncertainty in some bin")
 
         note = mdc.dp_annotation(lo, hi)
-        sfx = ("_gump" if args.gump_bins else "") + "_" + tag
+        sfx = ("_legacy" if args.legacy_bins else "") + "_" + tag
         n_saved += draw_figures(plotdir, detector, cut, var_y, var_x, label_x,
                                 pd_y, pd_x, pd_c, NMC_y_shift, args.no_save, log,
                                 stem_suffix=sfx, ax0_note=note)
@@ -773,8 +860,8 @@ def run_dp(detector, args, ctx=None):
     if not args.no_save:
         for tag, d_ in per_slice.items():
             px, py = d_["pd_x"], d_["pd_y"]
-            npz = os.path.join(plotdir, "%s_constraint_%s_by_%s%s.npz"
-                               % (detname, var_y, var_x, d_["sfx"]))
+            npz = os.path.join(plotdir, "%s_constraint%s_%s_by_%s%s.npz"
+                               % (detname, sel_infix(args), var_y, var_x, d_["sfx"]))
             np.savez(npz, Csyst=Csyst, Cstat=Cstat, cov_cond=d_["cov_cond"], K=d_["K"],
                      NMC_x=px["NMC_total"], NMC_y=py["NMC_total"],
                      NMC_y_shift=d_["NMC_y_shift"],
@@ -793,8 +880,8 @@ def run_dp(detector, args, ctx=None):
                      chi2_constrained=np.array(d_["chi2_c"]))
             log("Wrote %s" % npz)
 
-        summary = os.path.join(plotdir, "%s_constraint_dp%s_summary.txt"
-                               % (detname, "_gump" if args.gump_bins else ""))
+        summary = os.path.join(plotdir, "%s_constraint%s_dp%s_summary.txt"
+                               % (detname, sel_infix(args), "_legacy" if args.legacy_bins else ""))
         with open(summary, "w") as f:
             f.write("\n".join(ctx["summary_lines"]) + "\n")
         print("Wrote %s" % summary, flush=True)
@@ -804,9 +891,15 @@ def run_dp(detector, args, ctx=None):
 
 
 # Joint signal-box comparison: (1p / Mp stage, del_p tag, pane label) per
-# block. The 1p blocks are the three lower DP_SLICES; Mp is the unsliced
-# del_p < 0.6 cut (mdc.DP_CUTS_EXTRA).
+# block. The 1p blocks are the two del_p bins of the fit (CONSTRAINT_DP_SLICES);
+# Mp is the unsliced del_p < 0.6 cut (mdc.DP_CUTS_EXTRA). Each block takes its
+# PROfit channel's energy binning. --legacy-bins: the three lower DP_SLICES.
 JOINT_SB_BLOCKS = [
+    ("1p", "lt03dp",   "1$\\mu$1p"),
+    ("1p", "03to06dp", "1$\\mu$1p"),
+    ("mp", "lt06dp",   "1$\\mu$Mp"),
+]
+JOINT_SB_BLOCKS_LEGACY = [
     ("1p", "lodp",   "1$\\mu$1p"),
     ("1p", "middp",  "1$\\mu$1p"),
     ("1p", "hidp",   "1$\\mu$1p"),
@@ -822,11 +915,11 @@ JOINT_SB_STAGES = {
 
 
 def run_joint_signalbox(detector, args, ctx=None, stage_key="pid"):
-    """Joint MC/data comparison of the plot variable over the four signal-box
+    """Joint MC/data comparison of the plot variable over the signal-box
     spectra of JOINT_SB_BLOCKS at selection stage JOINT_SB_STAGES[stage_key],
     with one systematic + data-stat covariance over the concatenated blocks
     (cross-block correlations kept) and one combined chi2 / ndof, repeated on
-    each of the four panes."""
+    each pane."""
     if detector != "SBND":
         raise ValueError("the joint signal-box comparison is SBND-only (absolute "
                          "normalization), not %r" % detector)
@@ -835,9 +928,8 @@ def run_joint_signalbox(detector, args, ctx=None, stage_key="pid"):
         os.makedirs(os.path.join(plotdir, sub), exist_ok=True)
 
     var_y = args.plot_var
-    bins_y, label_y = _plotvar_spec(detector, var_y)
-    if args.gump_bins:
-        bins_y = GUMP_BINS
+    blocks = JOINT_SB_BLOCKS_LEGACY if args.legacy_bins else JOINT_SB_BLOCKS
+    _, label_y = _plotvar_spec(detector, var_y)
 
     if ctx is None:
         ctx = mdc.prepare_detector(detector, args)
@@ -846,10 +938,10 @@ def run_joint_signalbox(detector, args, ctx=None, stage_key="pid"):
     OFF_w, POT = ctx["OFF_w"], ctx["POT"]
 
     stages, infix, stage_title = JOINT_SB_STAGES[stage_key]
-    cuts4 = [mdc.dp_cutname(stages[m], tag) for m, tag, _ in JOINT_SB_BLOCKS]
+    cuts4 = [mdc.dp_cutname(stages[m], tag) for m, tag, _ in blocks]
     nb = len(cuts4)
     vars4 = [var_y]*nb
-    bins4 = [bins_y]*nb
+    bins4 = [_bins_for(detector, var_y, args, mp=(m == "mp"))[0] for m, _, _ in blocks]
     sizes = [len(b) - 1 for b in bins4]
     edges = np.cumsum([0] + sizes)
     blk = [slice(edges[i], edges[i+1]) for i in range(nb)]
@@ -858,7 +950,7 @@ def run_joint_signalbox(detector, args, ctx=None, stage_key="pid"):
     log("=" * 70)
     log("JOINT SIGNAL-BOX COMPARISON at %s (1p in del_p slices + Mp del_p < 0.6)"
         % stage_title)
-    log("  variable : %s  (%d bins x %d blocks)" % (var_y, len(bins_y) - 1, nb))
+    log("  variable : %s  (%s bins in %d blocks)" % (var_y, "+".join(str(n) for n in sizes), nb))
     log("=" * 70)
     for c in cuts4:
         log("  %-20s: MC %9.1f   on-beam %6d" % (
@@ -871,10 +963,10 @@ def run_joint_signalbox(detector, args, ctx=None, stage_key="pid"):
     # ---- per-block plot data; the covariance comes from the joint call below ----
     nosyst = syst.SystematicList([])
     pds = []
-    for (m, tag, plabel), c in zip(JOINT_SB_BLOCKS, cuts4):
+    for (m, tag, plabel), c, bins_y in zip(blocks, cuts4, bins4):
         stage = stages[m]
         lo, hi = dict((t, (l_, h_)) for t, l_, h_ in mdc.DP_SLICES + mdc.DP_CUTS_EXTRA)[tag]
-        rng = ("$\\delta p < %.1f$ GeV/c" % hi) if tag == "lt06dp" else mdc.dp_annotation(lo, hi)
+        rng = ("$\\delta p < %.1f$ GeV/c" % hi) if lo == 0 else mdc.dp_annotation(lo, hi)
         note = "%s, %s" % (plabel, rng)
         pds.append(mdc.make_plot_data(var_y, bins_y, c, "glob_scale", mdc.breakdown_mode,
                                       False, mdc.mode_labels, mdc.mode_colors, label_y,
@@ -891,7 +983,7 @@ def run_joint_signalbox(detector, args, ctx=None, stage_key="pid"):
 
     # every diagonal block must reproduce the single-cut covariance
     for i, c in enumerate(cuts4):
-        ref = ctx["systematics_by_cut"][c].cov(var_y, c, bins_y, NCV[blk[i]], fillna=-1)
+        ref = ctx["systematics_by_cut"][c].cov(var_y, c, bins4[i], NCV[blk[i]], fillna=-1)
         scale = max(np.abs(ref).max(), 1e-30)
         d = np.abs(Csyst[blk[i], blk[i]] - ref).max()
         log("  block %-20s vs the single-cut covariance: max |diff| = %.3g (rel %.2g)"
@@ -942,27 +1034,35 @@ def run_joint_signalbox(detector, args, ctx=None, stage_key="pid"):
         p["chi2"], p["ndof"] = chi2_j, ndof_j
         p["title"] = ""
 
-    # ---- four-pane figure ----
+    # ---- multi-pane figure: one row of panes, or 2x2 for four blocks ----
     from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
-    fig = plt.figure(figsize=(14, 11))
-    outer = GridSpec(2, 2, figure=fig, hspace=0.22, wspace=0.25)
-    for i, p in enumerate(pds):
-        inner = GridSpecFromSubplotSpec(2, 1, subplot_spec=outer[i // 2, i % 2],
-                                        height_ratios=[3, 1], hspace=0.05)
-        ax0 = fig.add_subplot(inner[0])
-        ax1 = fig.add_subplot(inner[1], sharex=ax0)
-        mdc.draw_ratio_axes(ax0, ax1, p)
-        plt.setp(ax0.get_xticklabels(), visible=False)
-        ax0.set_title("")
-        # the per-pane legends repeat; keep the stack legend only on the first
-        if i:
-            leg = ax0.get_legend()
-            if leg is not None:
-                leg.remove()
-    fig.suptitle("$\\bf{SBND}$ " + stage_title + ": 1$\\mu$1p ($\\delta p$ slices) + 1$\\mu$Mp "
-                 "($\\delta p < 0.6$ GeV/c), joint $\\chi^2$", fontsize=mdc.FONTSIZE+2, y=0.94)
+    ncol = 2 if nb == 4 else nb
+    nrow = -(-nb // ncol)
 
-    tag = "_gump" if args.gump_bins else ""
+    def draw_panes(pdlist, title, overlays=None):
+        fig = plt.figure(figsize=(7*ncol, 5.5*nrow))
+        outer = GridSpec(nrow, ncol, figure=fig, hspace=0.22, wspace=0.25)
+        for i, p in enumerate(pdlist):
+            inner = GridSpecFromSubplotSpec(2, 1, subplot_spec=outer[i // ncol, i % ncol],
+                                            height_ratios=[3, 1], hspace=0.05)
+            ax0 = fig.add_subplot(inner[0])
+            ax1 = fig.add_subplot(inner[1], sharex=ax0)
+            mdc.draw_ratio_axes(ax0, ax1, p,
+                                overlay=None if overlays is None else overlays[i])
+            plt.setp(ax0.get_xticklabels(), visible=False)
+            ax0.set_title("")
+            # the per-pane legends repeat; keep the stack legend only on the first
+            if i:
+                leg = ax0.get_legend()
+                if leg is not None:
+                    leg.remove()
+        fig.suptitle(title, fontsize=mdc.FONTSIZE+2, y=0.94 if nrow > 1 else 1.0)
+        return fig
+
+    fig = draw_panes(pds, "$\\bf{SBND}$ " + stage_title + ": 1$\\mu$1p ($\\delta p$ slices) + "
+                     "1$\\mu$Mp ($\\delta p < 0.6$ GeV/c), joint $\\chi^2$")
+
+    tag = "_legacy" if args.legacy_bins else ""
     detname = detector.replace(" ", "-")
     stem = "%s_signalbox%s_%s_joint1pMp_absnorm%s" % (detname, infix, var_y, tag)
     if not args.no_save:
@@ -972,10 +1072,145 @@ def run_joint_signalbox(detector, args, ctx=None, stage_key="pid"):
         npz = os.path.join(plotdir, "%s_signalbox%s_joint1pMp%s.npz" % (detname, infix, tag))
         np.savez(npz, Csyst=Csyst, Cstat=Cstat, NCV=NCV, NData=ND, NON=NON,
                  NDataErr=np.concatenate([p["NDataErr"] for p in pds]),
-                 bins=bins_y, cuts=np.array(cuts4), var=np.array(var_y), POT=POT,
+                 bins=np.concatenate(bins4), nbins=np.array(sizes), cuts=np.array(cuts4), var=np.array(var_y), POT=POT,
                  ylabel=np.array(ylabel or ""), chi2=np.array([chi2_j, ndof_j]))
         log("Wrote %s" % npz)
     plt.close(fig)
+
+    # ---- cross-constrained version: each pane's CV conditioned on the data of
+    # the OTHER blocks through the joint (syst + data stat) covariance ----
+    log("")
+    log("CROSS-CONSTRAINED signal box (each block conditioned on the other %d):" % (nb - 1))
+    pds_x, overlays, xrows = [], [], []
+    for i, (c, p) in enumerate(zip(cuts4, pds)):
+        oth = np.concatenate([np.arange(edges[j], edges[j+1]) for j in range(nb) if j != i])
+        own = np.arange(edges[i], edges[i+1])
+        order = np.concatenate([oth, own])
+        cov_cond, K, cn = syst.conditional_constraint(Ctot[np.ix_(order, order)], len(oth))
+        shift = NCV[own] + K @ (ND[oth] - NCV[oth])
+        nneg = int((shift <= 0).sum())
+        if nneg:
+            log("  !! WARNING: %s: %d bin(s) of the constrained CV are <= 0" % (c, nneg))
+        c2, nd = mdc.f_chi2(shift, ND[own], cov_cond, NON=NON[own])
+        _, _, pv = mdc.chi2_ndof_pvalue({"chi2": c2, "ndof": nd, "areanorm": False})
+        log("  %-20s cond(Cxx) %.3g   chi2 vs constrained CV %7.2f / %d   p = %.3g"
+            % (c, cn, c2, nd, pv))
+        q = dict(p)
+        q["cov"] = cov_cond
+        q["cov_w_stat"] = cov_cond          # data stat already inside
+        q["chi2"], q["ndof"] = c2, nd
+        pds_x.append(q)
+        overlays.append({"N": shift, "label": "Const. MC", "color": "black", "linestyle": "--", "band": True})
+        xrows.append((c, c2, nd, pv, shift, cov_cond))
+    figx = draw_panes(pds_x, "$\\bf{SBND}$ " + stage_title + ": each spectrum constrained by the "
+                      "other two (CV + uncertainty), per-pane $\\chi^2$", overlays=overlays)
+    stemx = "%s_signalbox%s_%s_joint1pMp_crossconstrained_absnorm%s" % (detname, infix, var_y, tag)
+    if not args.no_save:
+        figx.savefig(os.path.join(plotdir, "pdf", stemx + ".pdf"), bbox_inches="tight")
+        figx.savefig(os.path.join(plotdir, "png", stemx + ".png"), bbox_inches="tight")
+        log("Wrote %s.{pdf,png}" % stemx)
+        npzx = os.path.join(plotdir, "%s_signalbox%s_joint1pMp_crossconstrained%s.npz"
+                            % (detname, infix, tag))
+        np.savez(npzx, cuts=np.array(cuts4),
+                 chi2=np.array([[r[1], r[2]] for r in xrows]),
+                 pvalue=np.array([r[3] for r in xrows]),
+                 NCV_constrained=np.concatenate([r[4] for r in xrows]),
+                 NCV=NCV, NData=ND, nbins=np.array(sizes), bins=np.concatenate(bins4),
+                 **{"cov_cond_%d" % i: r[5] for i, r in enumerate(xrows)})
+        log("Wrote %s" % npzx)
+    plt.close(figx)
+    return 0
+
+
+# ============================================================
+# Kinematics round (--kinematics): single-variable absolute-normalized
+# MC/data comparisons for Np (1p+Mp), 1p and Mp, one figure per
+# (selection, variable). Every variable but del_p is drawn with
+# del_p < 0.6 (the fit range); del_p itself is drawn over its full range.
+# ============================================================
+KIN_SELS = [
+    # (file tag, stage, title)
+    ("Np", UNION_STAGE, "Np (1p+Mp)"),
+    ("1p", "PID 1p",    "1p"),
+    ("Mp", "PID Mp",    "Mp"),
+]
+
+# var -> (bins or None for the plot spec, label override or None)
+KIN_VARS = {
+    "p_p":            (None, "Leading Proton Momentum [GeV/c]"),
+    "mu_p":           (None, None),
+    "mu_costh":       (None, "Muon cos$\\theta_\\mathrm{beam}$"),
+    "p_costh":        (None, "Leading Proton cos$\\theta_\\mathrm{beam}$"),
+    "del_p":          (None, None),
+    "del_Tp":         (np.linspace(0., 0.6, 13), "$\\delta p_T$ [GeV/c]"),
+    "nu_E_frac_diff": (None, None),
+    # E_calo on the equal-width mdc.CONSTRAINT_VARS binning (0.3-1.2 GeV)
+    "nu_E_calo":      (None, None),
+    # the two del_p bins of the numu1p fit channel
+    "del_p_2bin":     (np.array([0., 0.3, 0.6]), "$\\delta p$ [GeV/c]"),
+    "del_Tp_2bin":    (np.array([0., 0.3, 0.6]), "$\\delta p_T$ [GeV/c]"),
+}
+# plot name -> frame column, where they differ
+KIN_COLUMN = {"del_p_2bin": "del_p", "del_Tp_2bin": "del_Tp"}
+# drawn WITHOUT the del_p < 0.6 cut
+KIN_FULL_RANGE = ("del_p", "del_Tp_2bin")
+
+
+def _kin_spec(detector, var):
+    bins, label = KIN_VARS[var]
+    if bins is None or label is None:
+        b0, l0 = _plotvar_spec(detector, KIN_COLUMN.get(var, var))
+        bins = b0 if bins is None else bins
+        label = l0 if label is None else label
+    return np.asarray(bins), label
+
+
+def run_kinematics(detector, args, ctx):
+    """KIN_VARS x KIN_SELS absolute-normalized MC/data comparisons. Writes
+    <plotdir>/{png,pdf}/<det>_kin_<sel>_<var>_absnorm.* plus
+    kinematics_summary.tsv (chi2, ndof, p) and kinematics_plotdata.npz."""
+    plotdir = args.kin_plotdir or args.plotdir
+    for sub in ("png", "pdf"):
+        os.makedirs(os.path.join(plotdir, sub), exist_ok=True)
+    log = ctx["log"]
+    detname = detector.replace(" ", "-")
+    hi = dict((t, h) for t, _, h in mdc.DP_CUTS_EXTRA)[FIT_DP_TAG]
+    rows, arrays = [], {}
+    n = 0
+    for tag, stage, title in KIN_SELS:
+        for var in KIN_VARS:
+            bins, label = _kin_spec(detector, var)
+            if var in KIN_FULL_RANGE:
+                cut = stage
+                note = "no $\\delta p$ cut (fit uses $\\delta p < %.1f$)" % hi
+            else:
+                cut = mdc.dp_cutname(stage, FIT_DP_TAG)
+                note = "$\\delta p < %.1f$ GeV/c" % hi
+            pdata = mdc.make_plot_data(KIN_COLUMN.get(var, var), bins, cut, "glob_scale", mdc.breakdown_mode,
+                                       False, mdc.mode_labels, mdc.mode_colors, label,
+                                       title, fillna=-999.,
+                                       det=detector, annotate=note)
+            c2, nd, pv = mdc.chi2_ndof_pvalue(pdata)
+            rows.append((tag, var, c2, nd, pv))
+            for k in ("NMC_total", "NData", "NDataErr", "cov"):
+                if pdata.get(k) is not None:
+                    arrays["%s__%s__%s" % (tag, var, k)] = np.asarray(pdata[k])
+            arrays["%s__%s__bins" % (tag, var)] = bins
+            stem = "%s_kin_%s_%s_absnorm" % (detname, tag, var)
+            if not args.no_save:
+                fig, _, _ = mdc.ratio_plot(plt, pdata, blinded=False)
+                fig.savefig(os.path.join(plotdir, "pdf", stem + ".pdf"), bbox_inches="tight")
+                fig.savefig(os.path.join(plotdir, "png", stem + ".png"), bbox_inches="tight")
+                plt.close(fig)
+                n += 1
+                log("Wrote %s.{pdf,png}" % stem)
+    if not args.no_save:
+        with open(os.path.join(plotdir, "kinematics_summary.tsv"), "w") as fo:
+            fo.write("sel\tvar\tchi2\tndof\tpvalue\n")
+            for r in rows:
+                fo.write("%s\t%s\t%.4f\t%d\t%.6g\n" % r)
+        np.savez(os.path.join(plotdir, "kinematics_plotdata.npz"), **arrays)
+    log("Kinematics round: %d figures" % n)
     return 0
 
 
@@ -989,10 +1224,9 @@ def parse_args(argv=None):
                    help="Variable to plot and constrain (default nu_E_calo)")
     p.add_argument("--constraint-var", default="nu_E_ccqe",
                    help="Variable to constrain WITH (default nu_E_ccqe)")
-    p.add_argument("--proton-sel", default=PROTON_SEL, choices=("1p", ">1p", ">=1p"),
-                   help="Proton-multiplicity selection (default %r). BLINDED: "
-                        "only '1p' may currently be run; anything else raises "
-                        "BlindedError." % PROTON_SEL)
+    p.add_argument("--proton-sel", default=PROTON_SEL, choices=("1p", "Mp", "Np", ">1p", ">=1p"),
+                   help="Proton-multiplicity selection (default %r): %s"
+                        % (PROTON_SEL, PROTON_SEL_STAGE))
     p.add_argument("--cut", default=None,
                    help="Selection stage (default: the stage for --proton-sel, "
                         "i.e. %r for '1p')" % PROTON_SEL_STAGE["1p"])
@@ -1003,13 +1237,12 @@ def parse_args(argv=None):
     p.add_argument("--no-save", action="store_true", help="Build plots but write nothing")
     p.add_argument("--dp-bins", action="store_true",
                    help="Run ONLY the del_p-sliced round: slice the comparison "
-                        "into the del_p bins of mcdata_comparison.DP_SLICES (%s), "
-                        "build one joint 2N-block covariance and constrain within "
-                        "each slice. Produces 3N figures tagged %s. By default "
-                        "both the inclusive and the sliced rounds run (one "
-                        "detector load); see also --no-dp."
-                        % (", ".join("%s [%.1f,%.1f)" % s_ for s_ in mdc.DP_SLICES),
-                           "/".join(t for t, _, _ in mdc.DP_SLICES)))
+                        "into the del_p bins of the fit (%s; mdc.DP_SLICES with "
+                        "--legacy-bins), build one joint 2N-block covariance and "
+                        "constrain within each slice. Produces 3N figures. By "
+                        "default both the inclusive and the sliced rounds run "
+                        "(one detector load); see also --no-dp."
+                        % ", ".join("%s [%.1f,%.1f)" % s_ for s_ in CONSTRAINT_DP_SLICES))
     p.add_argument("--no-dp", action="store_true",
                    help="Run only the inclusive round (skip the del_p slices)")
     p.add_argument("--joint-only", action="store_true",
@@ -1019,36 +1252,61 @@ def parse_args(argv=None):
                         "at both the PID and the two-prong stage")
     p.add_argument("--no-joint", action="store_true",
                    help="Skip the joint signal-box comparison")
-    p.add_argument("--gump-bins", action="store_true",
-                   help="Use the GUMP signal-box binning (%s) for both variables "
-                        "instead of the mcdata_comparison binning. Implies "
-                        "--per-mev 50, and tags the outputs '_gump'."
-                        % " ".join("%g" % b for b in GUMP_BINS))
+    p.add_argument("--legacy-bins", action="store_true",
+                   help="Use the mcdata_comparison binning (mdc.CONSTRAINT_VARS) "
+                        "and del_p slices (mdc.DP_SLICES) instead of the PROfit "
+                        "fit binning (1p: %s; Mp: %s; del_p bins %s), and tag "
+                        "the outputs '_legacy'."
+                        % (" ".join("%g" % b for b in PROFIT_1P_BINS),
+                           " ".join("%g" % b for b in PROFIT_MP_BINS),
+                           "/".join(t for t, _, _ in CONSTRAINT_DP_SLICES)))
     p.add_argument("--per-mev", type=float, default=None, metavar="MEV",
                    help="Normalize bin contents to events per MEV MeV. Needed "
                         "with variable-width bins, where raw contents are not "
-                        "comparable between bins. Default 50 with --gump-bins, "
-                        "off otherwise (equal-width bins need no rescaling).")
+                        "comparable between bins. Default 50 with the PROfit "
+                        "binning, off with --legacy-bins (equal-width bins).")
+    p.add_argument("--full-onbeam", action="store_true",
+                   help="use the full-statistics on-beam stream (mdc.FULL_ONBEAM)")
+    p.add_argument("--onbeam-file", default=None, metavar="NAME",
+                   help="with --full-onbeam: this on-beam .df (basename in --df-dir) "
+                        "instead of mdc.FULL_ONBEAM[detector], e.g. "
+                        "SBND_Run1BNBData_Full2p5e20.df")
+    p.add_argument("--offbeam-file", default=None, metavar="NAME",
+                   help="this off-beam .df (basename in --df-dir) instead of the "
+                        "detector's default, e.g. SBND_Run1BNBOffData_Full2p5e20.df")
+    p.add_argument("--g4-scale", type=float, default=None,
+                   help="load-time G4 uncertainty scale (loaddf.G4_UNC_SCALE; default: loaddf's)")
+    p.add_argument("--kinematics", action="store_true",
+                   help="Also run the kinematics round (run_kinematics): KIN_VARS "
+                        "for each of KIN_SELS, absolute-normalized, one figure each")
+    p.add_argument("--kin-plotdir", default=None,
+                   help="Output directory of the kinematics round (default --plotdir)")
+    p.add_argument("--kinematics-only", action="store_true",
+                   help="Run ONLY the kinematics round")
     p.add_argument("--replot-from", default=None, metavar="NPZ",
                    help="Rebuild the three figures from a previously written .npz "
                         "instead of reloading the detector (seconds, not minutes). "
                         "All other options except --plotdir/--no-save are ignored.")
     args = p.parse_args(argv)
 
-    # BLINDING: everything except the 1p selection is blinded. Gate before any
-    # other action (including --replot-from) so a blinded selection can never
-    # produce output.
-    if args.proton_sel != "1p":
-        raise BlindedError(
-            "Blinded: proton selection %r is blinded; only '1p' may currently "
-            "be run" % args.proton_sel)
+    # (The 1p-only BlindedError gate that stood here was removed 2026-11-23.)
+    if args.onbeam_file is not None and not args.full_onbeam:
+        p.error("--onbeam-file needs --full-onbeam")
+    if args.onbeam_file is not None:
+        mdc.FULL_ONBEAM[args.detector] = args.onbeam_file
+    if args.offbeam_file is not None:
+        mdc.OFFBEAM_OVERRIDE[args.detector] = [args.offbeam_file]
+    if args.g4_scale is not None:
+        # env so spawned loader workers see it; enters loaddf's MC cache key
+        os.environ["GUMPLE_G4_UNC_SCALE"] = repr(args.g4_scale)
+        mdc.loaddf.G4_UNC_SCALE = args.g4_scale
 
     # resolve the selection stage from the proton selection
     if args.cut is None:
         args.cut = PROTON_SEL_STAGE[args.proton_sel]
 
-    # the GUMP binning is variable-width, so it needs a reference width
-    if args.gump_bins and args.per_mev is None:
+    # the PROfit binning is variable-width, so it needs a reference width
+    if not args.legacy_bins and args.per_mev is None:
         args.per_mev = 50.
 
     if args.replot_from:
@@ -1074,6 +1332,11 @@ def main(argv=None):
     args = parse_args(argv)
     if args.replot_from:
         return replot(args.replot_from, args)
+    if args.kinematics or args.kinematics_only or args.proton_sel == "Np":
+        add_union_stage()
+    if args.kinematics_only:
+        ctx = mdc.prepare_detector(args.detector, args)
+        return run_kinematics(args.detector, args, ctx)
     if args.joint_only:
         ctx = mdc.prepare_detector(args.detector, args)
         rc = 0
@@ -1091,6 +1354,8 @@ def main(argv=None):
     if not args.no_joint and args.detector == "SBND":
         for k in JOINT_SB_STAGES:
             rc = run_joint_signalbox(args.detector, args, ctx, stage_key=k) or rc
+    if args.kinematics:
+        rc = run_kinematics(args.detector, args, ctx) or rc
     return rc
 
 

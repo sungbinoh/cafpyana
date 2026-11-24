@@ -11,15 +11,41 @@ the trigger universes and the ICARUS track-splitting re-evaluation) for free.
 Cuts that CANNOT be N-1'd, because the production preselection (maple/makedf.py
 selection="presel") already removed the failing slices, are listed in
 NOT_N1_CUTS and written to the summary. In particular the muon candidate is the
-longest track passing gc.get_base_muon_mask, so its track-score / length /
-containment requirements are baked into the candidate choice.
+longest track passing gc.get_base_muon_mask(level="trk"), so its Pandora
+track-score / length / containment requirements are baked into the candidate
+choice. The analysis track-score cut is the slice-level coltopo score
+(gc.coltopo_cut, sbn-rewgted-26+), which IS N-1'd ("trkscore").
 
 Mp follows gc.all_maplemp_cuts and so INCLUDES the far-shower veto, unlike the
 "PID Mp" stage of mcdata_comparison_gumple.py.
 
 Deliverables per detector, in --plotdir: pdf/ + png/ figures
-<det>_n-1-<sel>_<var>[_bkdwnpdg], <det>_n-1_chi2.tsv and
+<det>_n-1-<sel>_<var>[_bkdwnpdg|_bkdwntrkshw]
+(_bkdwntrkshw: track-score plots only, track-like vs shower-like muon cand.), <det>_n-1_chi2.tsv and
 <det>_n-1_summary.txt.
+
+Options:
+  --trkscore {coltopo,pandora}  muon-candidate track-score cut used in EVERY
+      stage (and the one N-1'd as "trkscore"): the analysis coltopo cut
+      (default) or the legacy Pandora mu_trackScore >= musel_track_score_min.
+      The stored candidate is the legacy trackScore > 0 track, so both N-1.
+  --full-onbeam  use the full-statistics on-beam stream (mcd.FULL_ONBEAM)
+      instead of the prescaled/unblind default.
+  --g4-scale S  Geant4 reinteraction uncertainty inflation, applied at LOAD time
+      (loaddf.G4_UNC_SCALE: each universe weight w -> 1 + S*(w - 1)); default:
+      the loaddf default (2). NB before 2026-11-13 this flag instead scaled the
+      covariance by S^2 on top of the load-time scale.
+  --sbnd-no-vtx-zgap  put the SBND slice-vertex APA gap (gc.SBND_VTX_ZGAP,
+      250 < z < 254) back into the FV (cross-check).
+  --exclude-tpc T / --only-tpc T  (ICARUS only) drop / keep only slices with
+      their reco vertex in TPC T (EE, EW, WE, WW), via mcd.cryo_mask.
+  --pass-only  compare only the part of each N-1 distribution that PASSES the
+      removed cut (i.e. the full selection, histogrammed over the kept side of
+      the cut). The kept range [lo, cut] or [cut, hi] of the nominal binning is
+      re-binned with edges anchored exactly on the cut value and about the
+      nominal bin width (see pass_bins); the shape-only normalization, the
+      covariance and the chi2 then cover the pass region only. Figures get a
+      "_passonly" suffix; the chi2 .tsv gains an n_pass_bins column.
 
     python analysis_village/gump/nminus1_gumple.py -d all --plotdir <dir>
 """
@@ -49,12 +75,12 @@ gc = mcd.gc
 # unchanged by importing it, so share that cache rather than reloading.
 mcd.FV.__module__ = "__main__"
 
-DEFAULT_PLOTDIR = "/Users/gputnam/Work/osc/cafpyana/plots-gumple-2026-10-20-rewgted25/evtsel_n-1/"
-DEFAULT_DF_DIR = "/Users/gputnam/Work/osc/sbn-rewgted-25/"
+DEFAULT_PLOTDIR = "/Users/gputnam/Work/osc/cafpyana/plots-gumple-2026-11-03-rewgted26/evtsel_n-1/"
+DEFAULT_DF_DIR = "/Users/gputnam/Work/osc/sbn-rewgted-26/"
 
 # Cuts of the selection chain that the stored frames cannot relax.
-# The muon track-score requirement is NOT among them: the stored candidate is
-# chosen with a looser score (~9% of stored slices have mu_trackScore < 0.5).
+# The muon track-score requirement (coltopo, slice level) is NOT among them: it
+# is not part of the production's candidate choice.
 NOT_N1_CUTS = [
     "sanity (slice vertex defined)",
     "slice-vertex FV (incl. ICARUS WW cable region)",
@@ -102,8 +128,40 @@ def c_farshw(d):
     return np.isnan(d.max_far_shw_len)
 
 
+# "coltopo" (analysis) or "pandora" (legacy mu_trackScore >= 0.5); set by
+# parse_args before register_stages.
+TRKSCORE = "coltopo"
+# --only-keys: restrict the plotted N-1 cuts (None: all)
+ONLY_KEYS = None
+# --pass-only: histogram only the kept side of each removed cut
+PASS_ONLY = False
+
+
+def pass_bins(bins, line, side):
+    """Bins covering only the kept side of a single cut at `line`.
+
+    The nominal bins do not always have the cut on an edge (e.g. coltopo 0.89,
+    the chi2 thresholds), so the kept range is re-binned: [lo, line] for "<",
+    [line, hi] for ">", in n equal bins with n = round(range / nominal width)
+    (at least 1). The bins then end exactly on the cut."""
+    bins = np.asarray(bins, dtype=float)
+    w = np.median(np.diff(bins))
+    lo, hi = bins[0], bins[-1]
+    if side == "<":
+        a, b = lo, min(line, hi)
+    elif side == ">":
+        a, b = max(line, lo), hi
+    else:
+        raise ValueError("pass_bins: unsupported cut side %r" % side)
+    n = max(1, int(round((b - a)/w)))
+    return np.linspace(a, b, n + 1)
+
+
 def c_trkscore(d):
-    return d["mu_trackScore"] >= gc._det_cut_th(d.detector, "musel_track_score_min")
+    if TRKSCORE == "pandora":
+        # NaN fails
+        return d["mu_trackScore"] >= gc._det_cut_th(d.detector, "musel_track_score_min")
+    return gc.coltopo_cut(d)
 
 
 def c_base(d):
@@ -155,15 +213,17 @@ CUTVARS = {
                  lambda det, sel: [0.5], "<"),
     "flash":    ("flash_maxpe", flash_bins, "Max. Flash PE",
                  lambda det, sel: [gc.FLASH_PE_THRESHOLD[det]], ">"),
-    "trkscore": ("mu_trackScore", lambda det: np.linspace(0.4, 0.9, 11),
-                 "Muon Cand. Track Score",
-                 lambda det, sel: [gc._det_cut_th(det, "musel_track_score_min")], ">"),
+    # coltopo is shower-like (muons near 0): the cut keeps the region below the line.
+    # NaN scores (~0.3%) land in the fillna=-1 underflow, outside the bins.
+    "trkscore": None,  # per TRKSCORE, see TRKSCORE_VARS
     "mu_chi2u": ("mu_chi2_of_mu_cand", lambda det: np.linspace(0, 60, 13),
                  "Muon Cand. $\\chi^2_\\mu$",
                  lambda det, sel: [gc._det_cut_th(det, "musel_muscore_th")], "<"),
-    "mu_chi2p": ("prot_chi2_of_mu_cand", lambda det: np.linspace(0, 270, 19),
+    # 0-255 in 15-wide bins (the 255-270 bin dropped 2026-11-24)
+    "mu_chi2p": ("prot_chi2_of_mu_cand", lambda det: np.linspace(0, 255, 18),
                  "Muon Cand. $\\chi^2_p$",
                  lambda det, sel: [gc._det_cut_th(det, "musel_pscore_th")], ">"),
+    # 10-wide bins: SBND 0-200, ICARUS 0-150
     "p_chi2p":  ("prot_chi2_of_prot_cand", lambda det: (np.linspace(0, 200, 21) if det == "SBND"
                                                         else np.linspace(0, 150, 16)),
                  "Proton Cand. $\\chi^2_p$",
@@ -177,13 +237,42 @@ CUTVARS = {
                  "Far Shower Length [cm] (none: underflow)",
                  lambda det, sel: [0.], "<"),
 }
+TRKSCORE_VARS = {
+    "coltopo": ("coltopo_trkscore", lambda det: np.linspace(0, 1, 21),
+                "Muon Cand. Track/Shower Score (coltopo)",
+                lambda det, sel: [gc._det_cut_th(det, "musel_coltopo_max")], "<"),
+    # Pandora is track-like (muons near 1): the cut keeps the region above the line.
+    "pandora": ("mu_trackScore", lambda det: np.linspace(0, 1, 21),
+                "Muon Cand. Track Score (Pandora)",
+                lambda det, sel: [gc._det_cut_th(det, "musel_track_score_min")], ">"),
+}
+
+
+def cutvar(key):
+    return TRKSCORE_VARS[TRKSCORE] if key == "trkscore" else CUTVARS[key]
+
+
+# Track-score breakdown of the muon candidate's true particle: track-like
+# (mu / pi+- / p) vs shower-like (e+- / gamma). |pdg| is used, so both charges
+# land in their class. "Other": anything else or no truth match (incl. dirt).
+TRKSHW_PDGS = [(13, 211, 2212), (11, 22)]
+trkshw_labels = ["Track-like ($\\mu$/$\\pi^\\pm$/$p$)", "Shower-like ($e^\\pm$/$\\gamma$)", "Other"]
+trkshw_colors = ["#1e3f54", "#d54c28", "#c89648"]
+
+
+def breakdown_trkshw(var, d):
+    apdg = d["mu_true_pdg"].abs()
+    masks = [apdg.isin(p) for p in TRKSHW_PDGS]
+    return [var[m] for m in masks] + [var[~(masks[0] | masks[1])]]
+
+
 PDG_CUTS = {"mu_chi2u", "mu_chi2p", "p_chi2p"}
 
 
 def cut_side(key, sel):
     if key == "npfp":
         return "<" if sel == "1p" else ">"
-    return CUTVARS[key][4]
+    return cutvar(key)[4]
 
 
 def n1_keys(detector, sel):
@@ -195,6 +284,8 @@ def n1_keys(detector, sel):
     # information): the CRT N-1 stage would equal the full selection
     elif "crt" in keys:
         keys.remove("crt")
+    if ONLY_KEYS is not None:
+        keys = [k for k in keys if k in ONLY_KEYS]
     return keys
 
 
@@ -226,10 +317,13 @@ def register_stages(detector):
             mcd.STAGE_CUTNAMES.append(name)
             if key == "flash":
                 mcd.NO_FLASH_STAGES.add(name)
-            var, binf, label, linef, _ = CUTVARS[key]
-            specs.append(dict(sel=sel, key=key, stage=name, var=var, bins=binf(detector),
-                              label=label, lines=linef(detector, sel),
-                              side=cut_side(key, sel)))
+            var, binf, label, linef, _ = cutvar(key)
+            bins, lines, side = binf(detector), linef(detector, sel), cut_side(key, sel)
+            if PASS_ONLY:
+                # the N-1 stage minus its failing side == the full selection
+                bins = pass_bins(bins, lines[0], side)
+            specs.append(dict(sel=sel, key=key, stage=name, var=var, bins=bins,
+                              label=label, lines=lines, side=side))
     mcd.extravarnames.append("crthit_f")
     mcd.extravars.append(lambda d: d.crthit.astype(float))
     mcd.EXTRA_UNIV_COLS.extend(["crthit_f", "flash_maxpe", "n_pfp", "max_far_shw_len"])
@@ -242,15 +336,19 @@ def register_stages(detector):
 def _worker(dat):
     (i, spec, kind) = dat
     pdg = kind.startswith("pdg")
-    if pdg:
+    if kind == "trkshw":
+        bkdwn, labels, colors = breakdown_trkshw, trkshw_labels, trkshw_colors
+    elif pdg:
         bkdwn = mcd.breakdown_pdg_p if "prot_cand" in spec["var"] else mcd.breakdown_pdg_mu
         labels, colors = mcd.pdg_labels, mcd.pdg_colors
     else:
         bkdwn, labels, colors = mcd.breakdown_mode, mcd.mode_labels, mcd.mode_colors
-    title = "%s, N-1" % SEL_TITLES[spec["sel"]]
+    title = "%s, %s" % (SEL_TITLES[spec["sel"]], "N-1, pass cut" if PASS_ONLY else "N-1")
+    # PID (chi2) comparisons: G4 / calorimetric covariance lines on the ratio panel
+    comps = mcd.COMPONENT_SYSTS if (pdg and spec["key"] in PDG_CUTS) else None
     return i, kind, mcd.make_plot_data(spec["var"], spec["bins"], spec["stage"], "glob_scale",
                                        bkdwn, True, labels, colors, spec["label"], title,
-                                       fillna=-1, det=mcd.DETECTOR)
+                                       fillna=-1, det=mcd.DETECTOR, components=comps)
 
 
 def draw_cut(ax0, ax1, spec):
@@ -278,7 +376,10 @@ def draw_cut(ax0, ax1, spec):
 
 def save_plot(pd_, spec, plotdir, suffix):
     fig, ax0, ax1 = mcd.ratio_plot(plt, pd_)
-    draw_cut(ax0, ax1, spec)
+    if PASS_ONLY:
+        suffix = suffix + "_passonly"  # the cut is a plot edge: no line/arrow
+    else:
+        draw_cut(ax0, ax1, spec)
     stem = "%s_n-1-%s_%s%s" % (pd_["det"].replace(" ", "-"), spec["sel"], spec["var"], suffix)
     fig.savefig(os.path.join(plotdir, "pdf", stem + ".pdf"), bbox_inches="tight")
     fig.savefig(os.path.join(plotdir, "png", stem + ".png"), bbox_inches="tight")
@@ -289,7 +390,11 @@ def run_detector(detector, args):
     specs = register_stages(detector)
     ctx = mcd.prepare_detector(detector, args)
     plotdir, detname, log = ctx["plotdir"], ctx["detname"], ctx["log"]
+    log("\nG4 uncertainty: load-time scale loaddf.G4_UNC_SCALE = %g" % mcd.loaddf.G4_UNC_SCALE)
+    log("SBND slice-vertex z gap excluded from FV: %s" % (gc.SBND_VTX_ZGAP,))
     df, ONdf, OFFdf, OFF_w = ctx["df"], ctx["ONdf"], ctx["OFFdf"], ctx["OFF_w"]
+
+    log("\nN-1 track-score cut: %s   on-beam: %s" % (TRKSCORE, os.path.basename(mcd.detector_files(detector, args.df_dir, full_onbeam=args.full_onbeam)["ONBEAM"])))
 
     # ---- yields ----
     log("\nN-1 stage yields (MC: POT-scaled glob_scale sum; data: on-beam count, "
@@ -300,11 +405,12 @@ def run_detector(detector, args):
             mc = df.loc[df[name], "glob_scale"].sum()
             non, noff = int(ONdf[name].sum()), int(OFFdf[name].sum())
             log("%-22s %12.1f %10d %10d %12.1f" % (name, mc, non, noff, non - noff*OFF_w))
-    log("cross-check, evtsel 'PID 1p' stage: MC %.1f  ON %d  OFF %d"
-        % (df.loc[df["PID 1p"], "glob_scale"].sum(), ONdf["PID 1p"].sum(), OFFdf["PID 1p"].sum()))
-    _mp = lambda f: f["PID Mp"] & c_farshw(f)
-    log("cross-check, evtsel 'PID Mp' & far-shower veto: MC %.1f  ON %d  OFF %d"
-        % (df.loc[_mp(df), "glob_scale"].sum(), _mp(ONdf).sum(), _mp(OFFdf).sum()))
+    if TRKSCORE == "coltopo":  # the evtsel stages are built with coltopo
+        log("cross-check, evtsel 'PID 1p' stage: MC %.1f  ON %d  OFF %d"
+            % (df.loc[df["PID 1p"], "glob_scale"].sum(), ONdf["PID 1p"].sum(), OFFdf["PID 1p"].sum()))
+        _mp = lambda f: f["PID Mp"] & c_farshw(f)
+        log("cross-check, evtsel 'PID Mp' & far-shower veto: MC %.1f  ON %d  OFF %d"
+            % (df.loc[_mp(df), "glob_scale"].sum(), _mp(ONdf).sum(), _mp(OFFdf).sum()))
     log("\nNot N-1'd (applied in the production preselection / muon-candidate definition):")
     for c in NOT_N1_CUTS:
         log("  - " + c)
@@ -319,13 +425,15 @@ def run_detector(detector, args):
         inputs.append((i, s, "mode"))
         if s["key"] in PDG_CUTS:
             inputs.append((i, s, "pdg"))
+        if s["key"] == "trkscore":
+            inputs.append((i, s, "trkshw"))
 
     results = {}
     with Pool(min(args.nproc, len(inputs))) as p:
         for i, kind, pd_ in tqdm(p.imap_unordered(_worker, inputs), total=len(inputs)):
             results[(i, kind)] = pd_
 
-    suffixes = {"mode": "", "pdg": "_bkdwnpdg"}
+    suffixes = {"mode": "", "pdg": "_bkdwnpdg", "trkshw": "_bkdwntrkshw"}
     rows = []
     for (i, kind) in sorted(results, key=lambda t: (t[0], t[1])):
         s, pd_ = specs[i], results[(i, kind)]
@@ -334,10 +442,19 @@ def run_detector(detector, args):
         chi2, ndof, pval = mcd.chi2_ndof_pvalue(pd_)
         rows.append(dict(detector=detector, selection=s["sel"], removed_cut=s["key"],
                          var=s["var"], breakdown=kind, norm="shape",
-                         chi2=chi2, ndof=ndof, pvalue=pval))
+                         chi2=chi2, ndof=ndof, pvalue=pval,
+                         pass_only=int(PASS_ONLY), n_pass_bins=len(s["bins"]) - 1))
     chi2df = pd.DataFrame(rows)
     log("\n" + chi2df[chi2df.breakdown == "mode"].to_string(index=False, float_format="%.3g"))
     log("\nSaved %d figures (pdf+png) to %s" % (0 if args.no_save else len(results), plotdir))
+
+    if args.save_plotdata and not args.no_save:
+        import pickle
+        out = {(specs[i]["sel"], specs[i]["key"], kind): pd_ for (i, kind), pd_ in results.items()}
+        fn = os.path.join(plotdir, "%s_n-1_plotdata.pkl" % detname)
+        with open(fn, "wb") as f:
+            pickle.dump(out, f)
+        log("Saved plotdata (NMC_total, NData, NON, cov_w_stat, ...) to %s" % fn)
 
     if not args.no_save:
         chi2df.to_csv(os.path.join(plotdir, "%s_n-1_chi2.tsv" % detname), sep="\t",
@@ -357,10 +474,61 @@ def parse_args(argv=None):
     p.add_argument("--nproc", type=int, default=8)
     p.add_argument("--no-dirt", action="store_true")
     p.add_argument("--no-save", action="store_true")
+    p.add_argument("--trkscore", choices=sorted(TRKSCORE_VARS), default="coltopo",
+                   help="muon-candidate track-score cut (default: coltopo)")
+    p.add_argument("--full-onbeam", action="store_true",
+                   help="use the full-statistics on-beam stream (mcd.FULL_ONBEAM)")
+    p.add_argument("--g4-scale", type=float, default=None,
+                   help="load-time G4 uncertainty scale (loaddf.G4_UNC_SCALE; default: loaddf's)")
+    p.add_argument("--sbnd-no-vtx-zgap", action="store_true",
+                   help="keep the SBND slice-vertex APA gap (gc.SBND_VTX_ZGAP) in the FV")
+    p.add_argument("--save-plotdata", action="store_true",
+                   help="pickle every comparison's histograms + covariance to <det>_n-1_plotdata.pkl")
+    tpcgrp = p.add_mutually_exclusive_group()
+    tpcgrp.add_argument("--only-tpc", choices=mcd.ICARUS_TPCS, default=None,
+                   help="ICARUS only: keep only slices whose reco vertex is in this TPC")
+    tpcgrp.add_argument("--exclude-tpc", choices=mcd.ICARUS_TPCS, default=None,
+                   help="ICARUS only: drop slices whose reco vertex is in this TPC "
+                        "(every MC/detvar/dirt/on/off frame, via mcd.cryo_mask)")
+    p.add_argument("--run2-fv-include-ew", action="store_true",
+                   help="ICARUS Run2: put TPC EW back into the FV (pre-2026-11-10 Run 2 FV, "
+                        "gumple_cuts.RUN2_FV_INCLUDE_EW); combine with --only-tpc EW for EW only")
+    p.add_argument("--pass-only", action="store_true",
+                   help="histogram only the side of each removed cut that passes it")
+    p.add_argument("--onbeam-file", default=None, metavar="NAME",
+                   help="with --full-onbeam: use this on-beam .df (basename in --df-dir) instead of "
+                        "mcd.FULL_ONBEAM[detector], e.g. SBND_Run1BNBData_Full2p5e20.df")
+    p.add_argument("--offbeam-file", default=None, metavar="NAME",
+                   help="use this off-beam .df (basename in --df-dir) instead of the detector's default "
+                        "off-beam file(s), e.g. SBND_Run1BNBOffData_Full2p5e20.df")
+    p.add_argument("--only-keys", default=None,
+                   help="comma-separated N-1 cut keys to plot (default: all)")
     args = p.parse_args(argv)
+    global TRKSCORE, ONLY_KEYS, PASS_ONLY
+    TRKSCORE = args.trkscore
+    PASS_ONLY = args.pass_only
+    ONLY_KEYS = None if args.only_keys is None else args.only_keys.split(",")
+    if args.onbeam_file is not None:
+        if not args.full_onbeam:
+            p.error("--onbeam-file needs --full-onbeam")
+    if args.g4_scale is not None:
+        # env so spawned loader workers see it; enters loaddf's MC cache key
+        os.environ["GUMPLE_G4_UNC_SCALE"] = repr(args.g4_scale)
+        mcd.loaddf.G4_UNC_SCALE = args.g4_scale
+    if args.sbnd_no_vtx_zgap:
+        # env for loader workers; the gap enters loaddf's SBND cache key
+        os.environ["GUMPLE_SBND_VTX_ZGAP"] = "0"
+        gc.SBND_VTX_ZGAP = None
+    if args.run2_fv_include_ew:
+        # Since f140cbc (2026-11-13) the default Run 2 FV already includes TPC EW
+        # and gumple_cuts no longer reads RUN2_FV_INCLUDE_EW, so this flag would
+        # silently do nothing. Use --exclude-tpc EW for the no-EW variant.
+        p.error("--run2-fv-include-ew is obsolete: the Run 2 FV includes TPC EW by default "
+                "(use --exclude-tpc EW to drop it)")
     # fields mcd.prepare_detector reads
     args.absnorm = False  # shape-normalized only
-    args.cryostat = None
+    args.cryostat = ("no-" + args.exclude_tpc if args.exclude_tpc else
+                     "only-" + args.only_tpc if args.only_tpc else None)
     args.blinded = False
     args.offbeam_scale = 1.0
 
@@ -373,6 +541,12 @@ def parse_args(argv=None):
         else:
             p.error("unknown detector %r" % d)
     args.detector = dets
+    if args.onbeam_file is not None:
+        for d in dets:
+            mcd.FULL_ONBEAM[d] = args.onbeam_file
+    if args.offbeam_file is not None:
+        for d in dets:
+            mcd.OFFBEAM_OVERRIDE[d] = [args.offbeam_file]
     return args
 
 
@@ -382,8 +556,21 @@ def main(argv=None):
     if len(args.detector) == 1:
         return run_detector(args.detector[0], args)
 
-    passthrough = ["--df-dir", args.df_dir, "--plotdir", args.plotdir, "--nproc", str(args.nproc)]
-    for flag in ("no_dirt", "no_save"):
+    passthrough = ["--df-dir", args.df_dir, "--plotdir", args.plotdir, "--nproc", str(args.nproc),
+                   "--trkscore", args.trkscore]
+    if args.g4_scale is not None:
+        passthrough += ["--g4-scale", repr(args.g4_scale)]
+    if args.exclude_tpc:
+        passthrough += ["--exclude-tpc", args.exclude_tpc]
+    if args.only_tpc:
+        passthrough += ["--only-tpc", args.only_tpc]
+    if args.only_keys:
+        passthrough += ["--only-keys", args.only_keys]
+    if args.onbeam_file:
+        passthrough += ["--onbeam-file", args.onbeam_file]
+    if args.offbeam_file:
+        passthrough += ["--offbeam-file", args.offbeam_file]
+    for flag in ("no_dirt", "no_save", "full_onbeam", "save_plotdata", "sbnd_no_vtx_zgap", "pass_only"):
         if getattr(args, flag):
             passthrough.append("--" + flag.replace("_", "-"))
     rc = 0
