@@ -41,8 +41,9 @@ container): if the gallery calls need adjusting for your release, the reading
 is confined to read_event().
 
 Parallel: -j N runs N worker processes on slices of the file list (each into
-<outdir>/part_<k>, log in part_<k>/log.txt) and merges their averages into
-<outdir>; --merge DIR... merges existing output directories. Most of the time
+<outdir>/part_<k>; their output is discarded, a failing worker's error
+output is printed) and merges their averages into <outdir>; Ctrl-C or
+killing the main process stops all workers; --merge DIR... merges existing output directories. Most of the time
 is reading the files over xrootd, so a few workers per machine help;
 --events-per-file K spreads the same number of events over more files.
 
@@ -64,16 +65,36 @@ import time
 
 try:
     from tqdm import tqdm
-except ImportError:   # no progress bar without tqdm (pip install --user tqdm)
+except ImportError:   # a minimal text progress bar (the LArSoft python has no pip to install tqdm)
+    import sys as _sys
+
     class tqdm:
-        def __init__(self, *a, **k):
-            self.n = 0
+        def __init__(self, total=None, unit="it", desc="", disable=False, **_):
+            self.total, self.unit, self.desc, self.disable = total, unit, desc, disable
+            self.n, self.post, self.t0 = 0, "", time.time()
+            self._draw()
+
+        def _draw(self):
+            if self.disable:
+                return
+            dt = time.time() - self.t0
+            frac = self.n / self.total if self.total else 0
+            bar = "#" * int(30 * frac) + "-" * (30 - int(30 * frac))
+            eta = " eta %ds" % (dt / self.n * (self.total - self.n)) if self.n and self.total else ""
+            _sys.stderr.write("\r%s [%s] %d/%s %s %ds%s %s" % (self.desc, bar, self.n, self.total, self.unit, dt, eta, self.post))
+            _sys.stderr.flush()
+
         def update(self, n=1):
             self.n += n
-        def set_postfix_str(self, *a, **k):
-            pass
+            self._draw()
+
+        def set_postfix_str(self, s, **_):
+            self.post = s
+            self._draw()
+
         def close(self):
-            pass
+            if not self.disable:
+                _sys.stderr.write("\n")
 
 import numpy as np
 
@@ -513,15 +534,27 @@ def _finish(args, rows, saved, tails, shapes, nplot):
           % (len(saved), len(rows), nplot, args.outdir))
 
 
+def _die_with_parent():
+    """In a worker (Linux): get SIGTERM when the parent process dies, however it dies (even kill -9)."""
+    try:
+        import ctypes
+        import signal
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGTERM)   # PR_SET_PDEATHSIG
+    except Exception:
+        pass
+
+
 def run_parallel(args, files):
     """Run this script on args.jobs slices of the files (round robin) in parallel, each into
-    <outdir>/part_<k>, then merge the parts' averages into <outdir>."""
+    <outdir>/part_<k>, then merge the parts' averages into <outdir>. The workers' output is discarded
+    (a failing worker's error output is shown); Ctrl-C, kill or the parent dying stops every worker."""
+    import signal
     import subprocess
     import sys
+    import tempfile
     passthrough, skip = [], False
-    argv = sys.argv[1:]
     drop = {"-i", "--inputs", "-o", "--outdir", "-j", "--jobs"}
-    for k, a in enumerate(argv):   # every option except the inputs, outdir and jobs
+    for a in sys.argv[1:]:   # every option except the inputs, outdir and jobs
         if skip:
             if a.startswith("-"):
                 skip = False
@@ -533,39 +566,64 @@ def run_parallel(args, files):
         if any(a.startswith(d + "=") for d in drop):
             continue
         passthrough.append(a)
-    procs, parts = [], []
+    procs = []   # (process, part directory, temporary file holding its error output)
     for k in range(args.jobs):
+        mine = files[k::args.jobs]
+        if not mine:
+            continue
         part = os.path.join(args.outdir, "part_%d" % k)
         os.makedirs(part, exist_ok=True)
         lst = os.path.join(part, "inputs.txt")
-        open(lst, "w").write("\n".join(files[k::args.jobs]) + "\n")
-        if not files[k::args.jobs]:
-            continue
-        log = open(os.path.join(part, "log.txt"), "w")
+        open(lst, "w").write("\n".join(mine) + "\n")
+        err = tempfile.TemporaryFile(mode="w+")
         cmd = [sys.executable, os.path.abspath(__file__), "-i", lst, "-o", part,
-               "--progress-file", os.path.join(part, "progress.txt")] + passthrough
-        procs.append((subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT), part))
-        parts.append(part)
-    print("%d workers running (logs in %s/part_*/log.txt) ..." % (len(procs), args.outdir))
-    bar = tqdm(total=len(files), unit="file", desc="reading (%d workers)" % len(procs))
+               "--progress-file", os.path.join(part, ".progress")] + passthrough
+        procs.append((subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=err, preexec_fn=_die_with_parent), part, err))
+
+    def stop(*_):
+        for p, _, _ in procs:
+            if p.poll() is None:
+                p.terminate()
+        deadline = time.time() + 10
+        for p, _, _ in procs:
+            try:
+                p.wait(max(0.1, deadline - time.time()))
+            except subprocess.TimeoutExpired:
+                p.kill()
+        raise SystemExit("stopped: %d workers terminated" % len(procs))
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGHUP, stop)
 
     def done():
         n = 0
-        for _, part in procs:
+        for _, part, _ in procs:
             try:
-                n += int(open(os.path.join(part, "progress.txt")).read().strip() or 0)
+                n += int(open(os.path.join(part, ".progress")).read().strip() or 0)
             except (OSError, ValueError):
                 pass
         return n
-    while any(p.poll() is None for p, _ in procs):
-        bar.update(max(0, done() - bar.n))
-        time.sleep(2)
+    bar = tqdm(total=len(files), unit="file", desc="reading (%d workers)" % len(procs))
+    try:
+        while any(p.poll() is None for p, _, _ in procs):
+            bar.update(max(0, done() - bar.n))
+            time.sleep(2)
+    except KeyboardInterrupt:
+        bar.close()
+        stop()
     bar.update(max(0, done() - bar.n))
     bar.close()
-    for p, part in procs:
+    for p, part, err in procs:
         if p.returncode != 0:
-            print("worker %s exited with %d: see its log.txt" % (part, p.returncode))
-    merge(parts, args.outdir)
+            err.seek(0)
+            tail = err.read().strip().splitlines()[-15:]
+            print("worker %s exited with %d:\n  %s" % (part, p.returncode, "\n  ".join(tail)))
+        err.close()
+        for f in (".progress", "inputs.txt"):
+            try:
+                os.remove(os.path.join(part, f))
+            except OSError:
+                pass
+    merge([part for _, part, _ in procs], args.outdir)
 
 
 def merge(dirs, outdir):
