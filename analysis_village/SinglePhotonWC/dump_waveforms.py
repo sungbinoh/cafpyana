@@ -21,7 +21,12 @@ and writes
                   raw (top) and deconvolved (below) over the whole readout,
                   the signal window shaded, plus a zoom of the raw baseline
                   after the signal (where an RC undershoot sits)
-  tail_average_plane<p>.png
+  shape_average_plane<p>.png (+ shapes_plane<p>.npy)
+                  the deconvolved signal / its mean, aligned at the start of
+                  the signal and averaged per plane: the in-signal sag, the
+                  part visible without raw digits (the Gen2 MC reco1 files
+                  keep only simtpc2d:dnnsp)
+  tail_average_plane<p>.png (only with raw digits)
                   raw ADC - pedestal averaged over the listed channels of a
                   plane, aligned at the end of the signal (the longest ROI of
                   the first wire label) and normalised to the signal's
@@ -53,6 +58,7 @@ import os
 import numpy as np
 
 TICK_US = 0.5
+SHAPE_TICKS = 800      # 400 us of signal in the shape average
 TAIL_TICKS = 3000      # 1.5 ms after the signal
 PRE_TICKS = 200
 
@@ -64,6 +70,9 @@ def load_gallery():
               "lardataobj/RecoBase/Wire.h", "canvas/Utilities/InputTag.h"]:
         ROOT.gInterpreter.Declare('#include "%s"' % h)
     return ROOT
+
+
+_WARNED = set()
 
 
 class ProductNotFound(Exception):
@@ -107,7 +116,9 @@ def read_event(ROOT, ev, channels, raw_label, wire_labels):
     try:
         digits = handle(ROOT, ev, ROOT.raw.RawDigit, raw_label)
     except Exception as e:
-        print("no raw::RawDigit '%s' in this event (%s): deconvolved signals only" % (raw_label, type(e).__name__))
+        if raw_label not in _WARNED:
+            print("no raw::RawDigit '%s' (%s): deconvolved signals only (reported once)" % (raw_label, type(e).__name__))
+            _WARNED.add(raw_label)
         digits = []
     for d in digits:
         c = int(d.Channel())
@@ -122,7 +133,9 @@ def read_event(ROOT, ev, channels, raw_label, wire_labels):
         try:
             wires = handle(ROOT, ev, ROOT.recob.Wire, lab)
         except Exception as e:
-            print("no recob::Wire '%s' in this event (%s)" % (lab, type(e).__name__))
+            if lab not in _WARNED:
+                print("no recob::Wire '%s' (%s; reported once)" % (lab, type(e).__name__))
+                _WARNED.add(lab)
             continue
         for w in wires:
             c = int(w.Channel())
@@ -216,6 +229,56 @@ def plot_channel(path, row, wf, labels, win):
     plt.close(fig)
 
 
+def plot_channel_wires(path, row, wf, labels, win):
+    """The deconvolved signals only (files without raw digits): the whole readout and a zoom on the signal."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    labs = [l for l in labels if l in wf]
+    fig, axs = plt.subplots(len(labs) + 1, 1, figsize=(12, 2.6 * (len(labs) + 1)))
+    s0, s1 = win
+    for a, lab in zip(axs, labs):
+        a.plot(np.arange(len(wf[lab])) * TICK_US, wf[lab], lw=0.8, color="#2a78d6")
+        a.axvspan(s0 * TICK_US, s1 * TICK_US, color="#eb6834", alpha=0.15, lw=0)
+        a.set_ylabel(lab, fontsize=9)
+    z = axs[-1]
+    lo, hi = max(0, s0 - 100), min(len(wf[labs[0]]), s1 + 100)
+    z.plot(np.arange(lo, hi) * TICK_US, wf[labs[0]][lo:hi], lw=1.0, color="#2a78d6")
+    z.set_xlabel("time [µs]")
+    z.set_ylabel("zoom")
+    axs[0].set_title("run %s subrun %s event %s, channel %s (plane %s); deconvolved only (no raw digits); signal %.0f µs"
+                     % (row["run"], row["subrun"], row["event"], row["channel"], row["plane"], (s1 - s0) * TICK_US),
+                     loc="left", fontsize=10)
+    fig.tight_layout()
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+
+
+def plot_shape_average(path, plane, shapes):
+    """Deconvolved signal / its mean over the signal, aligned at the start, averaged over channels: the
+    in-signal sag (a fall with time), comparable between data and MC."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    S = np.array(shapes)
+    nn = np.sum(np.isfinite(S), axis=0)
+    m = np.where(nn >= 3, np.nanmean(S, axis=0), np.nan)
+    e = np.where(nn >= 3, np.nanstd(S, axis=0) / np.sqrt(nn.clip(1)), np.nan)
+    t = np.arange(S.shape[1]) * TICK_US
+    fig, (a, b) = plt.subplots(2, 1, figsize=(10, 6), sharex=True, gridspec_kw=dict(height_ratios=[3, 1]))
+    a.fill_between(t, m - e, m + e, color="#2a78d6", alpha=0.25, lw=0)
+    a.plot(t, m, color="#2a78d6", lw=1.2)
+    a.axhline(1, color="#8a8984", lw=0.8)
+    a.set_ylabel("deconvolved / its mean\nover the signal")
+    a.set_title("plane %d: average shape of %d long signals, aligned at their start" % (plane, len(S)), loc="left", fontsize=10)
+    b.plot(t, nn, color="#1f1f1e", lw=1.2)
+    b.set_ylabel("signals")
+    b.set_xlabel("time since the start of the signal [µs]")
+    fig.tight_layout()
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
+
+
 def plot_tail_average(path, plane, tails):
     import matplotlib
     matplotlib.use("Agg")
@@ -259,7 +322,8 @@ def main():
                     help="print the recob::Wire and raw::RawDigit labels in the first input file and stop")
     ap.add_argument("-o", "--outdir", default="waveforms")
     ap.add_argument("--raw-label", default="simtpc2d:daq")
-    ap.add_argument("--wire-labels", nargs="+", default=["simtpc2d:gauss", "simtpc2d:dnnsp"])
+    ap.add_argument("--wire-labels", nargs="+", default=["simtpc2d:dnnsp"],
+                    help="recob::Wire labels (the Gen2 MC reco1 keeps simtpc2d:dnnsp only; see --list-products)")
     ap.add_argument("--max-plots", type=int, default=30, help="single-channel plots written (all go in the npz and the average)")
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
@@ -275,7 +339,7 @@ def main():
     if args.list_products:
         print("\n".join(list_products(ROOT, files[0])) or "no recob::Wire / raw::RawDigit branches found")
         return
-    saved, tails, nplot, nev = {}, {}, 0, 0
+    saved, tails, shapes, nplot, nev = {}, {}, {}, 0, 0
     for k in range(0, len(files), args.chunk):
         if args.max_events and nev >= args.max_events:
             break
@@ -288,8 +352,8 @@ def main():
         for evt in ([ev] if ev is not None else []) or [_open_one(ROOT, f) for f in chunk]:
             if evt is None:
                 continue
-            nev, nplot = loop_events(ROOT, evt, args, want, rows, saved, tails, nev, nplot)
-    _finish(args, rows, saved, tails, nplot)
+            nev, nplot = loop_events(ROOT, evt, args, want, rows, saved, tails, shapes, nev, nplot)
+    _finish(args, rows, saved, tails, shapes, nplot)
 
 
 def _open_one(ROOT, f):
@@ -311,7 +375,7 @@ def expand_inputs(items):
     return list(dict.fromkeys(out))
 
 
-def loop_events(ROOT, ev, args, want, rows, saved, tails, nev, nplot):
+def loop_events(ROOT, ev, args, want, rows, saved, tails, shapes, nev, nplot):
     while not ev.atEnd() and (not args.max_events or nev < args.max_events):
         nev += 1
         aux = ev.eventAuxiliary()
@@ -326,11 +390,26 @@ def loop_events(ROOT, ev, args, want, rows, saved, tails, nev, nplot):
         if chans:
             data = read_event(ROOT, ev, list(chans), args.raw_label, args.wire_labels)
             for c, wf in data.items():
-                if "raw" not in wf:
-                    print("run %d subrun %d event %d: channel %d not in %s" % (*key, c, args.raw_label))
-                    continue
                 r = chans[c]
                 lab0 = next((l for l in args.wire_labels if l in wf), None)
+                if lab0 is None and "raw" not in wf:
+                    continue
+                if lab0 is not None:   # the in-signal shape, from the deconvolved signal
+                    a0, a1 = signal_window(wf[lab0], (int(r["tick_start"]), int(r["tick_end"])))
+                    seg = np.full(SHAPE_TICKS, np.nan)
+                    n = min(SHAPE_TICKS, a1 - a0 + 1)
+                    mean = wf[lab0][a0:a1 + 1].mean()
+                    if mean > 0:
+                        seg[:n] = wf[lab0][a0:a0 + n] / mean
+                        shapes.setdefault(int(r["plane"]), []).append(seg)
+                if "raw" not in wf:   # deconvolved only (raw digits not in the file): no tail
+                    name = "wf_%d_%d_%d_ch%d" % (*key, c)
+                    win = signal_window(wf[lab0], (int(r["tick_start"]), int(r["tick_end"])))
+                    saved[name] = dict(row=r, window=win, **wf)
+                    if nplot < args.max_plots:
+                        plot_channel_wires(os.path.join(args.outdir, name + ".png"), r, wf, args.wire_labels, win)
+                        nplot += 1
+                    continue
                 win = signal_window(wf[lab0], (int(r["tick_start"]), int(r["tick_end"]))) if lab0 else \
                     (int(r["tick_start"]), int(r["tick_end"]))
                 name = "wf_%d_%d_%d_ch%d" % (*key, c)
@@ -350,11 +429,14 @@ def loop_events(ROOT, ev, args, want, rows, saved, tails, nev, nplot):
     return nev, nplot
 
 
-def _finish(args, rows, saved, tails, nplot):
+def _finish(args, rows, saved, tails, shapes, nplot):
     np.savez_compressed(os.path.join(args.outdir, "waveforms.npz"),
                         **{k: np.array(v, dtype=object) for k, v in saved.items()})
     for p, tl in sorted(tails.items()):
         plot_tail_average(os.path.join(args.outdir, "tail_average_plane%d.png" % p), p, tl)
+    for p, sh in sorted(shapes.items()):
+        plot_shape_average(os.path.join(args.outdir, "shape_average_plane%d.png" % p), p, sh)
+        np.save(os.path.join(args.outdir, "shapes_plane%d.npy" % p), np.array(sh))
     print("found %d of %d listed channels; wrote %d plots and the averages to %s"
           % (len(saved), len(rows), nplot, args.outdir))
 
