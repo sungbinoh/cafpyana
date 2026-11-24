@@ -79,18 +79,35 @@ class ProductNotFound(Exception):
     pass
 
 
+def _template(ROOT, tmpl, arg):
+    """tmpl<arg> for both PyROOT spellings (tmpl[arg] in cppyy, tmpl(arg) in older PyROOT)."""
+    try:
+        return tmpl[arg]
+    except TypeError:
+        return tmpl(arg)
+
+
 def handle(ROOT, ev, cls, label):
-    """The std::vector<cls> product `label` of the current event. Uses getHandle (no exception when the
-    product is absent) and raises ProductNotFound with the label; see --list-products for what a file has."""
+    """The std::vector<cls> product `label` of the current event, raising ProductNotFound when absent.
+    gallery versions differ: getHandle (newer), getByLabel into a gallery::Handle (older), and as a last
+    resort getValidHandle, whose exception on a missing product is turned into ProductNotFound."""
     tag = ROOT.art.InputTag(label)
     vec = ROOT.std.vector(cls)
+    what = "no std::vector<%s> with label '%s'" % (getattr(cls, "__cpp_name__", getattr(cls, "__name__", cls)), label)
+    if hasattr(ev, "getHandle"):
+        h = _template(ROOT, ev.getHandle, vec)(tag)
+        if not h.isValid():
+            raise ProductNotFound(what)
+        return h.product()
+    if hasattr(ev, "getByLabel"):
+        h = _template(ROOT, ROOT.gallery.Handle, vec)()
+        if not ev.getByLabel(tag, h):
+            raise ProductNotFound(what)
+        return h.product()
     try:
-        h = ev.getHandle[vec](tag)
-    except TypeError:
-        h = ev.getHandle(vec)(tag)
-    if not h.isValid():
-        raise ProductNotFound("no std::vector<%s> with label '%s'" % (cls.__name__ if hasattr(cls, "__name__") else cls, label))
-    return h.product()
+        return _template(ROOT, ev.getValidHandle, vec)(tag).product()
+    except Exception as e:
+        raise ProductNotFound("%s (%s)" % (what, type(e).__name__))
 
 
 def list_products(ROOT, path, patterns=("recob::Wire", "raw::RawDigit")):
