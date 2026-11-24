@@ -5,9 +5,11 @@ data and MC. Needs the SBND software environment (gallery + lardataobj
 dictionaries, e.g. after `setup sbndcode ...`): run it there, not in the
 cafpyana venv.
 
-Input: reco1 files and the CSV of select_waveform_channels.py (run, subrun,
-event, channel, plane, ...). For each listed (run, subrun, event, channel)
-found in the files it reads
+Input: reco1 files, and either the CSV of select_waveform_channels.py (run,
+subrun, event, channel, plane, ...) or --auto N: then, in every event, the N
+channels per plane with the longest single ROI (>= --min-us) of the first
+wire label are taken, so any reco1 file works, data or MC. For each channel
+it reads
   raw::RawDigit   --raw-label     (MC: simtpc2d:daq; data: the DAQ decoder's
                                    label, check with `lar -c eventdump.fcl`)
   recob::Wire     --wire-labels   (MC: simtpc2d:gauss simtpc2d:dnnsp;
@@ -33,8 +35,15 @@ of the waveform is used). Untested here (no LArSoft in the cafpyana
 container): if the gallery calls need adjusting for your release, the reading
 is confined to read_event().
 
-  python dump_waveforms.py -i reco1_*.root --channels channels.csv -o waveforms/ \\
+  python dump_waveforms.py -i $(cat reco1_urls_mc.txt) -o waveforms_mc/ --auto 3 \\
       --raw-label simtpc2d:daq --wire-labels simtpc2d:gauss simtpc2d:dnnsp
+  python dump_waveforms.py -i $(cat reco1_urls_data.txt) -o waveforms_data/ --auto 3 \\
+      --raw-label daq --wire-labels sptpc2d:gauss sptpc2d:dnnsp
+
+Data: the signal processing reads raw::RawDigit "daq" (wcsp_data_sbnd.fcl);
+whether reco1 files keep it depends on the output's drop list. Without raw
+digits only the deconvolved signals can be shown (no tails): check one file
+with `lar -c eventdump.fcl -s <file> -n 1`.
 """
 
 import argparse
@@ -68,9 +77,15 @@ def handle(ROOT, ev, cls, label):
 
 
 def read_event(ROOT, ev, channels, raw_label, wire_labels):
-    """{channel: {"raw": adc - pedestal, label: deconvolved}} for the requested channels of the current event."""
+    """{channel: {"raw": adc - pedestal, label: deconvolved}} for the requested channels of the current event.
+    A missing product (e.g. raw digits dropped from the reco1 output) is skipped with a warning."""
     out = {c: {} for c in channels}
-    for d in handle(ROOT, ev, ROOT.raw.RawDigit, raw_label):
+    try:
+        digits = handle(ROOT, ev, ROOT.raw.RawDigit, raw_label)
+    except Exception as e:
+        print("no raw::RawDigit '%s' in this event (%s): deconvolved signals only" % (raw_label, type(e).__name__))
+        digits = []
+    for d in digits:
         c = int(d.Channel())
         if c not in out:
             continue
@@ -80,10 +95,44 @@ def read_event(ROOT, ev, channels, raw_label, wire_labels):
         ped = float(d.GetPedestal())
         out[c]["raw"] = a - (ped if ped != 0 else np.median(a))
     for lab in wire_labels:
-        for w in handle(ROOT, ev, ROOT.recob.Wire, lab):
+        try:
+            wires = handle(ROOT, ev, ROOT.recob.Wire, lab)
+        except Exception as e:
+            print("no recob::Wire '%s' in this event (%s)" % (lab, type(e).__name__))
+            continue
+        for w in wires:
             c = int(w.Channel())
             if c in out:
                 out[c][lab] = np.array(w.Signal(), dtype=float)
+    return out
+
+
+# (first channel, plane) per block of the SBND channel map (make_wc_events.CHANNEL_BLOCKS; TPC 0 then TPC 1)
+CHANNEL_BLOCKS = [(0, 0), (1984, 1), (3968, 2), (5638, 0), (7622, 1), (9606, 2), (11276, -1)]
+
+
+def channel_plane(c):
+    return [p for start, p in CHANNEL_BLOCKS if start <= c][-1]
+
+
+def longest_rois(ROOT, ev, label, min_ticks, per_plane):
+    """The channels with the longest single ROI of recob::Wire `label` in this event, per plane: {channel: row}."""
+    best = {}
+    for w in handle(ROOT, ev, ROOT.recob.Wire, label):
+        c = int(w.Channel())
+        sig = np.array(w.Signal(), dtype=float)
+        nz = np.flatnonzero(sig != 0)
+        if len(nz) < min_ticks:
+            continue
+        brk = np.flatnonzero(np.diff(nz) > 1)
+        st, en = np.r_[nz[0], nz[brk + 1]], np.r_[nz[brk], nz[-1]]
+        i = int(np.argmax(en - st))
+        if en[i] - st[i] + 1 >= min_ticks:
+            best.setdefault(channel_plane(c), []).append((en[i] - st[i], c, int(st[i]), int(en[i])))
+    out = {}
+    for plane, lst in best.items():
+        for n, c, a, b in sorted(lst, reverse=True)[:per_plane]:
+            out[c] = dict(channel=c, plane=plane, tick_start=a, tick_end=b, duration_us=(b - a) * TICK_US)
     return out
 
 
@@ -167,8 +216,16 @@ def plot_tail_average(path, plane, tails):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("-i", "--inputs", nargs="+", required=True, help="reco1 art-ROOT files")
-    ap.add_argument("--channels", required=True, help="CSV from select_waveform_channels.py")
+    ap.add_argument("-i", "--inputs", nargs="+", required=True,
+                    help="reco1 art-ROOT files or xrootd URLs, and / or text files listing them one per line "
+                         "(a .txt / .list argument is read as a list: no shell argument-length limit)")
+    ap.add_argument("--chunk", type=int, default=20, help="files opened per gallery pass (default 20)")
+    ap.add_argument("--channels", help="CSV from select_waveform_channels.py; without it, --auto")
+    ap.add_argument("--auto", type=int, default=3, metavar="N",
+                    help="without --channels: the N channels per plane with the longest ROI of the first wire label, "
+                         "in every event (default 3)")
+    ap.add_argument("--min-us", type=float, default=40.0, help="--auto: shortest ROI kept [us] (default 40)")
+    ap.add_argument("--max-events", type=int, default=0, help="stop after this many events (0: all)")
     ap.add_argument("-o", "--outdir", default="waveforms")
     ap.add_argument("--raw-label", default="simtpc2d:daq")
     ap.add_argument("--wire-labels", nargs="+", default=["simtpc2d:gauss", "simtpc2d:dnnsp"])
@@ -176,18 +233,63 @@ def main():
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
-    rows = list(csv.DictReader(open(args.channels)))
-    want = {}
-    for r in rows:
-        want.setdefault((int(r["run"]), int(r["subrun"]), int(r["event"])), []).append(r)
+    rows, want = [], {}
+    if args.channels:
+        rows = list(csv.DictReader(open(args.channels)))
+        for r in rows:
+            want.setdefault((int(r["run"]), int(r["subrun"]), int(r["event"])), []).append(r)
+    files = expand_inputs(args.inputs)
+    print("%d input files" % len(files))
     ROOT = load_gallery()
-    ev = ROOT.gallery.Event(ROOT.std.vector("std::string")(args.inputs))
-    saved, tails, nplot = {}, {}, 0
-    while not ev.atEnd():
+    saved, tails, nplot, nev = {}, {}, 0, 0
+    for k in range(0, len(files), args.chunk):
+        if args.max_events and nev >= args.max_events:
+            break
+        chunk = files[k:k + args.chunk]
+        try:
+            ev = ROOT.gallery.Event(ROOT.std.vector("std::string")(chunk))
+        except Exception as e:   # one unreadable file: try the chunk's files one by one
+            print("chunk %d: %s; opening its files one at a time" % (k // args.chunk, e))
+            ev = None
+        for evt in ([ev] if ev is not None else []) or [_open_one(ROOT, f) for f in chunk]:
+            if evt is None:
+                continue
+            nev, nplot = loop_events(ROOT, evt, args, want, rows, saved, tails, nev, nplot)
+    _finish(args, rows, saved, tails, nplot)
+
+
+def _open_one(ROOT, f):
+    try:
+        return ROOT.gallery.Event(ROOT.std.vector("std::string")([f]))
+    except Exception as e:
+        print("skip %s (%s)" % (f, e))
+        return None
+
+
+def expand_inputs(items):
+    """Files / URLs, with .txt / .list arguments read as one entry per line (# comments, blank lines skipped)."""
+    out = []
+    for it in items:
+        if it.endswith((".txt", ".list")) and os.path.isfile(it):
+            out += [l.strip() for l in open(it) if l.strip() and not l.startswith("#")]
+        else:
+            out.append(it)
+    return list(dict.fromkeys(out))
+
+
+def loop_events(ROOT, ev, args, want, rows, saved, tails, nev, nplot):
+    while not ev.atEnd() and (not args.max_events or nev < args.max_events):
+        nev += 1
         aux = ev.eventAuxiliary()
         key = (int(aux.run()), int(aux.subRun()), int(aux.event()))
-        if key in want:
+        chans = None
+        if args.channels and key in want:
             chans = {int(r["channel"]): r for r in want[key]}
+        elif not args.channels:
+            found = longest_rois(ROOT, ev, args.wire_labels[0], int(args.min_us / TICK_US), args.auto)
+            chans = {c: dict(r, run=key[0], subrun=key[1], event=key[2]) for c, r in found.items()}
+            rows += list(chans.values())
+        if chans:
             data = read_event(ROOT, ev, list(chans), args.raw_label, args.wire_labels)
             for c, wf in data.items():
                 if "raw" not in wf:
@@ -211,6 +313,10 @@ def main():
                 if q > 0:
                     tails.setdefault(int(r["plane"]), []).append(seg / q)
         ev.next()
+    return nev, nplot
+
+
+def _finish(args, rows, saved, tails, nplot):
     np.savez_compressed(os.path.join(args.outdir, "waveforms.npz"),
                         **{k: np.array(v, dtype=object) for k, v in saved.items()})
     for p, tl in sorted(tails.items()):
