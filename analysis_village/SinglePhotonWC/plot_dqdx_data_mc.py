@@ -322,7 +322,7 @@ def profile(p, coord, bins):
     return out
 
 
-def plot_dist(name, title, bins, on, mc, off, out, mc_alt=None):
+def plot_dist(name, title, bins, on, mc, off, out, mc_alt=None, xlabel="dQ/dx [MIP]", alt_label=ALT_LABEL):
     hd = np.histogram(on.dqdx, bins)[0]
     hm = np.histogram(mc.dqdx, bins, weights=mc.w)[0]
     ho = np.histogram(off.dqdx, bins, weights=off.w)[0]
@@ -339,7 +339,7 @@ def plot_dist(name, title, bins, on, mc, off, out, mc_alt=None):
     if mc_alt is not None:
         ha = np.histogram(mc_alt.dqdx, bins, weights=mc_alt.w)[0]
         pa = (ha + ho) * hd.sum() / max(ha.sum() + ho.sum(), 1e-12)
-        a.stairs(pa, bins, color=ALT_COLOR, lw=2, label=ALT_LABEL)
+        a.stairs(pa, bins, color=ALT_COLOR, lw=2, label=alt_label)
         oka = pa > 0
         r.errorbar(c[oka], hd[oka] / pa[oka], np.sqrt(hd[oka]) / pa[oka], fmt="s", color=ALT_COLOR, ms=3)
         ma = median_err(np.r_[mc_alt.dqdx, off.dqdx], np.r_[mc_alt.w, off.w])[0]
@@ -347,7 +347,7 @@ def plot_dist(name, title, bins, on, mc, off, out, mc_alt=None):
     r.axhline(1, color="k", lw=1)
     r.set_ylim(0, 2)
     r.set_ylabel("data / pred.")
-    r.set_xlabel("dQ/dx [MIP]")
+    r.set_xlabel(xlabel)
     a.set_ylabel("entries (pred. scaled to data)")
     md = median_err(on.dqdx.to_numpy(float), on.w.to_numpy(float))[0]
     mp = median_err(np.r_[mc.dqdx, off.dqdx], np.r_[mc.w, off.w])[0]
@@ -375,7 +375,8 @@ def _record(sample, coord, lo, hi, on, pred, alt=None, extra=None):
                                  pred_datarecomb=Pa[i, 0], pred_datarecomb_err=Pa[i, 1]))
 
 
-def plot_profile(name, title, coord, bins, label, on, mc, off, out, mc_alt=None, ylabel="median dQ/dx [MIP]"):
+def plot_profile(name, title, coord, bins, label, on, mc, off, out, mc_alt=None, ylabel="median dQ/dx [MIP]",
+                 alt_label=ALT_LABEL):
     pred = pd.concat([mc, off])
     _record(name, coord, bins[:-1], bins[1:], on, pred, pd.concat([mc_alt, off]) if mc_alt is not None else None)
     P = {k: profile(d, coord, bins) for k, d in [("on", on), ("pred", pred), ("mc", mc)]}
@@ -406,7 +407,7 @@ def plot_profile(name, title, coord, bins, label, on, mc, off, out, mc_alt=None,
     lims = [np.nanmax(np.abs(ratio - 1) + np.nan_to_num(rerr)) if np.isfinite(ratio).any() else 0.1]
     if mc_alt is not None:
         Pa = profile(pd.concat([mc_alt, off]), coord, bins)
-        a.stairs(Pa[:, 0], bins, baseline=None, color=ALT_COLOR, lw=2, ls="--", label=ALT_LABEL)
+        a.stairs(Pa[:, 0], bins, baseline=None, color=ALT_COLOR, lw=2, ls="--", label=alt_label)
         ra = P["on"][:, 0] / Pa[:, 0]
         rae = ra * np.hypot(P["on"][:, 1] / P["on"][:, 0], Pa[:, 1] / Pa[:, 0])
         r.errorbar(c + 0.25 * xe, ra, rae, fmt="s", color=ALT_COLOR, ms=3)
@@ -791,7 +792,9 @@ for _pl in range(3):
         SAMPLES["pandcal_%s_p%d" % (_q, _pl)] = dict(
             table=CAL_KEY, fn=(lambda pl, q: lambda w, t: _pandcal(t, pl, q))(_pl, _q),
             title="longest Pandora muon-like track, plane %d: median calibrated %s (wires at rr > %g cm)" % (_pl, _lab, RR_MIP_MIN),
-            bins=_bins, ylabel="median " + _lab, wc=False, swap=_pandcal_swap(_q))
+            bins=_bins, ylabel="median " + _lab, wc=False, swap=_pandcal_swap(_q),
+            alt_label="MC also with the SBND data recombination (one model on both: a reference, not a prediction)"
+            if _q == "dedx" else ALT_LABEL)
 
 
 def main():
@@ -861,7 +864,8 @@ def main():
         if swap is not None and "angle_drift" in mc and not args.no_recomb_swap:
             alt = mc.assign(dqdx=swap(mc))
         if args.dist:
-            plot_dist(name, full, bins, on, mc, off, args.outdir, alt)
+            plot_dist(name, full, bins, on, mc, off, args.outdir, alt, xlabel=spec.get("ylabel", "median dQ/dx [MIP]").replace("median ", "").replace("mean ", ""),
+                      alt_label=spec.get("alt_label", ALT_LABEL))
         md = median_err(on.dqdx.to_numpy(float), on.w.to_numpy(float))[0]
         mp = median_err(np.r_[mc.dqdx, off.dqdx], np.r_[mc.w, off.w])[0]
         line = "%-22s median data %.4g, prediction %.4g, ratio %.3f (by TPC: %s)" % (
@@ -875,7 +879,7 @@ def main():
             if coord in on and coord in args.coords:
                 cbins = angle_bins(coord, args.angle_bin) if cbins is None else cbins
                 plot_profile(name, full, coord, cbins, label, on, mc, off, args.outdir, alt,
-                             ylabel=spec.get("ylabel", "median dQ/dx [MIP]"))
+                             ylabel=spec.get("ylabel", "median dQ/dx [MIP]"), alt_label=spec.get("alt_label", ALT_LABEL))
                 if args.by_tpc and coord != "x":
                     plot_profile_tpc(name, full, coord, cbins, label, on, mc, off, args.outdir)
                 if coord == "rr" and "angle_drift" in on:
