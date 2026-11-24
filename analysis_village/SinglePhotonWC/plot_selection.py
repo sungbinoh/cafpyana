@@ -9,6 +9,9 @@
                              shw_sp_energy: systematics by group (if the
                              inputs have wgt / slimwgt tables), MC statistics,
                              and the data statistics expected at --data-pot
+  final_xsec_breakdown.png   the cross-section (GENIE) uncertainty on the
+                             selected signal and background rates, knob by
+                             knob (with the wgt table; not with slimwgt)
   final_scores_nminus1.png   each score cut with every other cut applied
   selection_sequential.png   each cut variable with the earlier cuts
                              applied, signal vs background
@@ -404,6 +407,68 @@ def plot_multiplicity(w, pot, out, var="pf_n_em_primary", L=5):
     return R
 
 
+XSEC_LABELS = {   # GENIE knob -> what it varies
+    "MaNCRES": "NC resonance axial mass", "MvNCRES": "NC resonance vector mass",
+    "MaCCRES": "CC resonance axial mass", "MvCCRES": "CC resonance vector mass",
+    "RDecBR1gamma": "Δ → Nγ branching ratio", "RDecBR1eta": "resonance → Nη branching ratio",
+    "Theta_Delta2Npi": "Δ → Nπ decay angle", "ThetaDelta2NRad": "Δ → Nγ decay angle",
+    "NormNCCOH": "NC coherent π normalisation", "NormCCCOH": "CC coherent π normalisation",
+    "FrAbs_pi": "π absorption (FSI)", "FrCEx_pi": "π charge exchange (FSI)", "FrInel_pi": "π inelastic (FSI)",
+    "FrPiProd_pi": "π production by π (FSI)", "MFP_pi": "π mean free path (FSI)",
+    "FrAbs_N": "nucleon absorption (FSI)", "FrCEx_N": "nucleon charge exchange (FSI)", "FrInel_N": "nucleon inelastic (FSI)",
+    "FrPiProd_N": "π production by nucleons (FSI)", "MFP_N": "nucleon mean free path (FSI)",
+    "NormCCMEC": "CC MEC normalisation", "NormNCMEC": "NC MEC normalisation", "DecayAngMEC": "MEC decay angle",
+    "MaNCEL": "NC elastic axial mass", "EtaNCEL": "NC elastic η", "AhtBY": "DIS Bodek-Yang A_ht", "BhtBY": "DIS Bodek-Yang B_ht",
+    "CV1uBY": "DIS Bodek-Yang C_V1u", "CV2uBY": "DIS Bodek-Yang C_V2u", "VecFFCCQEshape": "CCQE vector form factor",
+    "RPA_CCQE": "CCQE RPA", "CoulombCCQE": "CCQE Coulomb", "ZExpA1CCQE": "CCQE z-exp. a1", "ZExpA2CCQE": "CCQE z-exp. a2",
+    "ZExpA3CCQE": "CCQE z-exp. a3", "ZExpA4CCQE": "CCQE z-exp. a4",
+}
+
+
+def plot_xsec_breakdown(w, chain, wgt, out, n_top=12):
+    """Integrated GENIE uncertainty on the selected signal and background rates, per knob (paired bars, the
+    knobs ordered by the larger of the two), with the knobs' quadrature sum on top."""
+    sel = w[cuts.passes(w, chain)]
+    sig = cuts.is_signal_cat(sel.cat)
+    knobs = [k for k in wgt.columns.get_level_values(0).unique() if k.startswith("GENIE") and k != "GENIE"]
+    if not knobs:
+        print("no per-knob GENIE weights (slimwgt?): skipping final_xsec_breakdown.png")
+        return None
+    rows = {}
+    for name, s in [("signal", sel[sig]), ("background", sel[~sig])]:
+        g = pd.Series("all", index=s.index)
+        rows[name] = pd.Series({k.replace("GENIEReWeight_SBN_v1_multisigma_", ""): cutflow.syst_unc(s, wgt[[k]], g).iloc[0, 0]
+                                for k in knobs})
+        rows[name + "_total"] = cutflow.syst_unc(s, wgt[knobs], g).iloc[0]["genie"]
+    T = pd.DataFrame({"signal": rows["signal"], "background": rows["background"]})
+    T = T.loc[T.max(axis=1).sort_values(ascending=False).index[:n_top]]
+    labels = ["all GENIE knobs (quadrature)"] + [XSEC_LABELS.get(k, k) for k in T.index]
+    vs = np.r_[rows["signal_total"], T.signal.to_numpy()] * 100
+    vb = np.r_[rows["background_total"], T.background.to_numpy()] * 100
+    y = np.arange(len(labels))[::-1].astype(float)
+    y[0] += 0.5   # a gap below the total
+    fig, ax = plt.subplots(figsize=(10, 0.55 * len(labels) + 1.8))
+    h = 0.38
+    for v, dy, col, lab, n in [(vs, h / 2, "#2a78d6", "signal", sig.sum()), (vb, -h / 2, "#eb6834", "background", (~sig).sum())]:
+        ax.barh(y + dy, v, height=h - 0.04, color=col, label="%s (%d MC candidates)" % (lab, n))
+        for yi, vi in zip(y + dy, v):
+            ax.text(vi + 0.3, yi, "%.1f%%" % vi, va="center", fontsize=8.5, color="#1f1f1e")
+    ax.set_yticks(y, labels, fontsize=10)
+    ax.get_yticklabels()[0].set_fontweight("bold")
+    ax.set_xlabel("uncertainty on the selected rate [%]")
+    ax.set_xlim(0, max(vs.max(), vb.max()) * 1.15)
+    ax.grid(axis="y", visible=False)
+    ax.legend(frameon=False, fontsize=10, loc="lower right")
+    ax.set_title("Cross-section (GENIE) uncertainties after the full selection, largest %d knobs" % len(T),
+                 loc="left", fontsize=11)
+    fig.tight_layout()
+    fig.savefig(os.path.join(out, "final_xsec_breakdown.png"), dpi=150)
+    plt.close(fig)
+    T.assign(signal=100 * T.signal, background=100 * T.background).to_csv(
+        os.path.join(out, "final_xsec_breakdown.csv"), float_format="%.3g")
+    return T
+
+
 def load_cached(inputs, uboone_bdt, cache=None, nproc=None):
     """cutflow.load, through the pickles in cache (written on the first run)."""
     if cache and os.path.exists(os.path.join(cache, "w_ub.pkl")):
@@ -442,6 +507,8 @@ def main():
     plot_eff_purity(t, pot, args.outdir)
     plot_composition(t, pot, args.outdir)
     plot_frac_uncertainty(w, chain, pot, args.outdir, wgt, args.data_pot)
+    if wgt is not None:
+        plot_xsec_breakdown(w, chain, wgt, args.outdir)
     U = frac_uncertainty(sel, wgt, pot, [], ENERGY_BINS)
     plot_energy(w, chain, sc, args.outdir, U.loc[list(range(len(ENERGY_BINS) - 1)), "syst"].to_numpy(float)
                 if "syst" in U else None)
