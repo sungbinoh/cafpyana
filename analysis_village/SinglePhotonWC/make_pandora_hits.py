@@ -180,3 +180,71 @@ def make_pandora_hittrain_df(f):
     except Exception as e:
         print("make_pandora_hittrain_df: skipped (%s: %s)" % (type(e).__name__, e))
         return _empty_trains()
+
+
+# ---- per-wire charge (key "pandwire") ----
+# SBND's Gnocchi calorimetry (ChargeMethod 3, SummedIntegral) makes one calo point per ROI snippet a track
+# crosses on a wire: dqdx = (summed integral of the track's hits in that snippet) / the full per-wire pitch,
+# integral = the largest of those hits, sumadc = the snippet's whole ADC sum (ROISummedADC). A signal the
+# signal processing splits into several ROIs gives several points on one wire, each with the full pitch, so the
+# per-point dQ/dx of long signals falls with the number of ROIs (MC too). Summing the points of a wire undoes it.
+WIRE_MIN_US = 4.0        # wires with an expected signal duration below this (pitch |cos phi| / v_drift) ...
+WIRE_PRESCALE = 10       # ... kept one in this many (by wire number), weight column "prescale"
+DRIFT_SPEED_CM_US = 0.1563
+WIRE_LEAVES = ["wire", "start", "end", "dqdx", "integral", "sumadc", "rr", "x", "phi", "pitch"]
+
+
+def _empty_wires():
+    return pd.DataFrame(index=pd.MultiIndex.from_arrays([[]] * 5, names=LEVELS + ["plane", "wire"]))
+
+
+def _plane_wires(tree, plane, keep):
+    h = loadbranches(tree, [TRK + "calo.%d.points.%s" % (plane, k) for k in WIRE_LEAVES])
+    h.columns = [col[-1] for col in h.columns]
+    h = h[h.index.droplevel(-1).isin(keep)].reset_index(level=-1, drop=True).reset_index()
+    if not len(h):
+        return pd.DataFrame()
+    h["q"] = h.dqdx * h.pitch                     # calibrated summed integral of the snippet
+    h["ticks"] = (h.end - h.start + 1).clip(lower=1)
+    g = h.groupby(LEVELS + ["wire"])
+    out = pd.DataFrame({
+        "n_points": g.size(), "q": g.q.sum(), "integral": g.integral.sum(), "sumadc": g.sumadc.sum(),
+        "roi_ticks": g.ticks.sum(), "t_start": g.start.min(), "t_end": g.end.max(),
+        "pitch": g.pitch.median(), "phi": np.degrees(g.phi.median()), "rr_min": g.rr.min(), "rr_max": g.rr.max(),
+        "x": g.x.median()})
+    out["t_wire"] = out.pitch * np.abs(np.cos(np.radians(out.phi))) / DRIFT_SPEED_CM_US
+    wire = out.index.get_level_values("wire").to_numpy()
+    short = out.t_wire.to_numpy() < WIRE_MIN_US
+    out = out[~short | (wire % WIRE_PRESCALE == 0)]
+    out["prescale"] = np.where(out.t_wire < WIRE_MIN_US, WIRE_PRESCALE, 1)
+    out["plane"] = plane
+    return out.set_index("plane", append=True).reorder_levels(LEVELS + ["plane", "wire"])
+
+
+def make_pandora_wire_df(f):
+    """One row per (entry, slice, pfp, plane, wire): the charge one Pandora
+    track (>= TRK_MIN_LEN) leaves on one wire, summed over its calo points
+    (ROI snippets) on that wire: n_points, q (sum of dqdx x pitch: calibrated
+    summed integral), integral (sum of the largest hit per snippet), sumadc
+    (sum of the snippets' ADC sums), roi_ticks (summed snippet lengths),
+    t_start / t_end, pitch, phi (deg), rr_min / rr_max, x, t_wire (expected
+    duration, us), prescale (wires with t_wire < WIRE_MIN_US kept 1 in
+    WIRE_PRESCALE), plus the track variables. Never raises (see
+    make_pandora_trkhit_df)."""
+    try:
+        if "recTree" not in f or not f["recTree"].num_entries:
+            return _empty_wires()
+        tree = f["recTree"]
+        t = _tracks(tree)
+        if not len(t):
+            return _empty_wires()
+        parts = [p for p in (_plane_wires(tree, pl, t.index) for pl in range(3)) if len(p)]
+        if not parts:
+            return _empty_wires()
+        out = pd.concat(parts)
+        tcols = ["len", "dir_x", "dir_y", "dir_z", "chi2_mu", "chi2_p", "track_score", "is_clear_cosmic", "nu_score"] + \
+                (["true_pdg"] if "true_pdg" in t else [])
+        return out.join(t[tcols], on=LEVELS).astype(np.float32)
+    except Exception as e:
+        print("make_pandora_wire_df: skipped (%s: %s)" % (type(e).__name__, e))
+        return _empty_wires()

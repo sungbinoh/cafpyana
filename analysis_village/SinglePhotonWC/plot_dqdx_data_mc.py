@@ -148,6 +148,8 @@ SEG_LEVELS = ["file", "__ntuple", "entry", "nu_index", "kine_index", "seg"]   # 
 PAND_LEVELS = ["file", "__ntuple", "entry", "rec.slc..index", "rec.slc.reco.pfp..index", "plane"]
 TRAIN_KEY = "pandtrain"
 TRAIN_LEVELS = PAND_LEVELS + ["wire", "train"]
+WIRE_KEY = "pandwire"
+WIRE_LEVELS = PAND_LEVELS + ["wire"]
 CAND_LEVELS = ["file", "__ntuple", "entry", "nu_index"]
 RR_MIP_MIN = 30.0   # cm, residual range above which a muon is a MIP (no Bragg rise)
 MC_COLOR, PRED_COLOR, ALT_COLOR = "#2a78d6", "#1f1f1e", "#1baf7a"
@@ -698,12 +700,12 @@ def plot_recomb_fit(name, title, bins, on, mc, off, out, fit):
 
 def load_table(inputs, key, keep=None, nproc=None):
     """The trkseg (rows of the candidates in keep, an index over CAND_LEVELS),
-    pandtrk or pandtrain table; None if the inputs have none."""
+    pandtrk, pandtrain or pandwire table; None if the inputs have none."""
     files = dfio.expand_inputs(inputs)
     if key not in dfio.file_keys(files[0]):
         return None
 
-    names = {SEG_KEY: SEG_LEVELS, PAND_KEY: PAND_LEVELS, TRAIN_KEY: TRAIN_LEVELS}[key]
+    names = {SEG_KEY: SEG_LEVELS, PAND_KEY: PAND_LEVELS, TRAIN_KEY: TRAIN_LEVELS, WIRE_KEY: WIRE_LEVELS}[key]
     lost = []
 
     def select(k, d):
