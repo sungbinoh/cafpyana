@@ -60,6 +60,20 @@ with `lar -c eventdump.fcl -s <file> -n 1`.
 import argparse
 import csv
 import os
+import time
+
+try:
+    from tqdm import tqdm
+except ImportError:   # no progress bar without tqdm (pip install --user tqdm)
+    class tqdm:
+        def __init__(self, *a, **k):
+            self.n = 0
+        def update(self, n=1):
+            self.n += n
+        def set_postfix_str(self, *a, **k):
+            pass
+        def close(self):
+            pass
 
 import numpy as np
 
@@ -338,7 +352,8 @@ def main():
     ap.add_argument("-i", "--inputs", nargs="+", required=True,
                     help="reco1 art-ROOT files or xrootd URLs, and / or text files listing them one per line "
                          "(a .txt / .list argument is read as a list: no shell argument-length limit)")
-    ap.add_argument("--chunk", type=int, default=20, help="files opened per gallery pass (default 20)")
+    ap.add_argument("--chunk", type=int, default=1, help="files opened per gallery pass (default 1: per-file progress)")
+    ap.add_argument("--progress-file", help=argparse.SUPPRESS)   # set by -j: the worker reports files done there
     ap.add_argument("--channels", help="CSV from select_waveform_channels.py; without it, --auto")
     ap.add_argument("--auto", type=int, default=3, metavar="N",
                     help="without --channels: the N channels per plane with the longest ROI of the first wire label, "
@@ -383,9 +398,15 @@ def main():
     saved, tails, shapes, nplot, nev = {}, {}, {}, 0, 0
     if args.events_per_file:
         args.chunk = 1
+    bar = tqdm(total=len(files), unit="file", desc="reading", disable=bool(args.progress_file))
     for k in range(0, len(files), args.chunk):
         if args.max_events and nev >= args.max_events:
             break
+        if k:
+            bar.update(args.chunk)
+            bar.set_postfix_str("%d events, %d signals" % (nev, sum(len(v) for v in shapes.values())))
+            if args.progress_file:
+                open(args.progress_file, "w").write("%d\n" % k)
         chunk = files[k:k + args.chunk]
         try:
             ev = ROOT.gallery.Event(ROOT.std.vector("std::string")(chunk))
@@ -396,6 +417,10 @@ def main():
             if evt is None:
                 continue
             nev, nplot = loop_events(ROOT, evt, args, want, rows, saved, tails, shapes, nev, nplot)
+    bar.update(len(files) - bar.n)
+    bar.close()
+    if args.progress_file:
+        open(args.progress_file, "w").write("%d\n" % len(files))
     _finish(args, rows, saved, tails, shapes, nplot)
 
 
@@ -517,12 +542,28 @@ def run_parallel(args, files):
         if not files[k::args.jobs]:
             continue
         log = open(os.path.join(part, "log.txt"), "w")
-        cmd = [sys.executable, os.path.abspath(__file__), "-i", lst, "-o", part] + passthrough
+        cmd = [sys.executable, os.path.abspath(__file__), "-i", lst, "-o", part,
+               "--progress-file", os.path.join(part, "progress.txt")] + passthrough
         procs.append((subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT), part))
         parts.append(part)
     print("%d workers running (logs in %s/part_*/log.txt) ..." % (len(procs), args.outdir))
+    bar = tqdm(total=len(files), unit="file", desc="reading (%d workers)" % len(procs))
+
+    def done():
+        n = 0
+        for _, part in procs:
+            try:
+                n += int(open(os.path.join(part, "progress.txt")).read().strip() or 0)
+            except (OSError, ValueError):
+                pass
+        return n
+    while any(p.poll() is None for p, _ in procs):
+        bar.update(max(0, done() - bar.n))
+        time.sleep(2)
+    bar.update(max(0, done() - bar.n))
+    bar.close()
     for p, part in procs:
-        if p.wait() != 0:
+        if p.returncode != 0:
             print("worker %s exited with %d: see its log.txt" % (part, p.returncode))
     merge(parts, args.outdir)
 
