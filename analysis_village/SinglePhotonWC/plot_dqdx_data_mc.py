@@ -53,7 +53,7 @@ Samples (SAMPLES):
   all over hits with residual range > 30 cm; Pandora's hits come from the
   same signal-processing output as Wire-Cell's imaging
   from the pandwire, pandtrk and hdr tables, through the cafpyana dE/dx
-  calibration chain (pandora_calib.py: YZ maps, electron lifetime on data and
+  calibration chain (pandora_calib.py, no CVMFS needed: YZ maps, electron lifetime on data and
   MC, gains, then recombination; the CAF's own dQ/dx leaves the MC without its
   35 ms lifetime correction), the longest Pandora muon-like track of each
   event with a --stage candidate, per plane, median over its wires at
@@ -814,7 +814,9 @@ def main():
     ap.add_argument("--by-tpc", action="store_true", help="also the profiles split by TPC")
     ap.add_argument("--no-recomb-swap", action="store_true", help="no MC prediction with the data recombination")
     ap.add_argument("--fit-recomb", action="store_true", help="fit the ellipsoid ratio R and an MC scale to the angle profile")
-    ap.add_argument("--sbnd-data", help="sbnd_data directory for the pandcal samples (default $SBND_DATA_DIR, else CVMFS)")
+    ap.add_argument("--sbnd-data", help="sbnd_data directory for the pandcal samples (default: the copies in pandora_calib)")
+    ap.add_argument("--lifetime-db", default="v01_41_00", choices=list(pandora_calib.ETAU_TABLES),
+                    help="embedded sbnd_data lifetime database version (default v01_41_00, as chi2pid)")
     ap.add_argument("-j", "--nproc", type=int, help="worker processes (default: up to 8)")
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
@@ -829,7 +831,7 @@ def main():
     weight = {"mc": sc_mc, "on": 1.0, "off": sc_off}
     inputs = {"mc": args.mc, "on": args.onbeam, "off": args.offbeam}
     tables = {}
-    cal = pandora_calib.Calibration(args.sbnd_data) if any(SAMPLES[n]["table"] == CAL_KEY for n in args.samples) else None
+    cal = pandora_calib.Calibration(args.sbnd_data, args.lifetime_db) if any(SAMPLES[n]["table"] == CAL_KEY for n in args.samples) else None
     for key in {SAMPLES[n]["table"] for n in args.samples} - {None}:
         if key == CAL_KEY:
             t = {k: load_pandcal(inputs[k], cands[k], k != "mc", cal, args.nproc) for k in cands}
