@@ -49,9 +49,10 @@ echo "$total names, $(wc -l < "$todo") to look up with $JOBS parallel jobs" >&2
 
 lookup() {
     f=$1
-    url=$(timeout 120 samweb -e sbnd get-file-access-url --schema=root "$f" 2>/dev/null | head -1)
+    # only a root:// line is a URL (samweb can print an error message on stdout)
+    url=$(timeout 120 samweb -e sbnd get-file-access-url --schema=root "$f" 2>/dev/null | grep -m1 '^root://')
     if [ -z "$url" ]; then
-        loc=$(timeout 120 samweb -e sbnd locate-file "$f" 2>/dev/null | head -1)
+        loc=$(timeout 120 samweb -e sbnd locate-file "$f" 2>/dev/null | grep -m1 -E '^[a-z]+:/pnfs/')
         if [ -n "$loc" ]; then
             dir=$(echo "$loc" | sed -e 's/^[a-z]*://' -e 's/(.*)$//')
             url="root://fndcadoor.fnal.gov:1094/$(echo "$dir" | sed 's|^/pnfs/\([^/]*\)/|/pnfs/fnal.gov/usr/\1/|')/$f"
