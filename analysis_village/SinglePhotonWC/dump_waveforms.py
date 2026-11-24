@@ -101,7 +101,11 @@ def handle(ROOT, ev, cls, label):
         return h.product()
     if hasattr(ev, "getByLabel"):
         h = _template(ROOT, ROOT.gallery.Handle, vec)()
-        if not ev.getByLabel(tag, h):
+        try:
+            ok = ev.getByLabel(tag, h)
+        except TypeError:   # explicit template argument needed
+            ok = _template(ROOT, ev.getByLabel, vec)(tag, h)
+        if not ok:
             raise ProductNotFound(what)
         return h.product()
     try:
