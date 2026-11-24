@@ -38,7 +38,8 @@ NU_KEY = ["file", "__ntuple", "entry", "tmatch_idx"]
 def load(inputs, uboone_bdt=None, nproc=None):
     """(candidates with truth and cat, mcnu with cat, POT). With uboone_bdt,
     the candidates also get the MicroBooNE BDT scores (ub_*)."""
-    frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "mcnu", "wcevt"], nproc=nproc)
+    files = dfio.expand_inputs(inputs)
+    frames, totals = dfio.load(files, keys=["wc", "mcnu", "wcevt"] + numu_keys(files), nproc=nproc)
     w, m, ev = frames["wc"], frames["mcnu"], frames["wcevt"]
     m.index = m.index.set_names(NU_KEY)
     if len(ev):
@@ -50,10 +51,29 @@ def load(inputs, uboone_bdt=None, nproc=None):
     w = w.join(m.drop(columns=["cat", "wc_valid"]), on=NU_KEY)
     w["wc_valid"] = 1  # a candidate implies Wire-Cell output
     w["cat"] = cuts.truth_category(w)
+    w = add_numu_score(w, frames, ismc=True)
     if uboone_bdt:
         from analysis_village.SinglePhotonWC import microboone_bdt
         w = w.join(microboone_bdt.score(w, uboone_bdt, nproc=nproc))
     return w, m, totals.pot.sum()
+
+
+NUMU_KEY = "numuobj"
+
+
+def numu_keys(files):
+    """["numuobj"] if the inputs carry the numu BDT object table (configs since the numu_round3af BDT), else []."""
+    return [NUMU_KEY] if NUMU_KEY in dfio.file_keys(files[0]) else []
+
+
+def add_numu_score(w, frames, ismc):
+    """The numu_round3af BDT values (numu_bdt.score: numu_score_3af, the small-model values, numu_cc_flag_3af;
+    the simulation charge correction on MC) joined to the candidates, when the inputs have the numuobj table."""
+    if NUMU_KEY not in frames or not len(w):
+        print("No numuobj table in the inputs (older dataframes): no numu_score_3af.")
+        return w
+    from analysis_village.SinglePhotonWC import numu_bdt
+    return w.join(numu_bdt.score(w, frames[NUMU_KEY], ismc))
 
 
 WEIGHT_KEYS = ("wgt", "slimwgt")   # full / slim systematic weights, index as mcnu

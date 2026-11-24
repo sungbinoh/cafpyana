@@ -1,0 +1,1 @@
+Copied from https://github.com/Ningclover/sbnd-wirecell-bdt releases/numu_round3af at commit 0f13988 (2026-11-24): the xgboost models, manifest, simulation correction and the release README.

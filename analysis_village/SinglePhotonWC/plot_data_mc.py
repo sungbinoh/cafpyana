@@ -48,7 +48,7 @@ import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 from analysis_village.SinglePhotonWC import cuts, dfio  # noqa: E402
-from analysis_village.SinglePhotonWC.cutflow import load as load_mc  # noqa: E402
+from analysis_village.SinglePhotonWC.cutflow import add_numu_score, load as load_mc, numu_keys  # noqa: E402
 from analysis_village.SinglePhotonWC.plot_selection import GROUPS  # noqa: E402
 
 plt.style.use(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dune.mplstyle"))
@@ -116,8 +116,9 @@ VARIABLES = [   # name, column or function of the candidate frame, bins, axis la
 def load_data(inputs, nproc=None, uboone_bdt=True):
     """On- or off-beam data: (candidates with the uB scores, POT from the hdr
     table, off-beam BNB gates)."""
-    frames, totals = dfio.load(dfio.expand_inputs(inputs), keys=["wc", "wcevt", "hdr"], nproc=nproc)
-    w = frames["wc"]
+    files = dfio.expand_inputs(inputs)
+    frames, totals = dfio.load(files, keys=["wc", "wcevt", "hdr"] + numu_keys(files), nproc=nproc)
+    w = add_numu_score(frames["wc"], frames, ismc=False)
     w["wc_valid"] = 1   # a candidate implies Wire-Cell output
     if uboone_bdt:
         from analysis_village.SinglePhotonWC import microboone_bdt

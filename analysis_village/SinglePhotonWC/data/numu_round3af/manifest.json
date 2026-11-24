@@ -1,0 +1,381 @@
+{
+ "name": "numu_round3af",
+ "released_utc": "2026-11-23T19:03:12Z",
+ "kind": "numu small models (numu_1, numu_2, cosmict_10) and final model, round 3 af: trained on simulation with the dQ/dx inputs scaled by 1.071 and the numu_1 muon flag updated",
+ "xgboost": "3.4.1",
+ "level1": {
+  "models": {
+   "numu_1": {
+    "file": "l1/l1_numu_1.json",
+    "scale": 0.02804971050277742,
+    "offset": 1.9070490688722377,
+    "empty_value": -0.4,
+    "pool": "max",
+    "margin_min": -81.01662307418883,
+    "margin_max": 26.36759275703662,
+    "sha256": "cce2fc3ef3fb06b6eb3d73cf8408b39dfc9373da9defe97bdffec5489aa3a0b4",
+    "inputs": [
+     "numu_cc_1_particle_type",
+     "numu_cc_1_length",
+     "numu_cc_1_medium_dQ_dx",
+     "numu_cc_1_dQ_dx_cut",
+     "numu_cc_1_direct_length",
+     "numu_cc_1_n_daughter_tracks",
+     "numu_cc_1_n_daughter_all"
+    ],
+    "protect": {
+     "numu_cc_1_dQ_dx_cut": [
+      "inf",
+      10.0
+     ]
+    }
+   },
+   "numu_2": {
+    "file": "l1/l1_numu_2.json",
+    "scale": 0.3139434741996274,
+    "offset": 2.0875163090543887,
+    "empty_value": -0.1,
+    "pool": "max",
+    "margin_min": -6.808735374361277,
+    "margin_max": 1.7810088415862992,
+    "sha256": "63551c6305c360876c27f4a53b72b049984c735a0b42983a940d7c451992e678",
+    "inputs": [
+     "numu_cc_2_length",
+     "numu_cc_2_total_length",
+     "numu_cc_2_n_daughter_tracks",
+     "numu_cc_2_n_daughter_all"
+    ],
+    "protect": {}
+   },
+   "cosmict_10": {
+    "file": "l1/l1_cosmict_10.json",
+    "scale": 0.10762947971554067,
+    "offset": 1.6446853511274164,
+    "empty_value": 0.7,
+    "pool": "min",
+    "margin_min": -6.241136521100998,
+    "margin_max": 9.309410989284515,
+    "sha256": "aa4ed0c90d79d692d3f8fd1006524508ab840adac9608894f4f12236c51e1a85",
+    "inputs": [
+     "cosmict_10_vtx_z",
+     "cosmict_10_flag_shower",
+     "cosmict_10_flag_dir_weak",
+     "cosmict_10_angle_beam",
+     "cosmict_10_length"
+    ],
+    "protect": {
+     "cosmict_10_angle_beam": [
+      "nan",
+      0.0
+     ]
+    }
+   }
+  },
+  "recipe": "affine_for_range(forest, EMPTY_CONST + 0.05, 0.99) from wcgpu/release/scripts",
+  "rule": "A",
+  "note": "value = float32(tanh(scale * pooled margin + offset)); empty_value when the candidate has no object; the chain runs these on every candidate (no gate). The value replaces <model>_score in the final model inputs."
+ },
+ "inputs": [
+  "numu_cc_flag_3",
+  "numu_cc_3_particle_type",
+  "numu_cc_3_max_length",
+  "numu_cc_3_track_length",
+  "numu_cc_3_max_length_all",
+  "numu_cc_3_max_muon_length",
+  "numu_cc_3_n_daughter_tracks",
+  "numu_cc_3_n_daughter_all",
+  "cosmict_flag_2",
+  "cosmict_2_filled",
+  "cosmict_2_particle_type",
+  "cosmict_2_n_muon_tracks",
+  "cosmict_2_total_shower_length",
+  "cosmict_2_flag_inside",
+  "cosmict_2_angle_beam",
+  "cosmict_2_flag_dir_weak",
+  "cosmict_2_dQ_dx_end",
+  "cosmict_2_dQ_dx_front",
+  "cosmict_2_theta",
+  "cosmict_2_phi",
+  "cosmict_2_valid_tracks",
+  "cosmict_flag_4",
+  "cosmict_4_filled",
+  "cosmict_4_flag_inside",
+  "cosmict_4_angle_beam",
+  "cosmict_4_connected_showers",
+  "cosmict_flag_3",
+  "cosmict_3_filled",
+  "cosmict_3_flag_inside",
+  "cosmict_3_angle_beam",
+  "cosmict_3_flag_dir_weak",
+  "cosmict_3_dQ_dx_end",
+  "cosmict_3_dQ_dx_front",
+  "cosmict_3_theta",
+  "cosmict_3_phi",
+  "cosmict_3_valid_tracks",
+  "cosmict_flag_5",
+  "cosmict_5_filled",
+  "cosmict_5_flag_inside",
+  "cosmict_5_angle_beam",
+  "cosmict_5_connected_showers",
+  "cosmict_flag_6",
+  "cosmict_6_filled",
+  "cosmict_6_flag_dir_weak",
+  "cosmict_6_flag_inside",
+  "cosmict_6_angle",
+  "cosmict_flag_7",
+  "cosmict_7_filled",
+  "cosmict_7_flag_sec",
+  "cosmict_7_n_muon_tracks",
+  "cosmict_7_total_shower_length",
+  "cosmict_7_flag_inside",
+  "cosmict_7_angle_beam",
+  "cosmict_7_flag_dir_weak",
+  "cosmict_7_dQ_dx_end",
+  "cosmict_7_dQ_dx_front",
+  "cosmict_7_theta",
+  "cosmict_7_phi",
+  "cosmict_flag_8",
+  "cosmict_8_filled",
+  "cosmict_8_flag_out",
+  "cosmict_8_muon_length",
+  "cosmict_8_acc_length",
+  "cosmict_flag_9",
+  "cosmic_flag",
+  "cosmic_filled",
+  "cosmict_flag",
+  "numu_cc_flag",
+  "cosmict_flag_1",
+  "kine_reco_Enu",
+  "match_isFC",
+  "cosmict_10_score",
+  "numu_1_score",
+  "numu_2_score"
+ ],
+ "nan_to_0": [
+  "cosmict_4_angle_beam",
+  "cosmict_7_angle_beam",
+  "cosmict_7_theta",
+  "cosmict_7_phi"
+ ],
+ "score": "xgboost margin (output_margin=True); numu_score scale = margin * 2/ln(10) = margin * 0.868589",
+ "models": {
+  "d6_f0": {
+   "file": "l2/numu_l2.json",
+   "sha256": "48b3c88787e9265222f1c5be93240a098d0abcac8a0309a39048ab338c434920",
+   "trees": 472,
+   "depth": 6,
+   "floor": 0.0,
+   "dev": {
+    "auc": 0.9552980302839587,
+    "weighted_auc": 0.9517081475081628,
+    "at_purity": {
+     "cut": 1.1539771556854248,
+     "cut_numu_score_scale": 1.0023318219131794,
+     "eff": 0.8615127175368139,
+     "eff_err": 0.0028259241070568816,
+     "purity": 0.9500038038680756,
+     "passing_weighted_signal": 12871.0,
+     "passing_weighted_background": 677.3668040000393,
+     "eff_by_true_E": [
+      {
+       "lo": 0,
+       "hi": 250,
+       "n": 33,
+       "eff": 0.30303030303030304
+      },
+      {
+       "lo": 250,
+       "hi": 500,
+       "n": 1228,
+       "eff": 0.753257328990228
+      },
+      {
+       "lo": 500,
+       "hi": 750,
+       "n": 3248,
+       "eff": 0.8020320197044335
+      },
+      {
+       "lo": 750,
+       "hi": 1000,
+       "n": 3810,
+       "eff": 0.8740157480314961
+      },
+      {
+       "lo": 1000,
+       "hi": 1500,
+       "n": 4252,
+       "eff": 0.9021636876763875
+      },
+      {
+       "lo": 1500,
+       "hi": 2000,
+       "n": 1262,
+       "eff": 0.9128367670364501
+      },
+      {
+       "lo": 2000,
+       "hi": 3000,
+       "n": 623,
+       "eff": 0.9229534510433387
+      },
+      {
+       "lo": 3000,
+       "hi": 1000000000.0,
+       "n": 484,
+       "eff": 0.9049586776859504
+      }
+     ],
+     "passing_background_by_sample": {
+      "wcl1116-bnb": 559.0,
+      "wcl1116-ncdr": 0.465124,
+      "wcl1116-beam-off-train": 117.90168
+     }
+    },
+    "paired_signal": {
+     "new_only": 1485,
+     "shipped_only": 236
+    }
+   },
+   "max_abs_diff_vs_unfrozen": 0.0
+  }
+ },
+ "operating_point": {
+  "purity": 0.95,
+  "cut_margin": 1.134,
+  "cut_numu_score": 0.985,
+  "efficiency": 0.8033,
+  "efficiency_range": [
+   0.8002,
+   0.8053
+  ],
+  "data_selected": 40222,
+  "data_predicted": 37854.1,
+  "data_over_prediction": 1.0626,
+  "source": "Fermilab evaluation samples, simulation charge-corrected as in correction.json (gpvm, private issue #42, numu/results/round3/eval_fg/eval_at_purity_95.json)"
+ },
+ "simulation_correction": {
+  "mode": "uniform",
+  "k": 1.071,
+  "source": "gpvm #41 round3_charge_correction.json 3a",
+  "inputs": [
+   "numu_cc_1_medium_dQ_dx",
+   "cosmict_2_dQ_dx_end",
+   "cosmict_2_dQ_dx_front",
+   "cosmict_3_dQ_dx_end",
+   "cosmict_3_dQ_dx_front",
+   "cosmict_7_dQ_dx_end",
+   "cosmict_7_dQ_dx_front"
+  ],
+  "applies_to": "simulation only, filled values > 0; data never",
+  "update_flag1": true,
+  "flag_rule": "per numu_1 segment: numu_cc_flag_1 = numu_cc_flag_1 AND (corrected numu_cc_1_medium_dQ_dx < numu_cc_1_dQ_dx_cut); numu_cc_flag = any segment flag_1 OR any numu_cc_2 flag OR numu_cc_flag_3",
+  "code": "training/numu/make_corrected_tables.py --update-flag1"
+ },
+ "spec": "numu/docs/spec_numu_draft.md",
+ "purity_anchor": 0.95,
+ "weights": {
+  "wcl1116-bnb": 1.0,
+  "wcl1116-ncdr": 0.010571,
+  "wcl1116-beam-off-train": 4.91257
+ },
+ "nc_only": [
+  "wcl1116-ncdr"
+ ],
+ "shipped_dev": {
+  "cut": 1.1692728996276855,
+  "cut_numu_score_scale": 1.1692728996276855,
+  "eff": 0.7779116465863454,
+  "eff_err": 0.0034005779165868556,
+  "purity": 0.9502963534992321,
+  "passing_weighted_signal": 11622.0,
+  "passing_weighted_background": 607.8690900000292,
+  "eff_by_true_E": [
+   {
+    "lo": 0,
+    "hi": 250,
+    "n": 33,
+    "eff": 0.0
+   },
+   {
+    "lo": 250,
+    "hi": 500,
+    "n": 1228,
+    "eff": 0.4804560260586319
+   },
+   {
+    "lo": 500,
+    "hi": 750,
+    "n": 3248,
+    "eff": 0.7007389162561576
+   },
+   {
+    "lo": 750,
+    "hi": 1000,
+    "n": 3810,
+    "eff": 0.8070866141732284
+   },
+   {
+    "lo": 1000,
+    "hi": 1500,
+    "n": 4252,
+    "eff": 0.8515992474129821
+   },
+   {
+    "lo": 1500,
+    "hi": 2000,
+    "n": 1262,
+    "eff": 0.8629160063391442
+   },
+   {
+    "lo": 2000,
+    "hi": 3000,
+    "n": 623,
+    "eff": 0.8876404494382022
+   },
+   {
+    "lo": 3000,
+    "hi": 1000000000.0,
+    "n": 484,
+    "eff": 0.8636363636363636
+   }
+  ],
+  "passing_background_by_sample": {
+   "wcl1116-bnb": 470.0,
+   "wcl1116-ncdr": 0.31713,
+   "wcl1116-beam-off-train": 137.55195999999998
+  }
+ },
+ "wirecell": {
+  "folder": "wirecell",
+  "files": {
+   "numu_1": {
+    "file": "wirecell/uboone/weights/numu_tagger1.weights.xml",
+    "sha256": "1af283ddb28a54f823f82896cc68856336ea3101163dab9c0e5a73d5ee7edc92",
+    "trees": 692
+   },
+   "numu_2": {
+    "file": "wirecell/uboone/weights/numu_tagger2.weights.xml",
+    "sha256": "a129aaad2950564d717b4769abe043c67f17b3a46d5b10801135c418ba10592f",
+    "trees": 115
+   },
+   "cosmict_10": {
+    "file": "wirecell/uboone/weights/cos_tagger_10.weights.xml",
+    "sha256": "8405c13c5e3129a9d4a4beeb8cdf009371dcbb13f36cdf332e613bce28c0f1b9",
+    "trees": 28
+   },
+   "final": {
+    "file": "wirecell/uboone/weights/numu_scalars_scores_0923.xml",
+    "sha256": "81fb26f88bb1aed30455ea5e55e6179f53b49bf6af4a36a119fbd181da6310b6",
+    "trees": 472
+   }
+  },
+  "replaces": "wire-cell-data/uboone/weights/: numu_tagger1.weights.xml, numu_tagger2.weights.xml, cos_tagger_10.weights.xml, numu_scalars_scores_0923.xml (numu_tagger3 not retrained)",
+  "written_by": "training/numu/make_numu_chain_weights.py",
+  "checks": [
+   "independent TMVA evaluator (training/numu/check_numu_chain_xml.py) vs xgboost on 328,698 candidates (corrected bnb, ncdr, beam-off-train): small models max |diff| 5.5e-07; final model with the same small-model values 7.7e-06 on numu_score; full path pass/fail differs on 4 candidates",
+   "full chain passed 2026-11-23: BNB simulation with numu_sim_dqdx_scale=1.071 in the chain (82 and 31 candidates, numu_score within 6e-06, pass/fail identical 44/44 and 25/25) and beam-on data without correction (34 candidates, 22/22); all other outputs identical to production; checks/chain/"
+  ],
+  "simulation_patch": "wirecell/patches/wct-0.38.0-numu_sim_dqdx_scale.patch (toolkit 0.38.0; TLA numu_sim_dqdx_scale, sim only) and wirecell/patches/step2-numu_sim_dqdx_scale.patch (Aurora workflow)"
+ }
+}
