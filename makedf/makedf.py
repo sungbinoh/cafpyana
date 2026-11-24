@@ -529,6 +529,19 @@ def make_pandora_df(f, trkScoreCut=False, trkDistCut=50., cutClearCosmic=False, 
     #print(slcdf.pfp.trk.chi2pid.head(50))
     return slcdf
 
+def make_stubs_raw(f):
+    stubdf = loadbranches(f["recTree"], stubbranches).rec.slc.reco.stub
+    stubpdf = loadbranches(f["recTree"], stubplanebranches).rec.slc.reco.stub
+    stubhitdf = loadbranches(f["recTree"], stubhitbranches).rec.slc.reco.stub
+
+    #checked individual dfs had different levels of padding making it all 3
+    stubpdf.columns = pd.MultiIndex.from_tuples(
+        [col + ('',) for col in stubpdf.columns]
+    )
+    
+    return stubhitdf.join(stubpdf).join(stubdf).sort_index(axis=1)
+
+
 def make_stubs(f, det="ICARUS"):
     stubdf = loadbranches(f["recTree"], stubbranches)
     stubdf = stubdf.rec.slc.reco.stub
