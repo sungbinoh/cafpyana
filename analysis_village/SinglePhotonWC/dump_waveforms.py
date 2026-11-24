@@ -66,14 +66,38 @@ def load_gallery():
     return ROOT
 
 
+class ProductNotFound(Exception):
+    pass
+
+
 def handle(ROOT, ev, cls, label):
-    """ev.getValidHandle<cls>(tag), for both PyROOT template spellings."""
+    """The std::vector<cls> product `label` of the current event. Uses getHandle (no exception when the
+    product is absent) and raises ProductNotFound with the label; see --list-products for what a file has."""
     tag = ROOT.art.InputTag(label)
     vec = ROOT.std.vector(cls)
     try:
-        return ev.getValidHandle[vec](tag).product()
+        h = ev.getHandle[vec](tag)
     except TypeError:
-        return ev.getValidHandle(vec)(tag).product()
+        h = ev.getHandle(vec)(tag)
+    if not h.isValid():
+        raise ProductNotFound("no std::vector<%s> with label '%s'" % (cls.__name__ if hasattr(cls, "__name__") else cls, label))
+    return h.product()
+
+
+def list_products(ROOT, path, patterns=("recob::Wire", "raw::RawDigit")):
+    """The module:instance labels of the art products of `patterns` in a file, from its Events tree branches
+    (<class>s_<module>_<instance>_<process>.)."""
+    f = ROOT.TFile.Open(path)
+    t = f.Get("Events")
+    out = []
+    for b in t.GetListOfBranches():
+        name = b.GetName()
+        for p in patterns:
+            if name.startswith(p.replace("::", "::") + "s_"):
+                parts = name.rstrip(".").split("_")
+                out.append("%-15s label %s:%s  (process %s)" % (p, parts[1], parts[2], parts[3] if len(parts) > 3 else "?"))
+    f.Close()
+    return out
 
 
 def read_event(ROOT, ev, channels, raw_label, wire_labels):
@@ -118,7 +142,12 @@ def channel_plane(c):
 def longest_rois(ROOT, ev, label, min_ticks, per_plane):
     """The channels with the longest single ROI of recob::Wire `label` in this event, per plane: {channel: row}."""
     best = {}
-    for w in handle(ROOT, ev, ROOT.recob.Wire, label):
+    try:
+        wires = handle(ROOT, ev, ROOT.recob.Wire, label)
+    except ProductNotFound as e:
+        print("%s in this event: check the labels with --list-products" % e)
+        return {}
+    for w in wires:
         c = int(w.Channel())
         sig = np.array(w.Signal(), dtype=float)
         nz = np.flatnonzero(sig != 0)
@@ -226,6 +255,8 @@ def main():
                          "in every event (default 3)")
     ap.add_argument("--min-us", type=float, default=40.0, help="--auto: shortest ROI kept [us] (default 40)")
     ap.add_argument("--max-events", type=int, default=0, help="stop after this many events (0: all)")
+    ap.add_argument("--list-products", action="store_true",
+                    help="print the recob::Wire and raw::RawDigit labels in the first input file and stop")
     ap.add_argument("-o", "--outdir", default="waveforms")
     ap.add_argument("--raw-label", default="simtpc2d:daq")
     ap.add_argument("--wire-labels", nargs="+", default=["simtpc2d:gauss", "simtpc2d:dnnsp"])
@@ -241,6 +272,9 @@ def main():
     files = expand_inputs(args.inputs)
     print("%d input files" % len(files))
     ROOT = load_gallery()
+    if args.list_products:
+        print("\n".join(list_products(ROOT, files[0])) or "no recob::Wire / raw::RawDigit branches found")
+        return
     saved, tails, nplot, nev = {}, {}, 0, 0
     for k in range(0, len(files), args.chunk):
         if args.max_events and nev >= args.max_events:
