@@ -81,7 +81,7 @@ except ImportError:   # a minimal text progress bar (the LArSoft python has no p
             frac = self.n / self.total if self.total else 0
             bar = "#" * int(30 * frac) + "-" * (30 - int(30 * frac))
             eta = " eta %ds" % (dt / self.n * (self.total - self.n)) if self.n and self.total else ""
-            _sys.stderr.write("\r%s [%s] %d/%s %s %ds%s %s" % (self.desc, bar, self.n, self.total, self.unit, dt, eta, self.post))
+            _sys.stderr.write("\r%s [%s] %d/%s %s %ds%s %s   " % (self.desc, bar, self.n, self.total, self.unit, dt, eta, self.post))
             _sys.stderr.flush()
 
         def update(self, n=1):
