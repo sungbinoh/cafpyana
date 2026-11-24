@@ -52,6 +52,18 @@ Samples (SAMPLES):
   recombination for dQ/dx)
   all over hits with residual range > 30 cm; Pandora's hits come from the
   same signal-processing output as Wire-Cell's imaging
+  from the pandwire, pandtrk and hdr tables, through the cafpyana dE/dx
+  calibration chain (pandora_calib.py: YZ maps, electron lifetime on data and
+  MC, gains, then recombination; the CAF's own dQ/dx leaves the MC without its
+  35 ms lifetime correction), the longest Pandora muon-like track of each
+  event with a --stage candidate, per plane, median over its wires at
+  residual range > 30 cm; the Pandora counterparts of mu1_angle (not in the
+  defaults: --samples pandcal_dedx_p0 pandcal_dedx_p1 pandcal_dedx_p2):
+    pandcal_dedx_p<n>  dE/dx [MeV/cm], data with the SBND data recombination,
+                       MC with ICARUS (the cafpyana standard); the dashed
+                       prediction converts the MC with the data recombination
+    pandcal_dqdx_p<n>  dQ/dx [ke/cm] (before recombination); the dashed
+                       prediction is the MC with the data recombination
   from the candidate table (any dataframes):
     trk1_vtx     longest track median dQ/dx at the reco vertex (no direction)
     mu1_angle    longest muon-labelled track median dQ/dx, with the direction
@@ -129,7 +141,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-from analysis_village.SinglePhotonWC import cuts, dfio, wc_calo  # noqa: E402
+from analysis_village.SinglePhotonWC import cuts, dfio, pandora_calib, wc_calo  # noqa: E402
 from analysis_village.SinglePhotonWC.cutflow import load as load_mc  # noqa: E402
 from analysis_village.SinglePhotonWC.make_wc_candidates import DQDX_MIP, PID  # noqa: E402
 from analysis_village.SinglePhotonWC.plot_data_mc import (STAGES, UBOONE_BDT_DIR, OFFBEAM_COLOR,  # noqa: E402
@@ -727,6 +739,61 @@ def load_table(inputs, key, keep=None, nproc=None):
     return frames[key]
 
 
+CAL_KEY = "pandcal"   # pandwire + pandtrk (+ hdr for data) through pandora_calib, per (track, plane)
+
+
+def load_pandcal(inputs, cands, isdata, cal, nproc=None):
+    """Per (track, plane): the longest Pandora muon-like track (track score > 0.5, chi2_mu < chi2_p) of each
+    event with a candidate in cands, medians over its wires at residual range > RR_MIP_MIN of the calibrated
+    dQ/dx and dE/dx (pandora_calib.calibrate); None without the pandwire table."""
+    wires = load_table(inputs, WIRE_KEY, nproc=nproc)
+    trk = load_table(inputs, PAND_KEY, nproc=nproc)
+    if wires is None or trk is None:
+        return None
+    events = cands.index.droplevel([l for l in cands.index.names if l not in ("file", "__ntuple", "entry")]).unique()
+    evlev = ["file", "__ntuple", "entry"]
+    wires = wires[(wires.track_score > 0.5) & (wires.chi2_mu < wires.chi2_p) & (wires.rr_min > RR_MIP_MIN) & (wires.pitch > 0)
+                  & wires.index.droplevel([l for l in wires.index.names if l not in evlev]).isin(events)]
+    key = pandora_calib.TRK_LEVELS + ["plane"]
+    cols = ["dqdx_e", "dedx", "dedx_mcrecomb", "dedx_datarecomb", "x", "phi", "len", "dir_x", "dir_y", "dir_z"]
+    if not len(wires):
+        return pd.DataFrame(columns=cols, index=pd.MultiIndex.from_arrays([[]] * len(key), names=key), dtype=float)
+    runs = None
+    if isdata:
+        frames, _ = dfio.load(dfio.expand_inputs(inputs), keys=["hdr"], nproc=nproc)
+        runs = frames["hdr"].run
+        runs = runs[~runs.index.duplicated()]
+    w = pandora_calib.calibrate(wires, trk, cal, isdata, runs)
+    g = w.groupby(key)
+    t = pd.DataFrame({c: g[c].median() for c in ("dqdx_e", "dedx", "dedx_mcrecomb", "dedx_datarecomb", "x", "phi")})
+    t = t.join(g[["len", "dir_x", "dir_y", "dir_z"]].first())
+    longest = t.groupby(evlev + ["plane"]).len.transform("max")
+    return t[t.len == longest]
+
+
+def _pandcal(t, plane, q):
+    s = t[t.index.get_level_values("plane") == plane]
+    v = s.dqdx_e / 1e3 if q == "dqdx" else s.dedx
+    return pd.DataFrame({"dqdx": v, "phi": s.phi, "x": s.x, "angle_drift": _angle_drift(s.dir_x),
+                         "angle_yz": _angle_yz(s.dir_y, s.dir_z), "_dedx_datarecomb": s.dedx_datarecomb,
+                         "_dqdx_e": s.dqdx_e}, index=s.index)
+
+
+def _pandcal_swap(q):
+    """The MC with the data recombination: dE/dx converted with it, or dQ/dx re-derived with it (e/cm)."""
+    if q == "dedx":
+        return lambda mc: mc._dedx_datarecomb
+    return lambda mc: wc_calo.swap_recombination(mc._dqdx_e, np.radians(mc.phi), scale=1.0) / 1e3
+
+
+for _pl in range(3):
+    for _q, _lab, _bins in [("dedx", "dE/dx [MeV/cm]", np.arange(0, 6.01, 0.05)), ("dqdx", "dQ/dx [ke/cm]", np.arange(0, 120.1, 1))]:
+        SAMPLES["pandcal_%s_p%d" % (_q, _pl)] = dict(
+            table=CAL_KEY, fn=(lambda pl, q: lambda w, t: _pandcal(t, pl, q))(_pl, _q),
+            title="longest Pandora muon-like track, plane %d: median calibrated %s (wires at rr > %g cm)" % (_pl, _lab, RR_MIP_MIN),
+            bins=_bins, ylabel="median " + _lab, wc=False, swap=_pandcal_swap(_q))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--mc", nargs="+", required=True, help="MC .df files, directories or globs")
@@ -747,6 +814,7 @@ def main():
     ap.add_argument("--by-tpc", action="store_true", help="also the profiles split by TPC")
     ap.add_argument("--no-recomb-swap", action="store_true", help="no MC prediction with the data recombination")
     ap.add_argument("--fit-recomb", action="store_true", help="fit the ellipsoid ratio R and an MC scale to the angle profile")
+    ap.add_argument("--sbnd-data", help="sbnd_data directory for the pandcal samples (default $SBND_DATA_DIR, else CVMFS)")
     ap.add_argument("-j", "--nproc", type=int, help="worker processes (default: up to 8)")
     args = ap.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
@@ -761,8 +829,12 @@ def main():
     weight = {"mc": sc_mc, "on": 1.0, "off": sc_off}
     inputs = {"mc": args.mc, "on": args.onbeam, "off": args.offbeam}
     tables = {}
+    cal = pandora_calib.Calibration(args.sbnd_data) if any(SAMPLES[n]["table"] == CAL_KEY for n in args.samples) else None
     for key in {SAMPLES[n]["table"] for n in args.samples} - {None}:
-        t = {k: load_table(inputs[k], key, cands[k].index if key == SEG_KEY else None, args.nproc) for k in cands}
+        if key == CAL_KEY:
+            t = {k: load_pandcal(inputs[k], cands[k], k != "mc", cal, args.nproc) for k in cands}
+        else:
+            t = {k: load_table(inputs[k], key, cands[k].index if key == SEG_KEY else None, args.nproc) for k in cands}
         if any(v is None for v in t.values()):
             print("no %s table in some inputs (older dataframes): its samples are skipped" % key)
         else:
