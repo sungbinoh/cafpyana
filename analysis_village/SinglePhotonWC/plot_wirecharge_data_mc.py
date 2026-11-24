@@ -36,7 +36,10 @@ the track direction). Every event, no candidate selection. Wires with t_wire
 Outputs (-o): wirecharge_<quantity>_<coord>.png (planes in columns, ratio
 below), wirecharge_dq_vs_dx_<coord>.png (data / prediction of wire_dqdx,
 amp_dqdx, coverage and n_points together per plane: the dQ-or-dx plot),
-wirecharge_profiles.csv (binned medians only, shareable) and
+wirecharge_<wire|roi>_dqdx_t_wire_angle_slices.png (data / pred. vs t_wire in
+slices of the angle to the drift: recombination follows the angle, the signal
+processing the duration), wirecharge_profiles.csv (binned medians only,
+shareable) and
 wirecharge_summary.txt (per plane, a fit of data / pred. = a (1 - b t_wire)
 and the RC time constant a flat-pulse loss of b would need: loss kappa T / 2,
 kappa = 1/tau_true - 1/tau_assumed). The MC with the data recombination
@@ -86,6 +89,11 @@ QUANTITIES = [   # column, label, statistic, ratio range
 ]
 CHARGE = ("wire_dqdx", "roi_dqdx", "amp_dqdx", "point_dqdx")   # get the data-recombination variant
 INK, BLUE, GREEN, ORANGE, PURPLE = "#1f1f1e", "#2a78d6", "#1baf7a", "#eb6834", "#7f5bd5"
+# angle-to-drift slices for the duration-vs-angle separation: recombination depends on the angle to the field only,
+# the signal processing on how long the signal lasts on the wire (the angle to the wires sets the pitch, so at one
+# angle to the drift the duration still spans a decade or more)
+ANGLE_SLICES = [(0, 20), (20, 40), (40, 60), (60, 90)]
+SLICE_COLORS = [ORANGE, PURPLE, BLUE, INK]
 
 
 def recomb_factor(phi_deg):
@@ -267,6 +275,42 @@ def main():
                             2000 * b, "%.2f ms" % (1 / k / 1000) if k > 0 else "none")
                     lines.append(line)
                 lines.append("")
+
+    # duration or angle? data / prediction vs t_wire in slices of the angle to the drift, per plane
+    bins, xlabel, _ = COORDS["t_wire"]
+    c = np.sqrt(bins[1:] * bins[:-1])
+    for col in ("wire_dqdx", "roi_dqdx"):
+        fig, axs = plt.subplots(1, 3, figsize=(17, 5), sharey=True)
+        for pl in range(3):
+            d = {k: v[v.index.get_level_values("plane") == pl] for k, v in tab.items()}
+            a = axs[pl]
+            for (lo, hi), colr in zip(ANGLE_SLICES, SLICE_COLORS):
+                s_ = {k: v[(v.angle_drift >= lo) & (v.angle_drift < hi)] for k, v in d.items()}
+                pred = pd.concat([s_["mc"], s_["off"]])
+                wp = np.r_[sc_mc * s_["mc"].prescale.to_numpy(float), sc_off * s_["off"].prescale.to_numpy(float)]
+                Pd = profile(s_["on"], s_["on"].prescale.to_numpy(float), "t_wire", bins, col, "median")
+                Pp = profile(pred, wp, "t_wire", bins, col, "median")
+                rr_, re_ = ratio(Pd, Pp)
+                ok = (Pd[:, 2] >= 30) & (Pp[:, 2] >= 30)
+                a.errorbar(c[ok], rr_[ok], re_[ok], fmt="o-", color=colr, ms=4, lw=1, label="%d–%d° to the drift" % (lo, hi))
+                for i in range(len(c)):
+                    rows.append(dict(coord="t_wire|angle_drift %d-%d" % (lo, hi), quantity=col, stat="median", plane=pl,
+                                     lo=bins[i], hi=bins[i + 1], n_data=int(Pd[i, 2]), data=Pd[i, 0], data_err=Pd[i, 1],
+                                     n_pred=int(Pp[i, 2]), pred=Pp[i, 0], pred_err=Pp[i, 1], pred_datarecomb=np.nan))
+            a.axhline(1, color="#8a8984", lw=0.8)
+            a.set_xscale("log")
+            a.set_ylim(0.6, 1.4)
+            a.set_xlabel(xlabel, fontsize=10)
+            a.set_title("plane %d" % pl, fontsize=11, loc="left")
+            if pl == 0:
+                a.set_ylabel("data / prediction (medians)")
+                a.legend(frameon=False, fontsize=9)
+        fig.suptitle("Duration or angle? %s data / prediction vs signal duration, in slices of the angle to the drift: "
+                     "overlapping slices = a duration effect (signal processing), offset slices = an angle effect "
+                     "(e.g. recombination)" % col, x=0.01, ha="left", fontsize=10.5)
+        fig.tight_layout(rect=(0, 0, 1, 0.93))
+        fig.savefig(os.path.join(args.outdir, "wirecharge_%s_t_wire_angle_slices.png" % col), dpi=120, bbox_inches="tight")
+        plt.close(fig)
 
     with open(os.path.join(args.outdir, "wirecharge_profiles.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
