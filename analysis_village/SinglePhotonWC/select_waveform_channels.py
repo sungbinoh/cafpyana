@@ -11,7 +11,12 @@ dataframes with the wcchanrun and wcevt tables. Keeps the runs of at least
 run, subrun, event, channel, plane, tpc, tick_start / tick_end (time slice x
 TICKS_PER_SLICE: approximate, the dump finds the signal itself), duration_us,
 q (summed charge), on_candidate (the main cluster of a Wire-Cell candidate),
-source (the flat CAF or dataframe it came from).
+source (the flat CAF or dataframe it came from), reco1 (the reco1 file name
+the flat CAF was made from, by the production's pairing rule
+reco2-<reco1 stem>[.wc].flat.caf.root; empty for dataframe inputs).
+reco1_files.txt (next to the CSV) lists those names once each, e.g. for
+
+  for f in $(cat reco1_files.txt); do samweb -e sbnd locate-file $f; done
 
   python analysis_village/SinglePhotonWC/select_waveform_channels.py -i <flat CAFs or .df> -o channels.csv \\
       [--min-us 40] [--per-plane 20]
@@ -54,6 +59,14 @@ def from_df(path):
     return runs.rename(columns={"run_number": "run"}).assign(source=os.path.basename(path))
 
 
+def reco1_name(caf):
+    """reco2-<reco1 stem>[.wc].flat.caf.root -> <reco1 stem>.root (the production's pairing rule)."""
+    if not caf.startswith("reco2-") or ".flat.caf" not in caf:
+        return ""
+    stem = caf[len("reco2-"):].split(".flat.caf")[0]
+    return (stem[:-3] if stem.endswith(".wc") else stem) + ".root"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-i", "--inputs", nargs="+", required=True, help="flat CAFs (.root) and / or dataframes (.df)")
@@ -83,9 +96,14 @@ def main():
         "channel": d.channel.astype(int), "plane": d.plane.astype(int), "tpc": d.tpc.astype(int),
         "tick_start": (d.ts_start * TICKS_PER_SLICE).astype(int),
         "tick_end": ((d.ts_start + d.n_slices) * TICKS_PER_SLICE).astype(int),
-        "duration_us": d.duration_us, "q": d.q, "on_candidate": (d.nu_index >= 0).astype(int), "source": d.source})
+        "duration_us": d.duration_us, "q": d.q, "on_candidate": (d.nu_index >= 0).astype(int), "source": d.source,
+        "reco1": d.source.map(reco1_name)})
     out = out.sort_values(["plane", "duration_us"], ascending=[True, False])
     out.to_csv(args.output, index=False, float_format="%.6g")
+    names = sorted(n for n in out.reco1.unique() if n)
+    if names:
+        open(os.path.join(os.path.dirname(os.path.abspath(args.output)), "reco1_files.txt"), "w").write("\n".join(names) + "\n")
+        print("%d reco1 files hold these channels: reco1_files.txt" % len(names))
     print(out.groupby("plane").agg(n=("channel", "size"), longest_us=("duration_us", "max"),
                                    median_us=("duration_us", "median")).to_string())
     print("wrote %d channels to %s" % (len(out), args.output))
