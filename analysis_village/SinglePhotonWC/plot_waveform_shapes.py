@@ -16,7 +16,7 @@ electronics, so the signals are compared like for like:
     and against the fraction of the signal's duration (geometry scales with
     it).
 Rows of the figures are planes, columns duration classes; the lower panels
-are data / MC.
+are data / MC. waveform_durations.png compares the duration distributions.
 
   python analysis_village/SinglePhotonWC/plot_waveform_shapes.py --data <dir> --mc <dir> -o <outdir>
 """
@@ -127,6 +127,36 @@ def figure(kind, data, mc, out):
     return rows
 
 
+def duration_figure(data, mc, out):
+    """Signal durations, data vs MC (unit area), per plane: the duration itself can carry the effect (a
+    signal that loses charge falls below the ROI threshold sooner), so its distribution is worth comparing."""
+    planes = sorted(set(data) & set(mc))
+    bins = np.arange(40, 402, 10)
+    fig, axs = plt.subplots(2, len(planes), figsize=(5 * len(planes), 5.5), sharex=True,
+                            gridspec_kw=dict(height_ratios=[3, 1.2], hspace=0.06))
+    c = 0.5 * (bins[1:] + bins[:-1])
+    for j, p in enumerate(planes):
+        hd = np.histogram(data[p][1], bins)[0].astype(float)
+        hm = np.histogram(mc[p][1], bins)[0].astype(float)
+        a, r = axs[0, j], axs[1, j]
+        a.stairs(hm / hm.sum(), bins, color=MC, lw=1.8, label="MC (CV): %d" % hm.sum())
+        a.errorbar(c, hd / hd.sum(), np.sqrt(hd) / hd.sum(), fmt="o", color=DATA, ms=3, label="data: %d" % hd.sum())
+        ok = (hm > 0) & (hd > 0)
+        ratio = (hd / hd.sum()) / (hm / hm.sum())
+        r.errorbar(c[ok], ratio[ok], ratio[ok] * np.sqrt(1 / hd[ok] + 1 / hm[ok]), fmt="o", color=DATA, ms=3)
+        r.axhline(1, color="#8a8984", lw=0.8)
+        r.set_ylim(0, 2)
+        a.set_title("plane %d" % p, fontsize=10, loc="left")
+        a.legend(frameon=False, fontsize=8.5)
+        a.set_ylim(bottom=0)
+        r.set_xlabel("signal duration on one wire [µs] (400: stored length)")
+        if j == 0:
+            a.set_ylabel("fraction of signals / 10 µs")
+            r.set_ylabel("data / MC")
+    fig.savefig(os.path.join(out, "waveform_durations.png"), dpi=110, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", required=True, help="dump_waveforms.py output directory of the data")
@@ -137,6 +167,7 @@ def main():
     data = {p: prepare(S) for p, S in load(args.data).items()}
     mc = {p: prepare(S) for p, S in load(args.mc).items()}
     rows = figure("abs", data, mc, args.outdir) + figure("rel", data, mc, args.outdir)
+    duration_figure(data, mc, args.outdir)
     import csv
     with open(os.path.join(args.outdir, "waveform_shapes.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
