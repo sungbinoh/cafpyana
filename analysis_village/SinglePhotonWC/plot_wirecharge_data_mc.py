@@ -38,7 +38,9 @@ below), wirecharge_dq_vs_dx_<coord>.png (data / prediction of wire_dqdx,
 amp_dqdx, coverage and n_points together per plane: the dQ-or-dx plot),
 wirecharge_<wire|roi>_dqdx_t_wire_angle_slices.png (data / pred. vs t_wire in
 slices of the angle to the drift: recombination follows the angle, the signal
-processing the duration), wirecharge_profiles.csv (binned medians only,
+processing the duration; one entry per track and bin, as a straight track puts
+all its wires in one bin, so the errors are the spread over tracks; the
+summary has the slices' consistency chi2 and offsets per duration range), wirecharge_profiles.csv (binned medians only,
 shareable) and
 wirecharge_summary.txt (per plane, a fit of data / pred. = a (1 - b t_wire)
 and the RC time constant a flat-pulse loss of b would need: loss kappa T / 2,
@@ -60,6 +62,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from scipy.stats import chi2 as chi2_dist
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 from analysis_village.SinglePhotonWC import wc_calo  # noqa: E402
@@ -156,6 +159,54 @@ def linear_fit(x, r, e):
     b = -p1 / p0
     eb = abs(b) * np.hypot(np.sqrt(cov[1, 1]) / p1, np.sqrt(cov[0, 0]) / p0) if p1 != 0 else np.nan
     return p0, b, np.sqrt(cov[0, 0]), eb, chi2, int(ok.sum()) - 2
+
+
+def per_track(t, col, bins):
+    """One row per (track, t_wire bin): the median of col over the track's wires there, with the track's
+    t_wire (median) and angle to the drift; ntrk: the number of tracks."""
+    if not len(t):
+        return pd.DataFrame(columns=[col, "t_wire", "angle_drift", "ntrk"])
+    key = [l for l in t.index.names if l != "wire"]
+    b = np.digitize(t.t_wire.to_numpy(float), bins)
+    g = t[[col, "t_wire", "angle_drift"]].assign(_b=b).set_index("_b", append=True)
+    g = g[np.isfinite(g[col])].groupby(level=key + ["_b"]).median()
+    return g.assign(ntrk=g.index.droplevel("_b").nunique())
+
+
+def slice_consistency(R):
+    """R[slice, bin, (ratio, err)]: chi2 / ndf of the slices against one value per bin, the reference slice
+    (the one with the most bins) and the other slices' offsets from a common shape (fit ratio = f(bin) +
+    delta(slice), delta of the reference = 0)."""
+    ok = np.isfinite(R[..., 0]) & np.isfinite(R[..., 1]) & (R[..., 1] > 0)
+    chi2, ndf = 0.0, 0
+    for i in range(R.shape[1]):
+        m = ok[:, i]
+        if m.sum() < 2:
+            continue
+        w = 1 / R[m, i, 1] ** 2
+        mu = np.sum(w * R[m, i, 0]) / w.sum()
+        chi2 += float(np.sum(w * (R[m, i, 0] - mu) ** 2))
+        ndf += int(m.sum()) - 1
+    js, iss = np.nonzero(ok)
+    used = sorted(set(iss[np.isin(iss, [i for i in range(R.shape[1]) if ok[:, i].sum() >= 2])]))
+    offs, ref = [], int(np.argmax(ok[:, used].sum(axis=1))) if used else 0
+    if used:
+        others = [j for j in range(R.shape[0]) if j != ref]
+        rows_ = [(j, i) for j, i in zip(js, iss) if i in used]
+        A = np.zeros((len(rows_), len(used) + len(others)))
+        y, W = np.zeros(len(rows_)), np.zeros(len(rows_))
+        for k, (j, i) in enumerate(rows_):
+            A[k, used.index(i)] = 1
+            if j != ref:
+                A[k, len(used) + others.index(j)] = 1
+            y[k], W[k] = R[j, i, 0], 1 / R[j, i, 1] ** 2
+        cov = np.linalg.pinv(A.T @ (A * W[:, None]))
+        p = cov @ (A.T @ (W * y))
+        for n, j in enumerate(others):
+            k = len(used) + n
+            if np.any(A[:, k]):
+                offs.append((j, (p[k], np.sqrt(cov[k, k]))))
+    return chi2, ndf, ref, offs
 
 
 def main():
@@ -276,41 +327,62 @@ def main():
                     lines.append(line)
                 lines.append("")
 
-    # duration or angle? data / prediction vs t_wire in slices of the angle to the drift, per plane
+    # duration or angle? data / prediction vs t_wire in slices of the angle to the drift, per plane. A straight
+    # track has one t_wire and one angle, so all its wires fall in one bin: the statistic is per track (the median
+    # of its wires), its error the spread over tracks
     bins, xlabel, _ = COORDS["t_wire"]
     c = np.sqrt(bins[1:] * bins[:-1])
+    ranges = [("short", 0, 4), ("mid", 4, 16), ("long", 16, 1e9)]
+    lines += ["duration or angle: per-track medians of the wires in each (plane, t_wire bin, angle slice), errors from",
+              "the spread over tracks. chi2 of the angle slices against one value per t_wire bin (consistent slices: "
+              "chi2/ndf ~ 1), and the slice offsets from a common duration shape (relative to the slice with the "
+              "most bins)", ""]
     for col in ("wire_dqdx", "roi_dqdx"):
         fig, axs = plt.subplots(1, 3, figsize=(17, 5), sharey=True)
         for pl in range(3):
-            d = {k: v[v.index.get_level_values("plane") == pl] for k, v in tab.items()}
+            d = {k: per_track(v[v.index.get_level_values("plane") == pl], col, bins) for k, v in tab.items()}
             a = axs[pl]
-            for (lo, hi), colr in zip(ANGLE_SLICES, SLICE_COLORS):
+            R = np.full((len(ANGLE_SLICES), len(c), 2), np.nan)
+            for j, ((lo, hi), colr) in enumerate(zip(ANGLE_SLICES, SLICE_COLORS)):
                 s_ = {k: v[(v.angle_drift >= lo) & (v.angle_drift < hi)] for k, v in d.items()}
                 pred = pd.concat([s_["mc"], s_["off"]])
-                wp = np.r_[sc_mc * s_["mc"].prescale.to_numpy(float), sc_off * s_["off"].prescale.to_numpy(float)]
-                Pd = profile(s_["on"], s_["on"].prescale.to_numpy(float), "t_wire", bins, col, "median")
+                wp = np.r_[np.full(len(s_["mc"]), sc_mc), np.full(len(s_["off"]), sc_off)]
+                Pd = profile(s_["on"], np.ones(len(s_["on"])), "t_wire", bins, col, "median")
                 Pp = profile(pred, wp, "t_wire", bins, col, "median")
                 rr_, re_ = ratio(Pd, Pp)
-                ok = (Pd[:, 2] >= 30) & (Pp[:, 2] >= 30)
+                ok = (Pd[:, 2] >= 20) & (Pp[:, 2] >= 20)
+                R[j, ok, 0], R[j, ok, 1] = rr_[ok], re_[ok]
                 a.errorbar(c[ok], rr_[ok], re_[ok], fmt="o-", color=colr, ms=4, lw=1, label="%d–%d° to the drift" % (lo, hi))
                 for i in range(len(c)):
-                    rows.append(dict(coord="t_wire|angle_drift %d-%d" % (lo, hi), quantity=col, stat="median", plane=pl,
-                                     lo=bins[i], hi=bins[i + 1], n_data=int(Pd[i, 2]), data=Pd[i, 0], data_err=Pd[i, 1],
-                                     n_pred=int(Pp[i, 2]), pred=Pp[i, 0], pred_err=Pp[i, 1], pred_datarecomb=np.nan))
+                    rows.append(dict(coord="t_wire|angle_drift %d-%d (tracks)" % (lo, hi), quantity=col, stat="median",
+                                     plane=pl, lo=bins[i], hi=bins[i + 1], n_data=int(Pd[i, 2]), data=Pd[i, 0],
+                                     data_err=Pd[i, 1], n_pred=int(Pp[i, 2]), pred=Pp[i, 0], pred_err=Pp[i, 1],
+                                     pred_datarecomb=np.nan))
+            for name, lo, hi in ranges:
+                sel = (c >= lo) & (c < hi)
+                chi2, ndf, ref, offs = slice_consistency(R[:, sel])
+                lines.append("%-9s plane %d %-5s (%g-%s us): slices vs common chi2/ndf = %.1f/%d (p = %.2g); offsets from "
+                             "%d-%d deg: %s" % (col, pl, name, lo, "inf" if hi > 1e8 else "%g" % hi, chi2, ndf,
+                                chi2_dist.sf(chi2, ndf) if ndf > 0 else np.nan, ANGLE_SLICES[ref][0], ANGLE_SLICES[ref][1],
+                                ", ".join("%d-%d: %+.3f +- %.3f" % (ANGLE_SLICES[j][0], ANGLE_SLICES[j][1], o, e)
+                                          for j, (o, e) in offs)))
             a.axhline(1, color="#8a8984", lw=0.8)
             a.set_xscale("log")
             a.set_ylim(0.6, 1.4)
             a.set_xlabel(xlabel, fontsize=10)
-            a.set_title("plane %d" % pl, fontsize=11, loc="left")
+            a.set_title("plane %d: %d data / %d MC tracks" % (pl, d["on"].ntrk.iloc[0] if len(d["on"]) else 0,
+                                                             d["mc"].ntrk.iloc[0] if len(d["mc"]) else 0),
+                        fontsize=10.5, loc="left")
             if pl == 0:
-                a.set_ylabel("data / prediction (medians)")
+                a.set_ylabel("data / prediction (medians of tracks)")
                 a.legend(frameon=False, fontsize=9)
-        fig.suptitle("Duration or angle? %s data / prediction vs signal duration, in slices of the angle to the drift: "
-                     "overlapping slices = a duration effect (signal processing), offset slices = an angle effect "
-                     "(e.g. recombination)" % col, x=0.01, ha="left", fontsize=10.5)
+        fig.suptitle("Duration or angle? %s data / prediction vs signal duration, in slices of the angle to the drift "
+                     "(one entry per track and bin, errors from the spread over tracks): overlapping slices = a duration "
+                     "effect, offset slices = an angle effect" % col, x=0.01, ha="left", fontsize=10)
         fig.tight_layout(rect=(0, 0, 1, 0.93))
         fig.savefig(os.path.join(args.outdir, "wirecharge_%s_t_wire_angle_slices.png" % col), dpi=120, bbox_inches="tight")
         plt.close(fig)
+        lines.append("")
 
     with open(os.path.join(args.outdir, "wirecharge_profiles.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
